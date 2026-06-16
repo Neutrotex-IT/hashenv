@@ -2,14 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import { organizationsAPI } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { OrgSubnav } from '@/components/OrgSubnav';
 import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
 
 export default function OrganizationSettingsPage() {
@@ -78,97 +74,75 @@ export default function OrganizationSettingsPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <SkeletonCard />
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <div className="max-w-2xl">
+        <SkeletonCard />
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mx-auto max-w-2xl">
-            <div className="mb-6">
-              <Link
-                href="/dashboard"
-                className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4"
-              >
-                ← Back to Dashboard
-              </Link>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">
-                {org?.name || 'Organization'} Settings
-              </h1>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Manage organization details.
-              </p>
-            </div>
+    <div className="max-w-2xl">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-[var(--foreground)]">Settings</h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">Manage organization details.</p>
+      </div>
 
-            <OrgSubnav org={org} />
-
-            {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                <p className="text-sm text-[var(--error)]">{error}</p>
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-                <p className="text-sm text-green-400">{success}</p>
-              </div>
-            )}
-
-            {canUpdate ? (
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                      Organization name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      maxLength={100}
-                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                    />
-                    {fieldErrors.name && (
-                      <p className="mt-1 text-sm text-[var(--error)]">{fieldErrors.name}</p>
-                    )}
-                  </div>
-                  {org?.type === 'team' && (
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Slug: <code className="font-mono">{org.slug}</code> (cannot be changed)
-                    </p>
-                  )}
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      variant="primary"
-                      size="md"
-                      type="submit"
-                      disabled={submitting || !name.trim() || name.trim() === org?.name}
-                    >
-                      {submitting ? 'Saving...' : 'Save changes'}
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                <p className="text-sm text-[var(--text-secondary)]">
-                  You do not have permission to update organization settings.
-                </p>
-              </div>
-            )}
-          </div>
+      {error && (
+        <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+          <p className="text-sm text-[var(--error)]">{error}</p>
         </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+      )}
+
+      {success && (
+        <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+          <p className="text-sm text-green-400">{success}</p>
+        </div>
+      )}
+
+      {canUpdate ? (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                Organization name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
+                className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+              {fieldErrors.name && (
+                <p className="mt-1 text-sm text-[var(--error)]">{fieldErrors.name}</p>
+              )}
+            </div>
+            {org?.type === 'team' && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Slug: <code className="font-mono">{org.slug}</code> (cannot be changed)
+              </p>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={submitting || !name.trim() || name.trim() === org?.name}
+              >
+                {submitting ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <p className="text-sm text-[var(--text-secondary)]">
+            You do not have permission to update organization settings.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

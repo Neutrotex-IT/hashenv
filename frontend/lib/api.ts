@@ -380,6 +380,14 @@ export const projectsAPI = {
     const response = await api.delete(`/projects/${projectId}/members/${userId}`);
     return response.data;
   },
+  updateMember: async (
+    projectId: string,
+    userId: string,
+    data: { permission?: 'read' | 'write'; permissions?: string[] }
+  ) => {
+    const response = await api.patch(`/projects/${projectId}/members/${userId}`, data);
+    return response.data;
+  },
   searchUsers: async (orgId: string, query: string, limit: number = 10) => {
     const params = new URLSearchParams({ orgId, limit: limit.toString() });
     if (query && query.trim().length > 0) {

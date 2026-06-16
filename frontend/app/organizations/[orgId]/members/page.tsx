@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import { organizationsAPI, OrgMember, OrgInvite, OrgPermissionsResponse } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
 import { EditOrgMemberModal } from '@/components/ui/EditOrgMemberModal';
-import { OrgSubnav } from '@/components/OrgSubnav';
+import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { formatOrgPermission, hasOrgPermission, OrgPermission } from '@/lib/permissions';
+import { useConfirm } from '@/contexts/ConfirmContext';
 
 export default function OrganizationMembersPage() {
   const params = useParams();
@@ -20,6 +18,7 @@ export default function OrganizationMembersPage() {
   const { organizations } = useOrganization();
 
   const org = organizations.find((item) => item._id === orgId);
+  const { confirm } = useConfirm();
 
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [invites, setInvites] = useState<OrgInvite[]>([]);
@@ -104,7 +103,13 @@ export default function OrganizationMembersPage() {
   };
 
   const handleRevokeInvite = async (inviteId: string) => {
-    if (!confirm('Revoke this invitation?')) return;
+    const ok = await confirm({
+      title: 'Revoke invitation?',
+      message: 'The invitee will no longer be able to accept this invitation.',
+      confirmLabel: 'Revoke',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await organizationsAPI.revokeInvite(orgId, inviteId);
@@ -115,7 +120,13 @@ export default function OrganizationMembersPage() {
   };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (!confirm('Remove this member from the organization?')) return;
+    const ok = await confirm({
+      title: 'Remove member?',
+      message: 'This person will lose access to all projects in this organization.',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await organizationsAPI.removeMember(orgId, memberId);
@@ -136,49 +147,45 @@ export default function OrganizationMembersPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <SkeletonCard className="mb-6" />
-            <SkeletonCard />
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <div className="max-w-4xl">
+        <SkeletonCard className="mb-6" />
+        <SkeletonCard />
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mx-auto max-w-4xl">
-            <div className="mb-6">
-              <Link href="/dashboard" className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4">
-                ← Back to Dashboard
-              </Link>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">
-                {org?.name || 'Organization'} Members
-              </h1>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects.
-              </p>
-            </div>
+    <>
+      <div className="max-w-4xl">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-[var(--foreground)]">Members</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects.
+          </p>
+        </div>
 
-            <OrgSubnav org={org} />
+        {error && (
+          <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+            <p className="text-sm text-[var(--error)]">{error}</p>
+          </div>
+        )}
 
-            {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                <p className="text-sm text-[var(--error)]">{error}</p>
-              </div>
-            )}
+        {success && (
+          <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+            <p className="text-sm text-green-400">{success}</p>
+          </div>
+        )}
 
-            {success && (
-              <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-                <p className="text-sm text-green-400">{success}</p>
-              </div>
-            )}
+        {permissionInfo && (
+          <EffectivePermissionsPanel
+            scope="org"
+            catalog={permissionInfo.catalog.org}
+            effective={permissionInfo.effective}
+            className="mb-6"
+          />
+        )}
 
-            {canInvite && org?.type === 'team' && (
+        {canInvite && org?.type === 'team' && (
               <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
                 <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Invite by Email</h2>
                 <form onSubmit={handleInvite} className="space-y-4">
@@ -315,19 +322,17 @@ export default function OrganizationMembersPage() {
                 </table>
               </div>
             </div>
-          </div>
-        </div>
+      </div>
 
-        {editingMember && (
-          <EditOrgMemberModal
-            member={editingMember}
-            grantablePermissions={grantablePermissions}
-            canAssignAdmin={org?.role === 'owner' || org?.role === 'admin'}
-            onSave={(data) => handleUpdateMember(editingMember.id, data)}
-            onClose={() => setEditingMember(null)}
-          />
-        )}
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+      {editingMember && (
+        <EditOrgMemberModal
+          member={editingMember}
+          grantablePermissions={grantablePermissions}
+          canAssignAdmin={org?.role === 'owner' || org?.role === 'admin'}
+          onSave={(data) => handleUpdateMember(editingMember.id, data)}
+          onClose={() => setEditingMember(null)}
+        />
+      )}
+    </>
   );
 }

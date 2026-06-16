@@ -4,13 +4,17 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, envAPI, secretsAPI, accountsAPI } from '@/lib/api';
+import { projectsAPI, envAPI, secretsAPI, accountsAPI, ProjectPermissionsResponse } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { UploadEnvButton } from '@/components/ui/UploadEnvButton';
 import { formatPermission } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
+import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
 
 interface Project {
   _id: string;
@@ -95,6 +99,7 @@ export default function ProjectDetailPage() {
   const { user } = useAuth();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
+  const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
   const [envVersions, setEnvVersions] = useState<EnvVersion[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [accounts, setAccounts] = useState<AssociatedAccount[]>([]);
@@ -119,6 +124,15 @@ export default function ProjectDetailPage() {
   const [accountPassword, setAccountPassword] = useState('');
   const [accountNotes, setAccountNotes] = useState('');
   const [submittingAccount, setSubmittingAccount] = useState(false);
+  const [sensitiveModal, setSensitiveModal] = useState<{
+    title: string;
+    fields: SensitiveField[];
+    loading?: boolean;
+    error?: string;
+  } | null>(null);
+
+  const { confirm } = useConfirm();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   useEffect(() => {
     if (projectId) {
@@ -140,9 +154,13 @@ export default function ProjectDetailPage() {
 
   const loadProject = async () => {
     try {
-      const data = await projectsAPI.get(projectId);
+      const [data, permissionsData] = await Promise.all([
+        projectsAPI.get(projectId),
+        projectsAPI.getPermissions(projectId),
+      ]);
       setProject(data);
-      setError(''); // Clear any previous errors
+      setPermissionInfo(permissionsData);
+      setError('');
     } catch (err: any) {
       const status = err.response?.status;
       const errorMessage = err.response?.data?.error || 'Failed to load project';
@@ -222,14 +240,14 @@ export default function ProjectDetailPage() {
       // Refresh versions list after download
       loadEnvVersions();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download file');
+      toastError(err.response?.data?.error || 'Failed to download file');
     }
   };
 
   const handleCreateSecret = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!secretName.trim() || !secretContent.trim()) {
-      alert('Secret name and content are required');
+      toastError('Secret name and content are required');
       return;
     }
 
@@ -251,8 +269,9 @@ export default function ProjectDetailPage() {
       setSecretName('');
       setSecretContent('');
       loadSecrets();
+      toastSuccess(editingSecret ? 'Secret updated' : 'Secret created');
     } catch (err: any) {
-      alert(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save secret');
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save secret');
     } finally {
       setSubmittingSecret(false);
     }
@@ -266,29 +285,42 @@ export default function ProjectDetailPage() {
       setSecretContent(secretData.content);
       setSecretFormOpen(true);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load secret');
+      toastError(err.response?.data?.error || 'Failed to load secret');
     }
   };
 
   const handleDeleteSecret = async (secretId: string) => {
-    if (!confirm('Are you sure you want to delete this secret? This action cannot be undone.')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete secret?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await secretsAPI.delete(projectId, secretId);
+      toastSuccess('Secret deleted');
       loadSecrets();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete secret');
+      toastError(err.response?.data?.error || 'Failed to delete secret');
     }
   };
 
   const handleViewSecret = async (secret: Secret) => {
+    setSensitiveModal({ title: secret.name, fields: [], loading: true });
     try {
       const secretData = await secretsAPI.get(projectId, secret._id);
-      alert(`Secret: ${secretData.name}\n\nContent:\n${secretData.content}`);
+      setSensitiveModal({
+        title: secretData.name,
+        fields: [{ label: 'Content', value: secretData.content, sensitive: true }],
+      });
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load secret');
+      setSensitiveModal({
+        title: secret.name,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load secret',
+      });
     }
   };
 
@@ -310,7 +342,7 @@ export default function ProjectDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download secret');
+      toastError(err.response?.data?.error || 'Failed to download secret');
     }
   };
 
@@ -349,22 +381,22 @@ export default function ProjectDetailPage() {
     e.preventDefault();
 
     if (!accountLabel.trim() || !accountEmail.trim()) {
-      alert('Label and email/username are required');
+      toastError('Label and email/username are required');
       return;
     }
 
     if (accountProvider === 'other' && !accountProviderOther.trim()) {
-      alert('Please specify the provider name');
+      toastError('Please specify the provider name');
       return;
     }
 
     if (accountUsesSSO && !accountSsoProvider.trim()) {
-      alert('Please specify the SSO provider');
+      toastError('Please specify the SSO provider');
       return;
     }
 
     if (!accountUsesSSO && !editingAccount && !accountPassword.trim()) {
-      alert('Password is required when SSO is not used');
+      toastError('Password is required when SSO is not used');
       return;
     }
 
@@ -390,8 +422,9 @@ export default function ProjectDetailPage() {
 
       closeAccountForm();
       loadAccounts();
+      toastSuccess(editingAccount ? 'Account updated' : 'Account created');
     } catch (err: any) {
-      alert(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save account');
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save account');
     } finally {
       setSubmittingAccount(false);
     }
@@ -412,41 +445,50 @@ export default function ProjectDetailPage() {
       setAccountNotes(data.notes || '');
       setAccountFormOpen(true);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load account credentials');
+      toastError(err.response?.data?.error || 'Failed to load account credentials');
     }
   };
 
   const handleDeleteAccount = async (accountId: string) => {
-    if (!confirm('Are you sure you want to delete this associated account? This action cannot be undone.')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete associated account?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await accountsAPI.delete(projectId, accountId);
+      toastSuccess('Account deleted');
       loadAccounts();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete account');
+      toastError(err.response?.data?.error || 'Failed to delete account');
     }
   };
 
   const handleViewAccount = async (account: AssociatedAccount) => {
+    setSensitiveModal({ title: account.label, fields: [], loading: true });
     try {
       const data = await accountsAPI.getCredentials(projectId, account._id);
-      const lines = [
-        `Label: ${data.label}`,
-        `Provider: ${formatProvider(data.provider, data.providerOther)}`,
-        `Email/Username: ${data.email}`,
+      const fields: SensitiveField[] = [
+        { label: 'Provider', value: formatProvider(data.provider, data.providerOther), sensitive: false },
+        { label: 'Email / Username', value: data.email, sensitive: false },
       ];
-      if (data.loginUrl) lines.push(`Login URL: ${data.loginUrl}`);
+      if (data.loginUrl) fields.push({ label: 'Login URL', value: data.loginUrl, sensitive: false });
       if (data.usesSSO) {
-        lines.push(`SSO: Yes (${data.ssoProvider})`);
+        fields.push({ label: 'SSO Provider', value: data.ssoProvider || '', sensitive: false });
       } else {
-        lines.push(`Password: ${data.password || '(not set)'}`);
+        fields.push({ label: 'Password', value: data.password || '', sensitive: true });
       }
-      if (data.notes) lines.push(`Notes: ${data.notes}`);
-      alert(lines.join('\n'));
+      if (data.notes) fields.push({ label: 'Notes', value: data.notes, sensitive: false });
+      setSensitiveModal({ title: data.label, fields });
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load account credentials');
+      setSensitiveModal({
+        title: account.label,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load account credentials',
+      });
     }
   };
 
@@ -530,6 +572,15 @@ export default function ProjectDetailPage() {
             <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
               <p className="text-sm text-[var(--error)]">{error}</p>
             </div>
+          )}
+
+          {permissionInfo && (
+            <EffectivePermissionsPanel
+              scope="project"
+              catalog={permissionInfo.catalog.project}
+              effective={permissionInfo.effective}
+              className="mb-6"
+            />
           )}
 
           {/* Main Tabs: Environments vs Secrets */}
@@ -694,13 +745,19 @@ export default function ProjectDetailPage() {
                               </button>
                               <button
                                 onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this version? This action cannot be undone.')) {
-                                    try {
-                                      await envAPI.delete(projectId, version._id);
-                                      loadEnvVersions();
-                                    } catch (err: any) {
-                                      alert(err.response?.data?.error || 'Failed to delete file');
-                                    }
+                                  const ok = await confirm({
+                                    title: 'Delete env version?',
+                                    message: 'This action cannot be undone.',
+                                    confirmLabel: 'Delete',
+                                    variant: 'danger',
+                                  });
+                                  if (!ok) return;
+                                  try {
+                                    await envAPI.delete(projectId, version._id);
+                                    toastSuccess('Version deleted');
+                                    loadEnvVersions();
+                                  } catch (err: any) {
+                                    toastError(err.response?.data?.error || 'Failed to delete file');
                                   }
                                 }}
                                 className="text-[var(--error)] hover:text-[#F85149] transition-colors"
@@ -1288,6 +1345,16 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
+
+        {sensitiveModal && (
+          <SensitiveValueModal
+            title={sensitiveModal.title}
+            fields={sensitiveModal.fields}
+            loading={sensitiveModal.loading}
+            error={sensitiveModal.error}
+            onClose={() => setSensitiveModal(null)}
+          />
+        )}
       </AuthenticatedLayout>
     </ProtectedRoute>
   );

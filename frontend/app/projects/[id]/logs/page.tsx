@@ -9,6 +9,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/contexts/ToastContext';
 
 interface LogEntry {
   _id: string;
@@ -35,6 +36,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedEnv, setSelectedEnv] = useState<'dev' | 'staging' | 'prod' | 'all'>('all');
+  const { error: toastError } = useToast();
 
   useEffect(() => {
     loadLogs();
@@ -60,7 +62,7 @@ export default function LogsPage() {
       const environment = selectedEnv === 'all' ? undefined : selectedEnv;
       await envAPI.downloadLogs(projectId, environment);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download logs');
+      toastError(err.response?.data?.error || 'Failed to download logs');
     }
   };
 

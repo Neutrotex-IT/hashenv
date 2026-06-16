@@ -10,6 +10,8 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
 
 interface Project {
   _id: string;
@@ -47,6 +49,8 @@ export default function ProjectApiTokensPage() {
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingToken, setEditingToken] = useState<ApiToken | null>(null);
+  const { confirm } = useConfirm();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   useEffect(() => {
     loadData();
@@ -78,7 +82,7 @@ export default function ProjectApiTokensPage() {
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tokenName.trim()) {
-      alert('Token name is required');
+      toastError('Token name is required');
       return;
     }
 
@@ -97,22 +101,27 @@ export default function ProjectApiTokensPage() {
       setTokenExpiry('');
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create token');
+      toastError(err.response?.data?.error || 'Failed to create token');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteToken = async (tokenId: string, tokenName: string) => {
-    if (!confirm(`Are you sure you want to revoke the token "${tokenName}"? This action cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Revoke API token?',
+      message: `Revoke "${tokenName}"? This action cannot be undone.`,
+      confirmLabel: 'Revoke',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await apiTokensAPI.delete(projectId, tokenId);
+      toastSuccess('Token revoked');
       loadData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to revoke token');
+      toastError(err.response?.data?.error || 'Failed to revoke token');
     }
   };
 

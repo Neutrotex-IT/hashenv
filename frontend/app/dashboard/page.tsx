@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/Button';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
 import Link from 'next/link';
 import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
 
 interface Project {
   _id: string;
@@ -47,6 +49,8 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [panicButtonSettings, setPanicButtonSettings] = useState<any>(null);
   const [panicLoading, setPanicLoading] = useState(false);
+  const { confirm } = useConfirm();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const loadProjects = useCallback(async () => {
     try {
@@ -76,34 +80,37 @@ export default function DashboardPage() {
 
   const handlePanicButton = async () => {
     if (!panicButtonSettings) {
-      alert('Panic button not configured. Please configure it in Settings.');
+      toastError('Panic button not configured. Please configure it in Settings.');
       return;
     }
 
     const { flushEnvs, revokeCollaborators, downloadEnvs, askConfirmation } = panicButtonSettings;
 
     if (!flushEnvs && !revokeCollaborators && !downloadEnvs) {
-      alert('No panic actions configured. Please configure panic button settings first.');
+      toastError('No panic actions configured. Please configure panic button settings first.');
       return;
     }
 
-    // Show confirmation if enabled
     if (askConfirmation) {
-      const confirmMessage = `Are you sure you want to execute panic actions?\n\n` +
+      const confirmMessage =
+        `Are you sure you want to execute panic actions?\n\n` +
         `${downloadEnvs ? '• Download all environment files\n' : ''}` +
         `${flushEnvs ? '• Delete all environment files\n' : ''}` +
         `${revokeCollaborators ? '• Revoke all collaborator access\n' : ''}`;
-      
-      if (!confirm(confirmMessage)) {
-        return;
-      }
+
+      const ok = await confirm({
+        title: 'Execute panic actions?',
+        message: confirmMessage,
+        confirmLabel: 'Execute',
+        variant: 'danger',
+      });
+      if (!ok) return;
     }
 
     setPanicLoading(true);
     try {
       const result = await settingsAPI.panic();
 
-      // Handle download if enabled
       if (result.results?.downloadEnvs && result.results?.downloadContent) {
         const blob = new Blob([result.results.downloadContent], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
@@ -116,18 +123,15 @@ export default function DashboardPage() {
         window.URL.revokeObjectURL(url);
       }
 
-      // Show success message
       const actions = [];
       if (result.results?.downloadEnvs) actions.push('downloaded');
       if (result.results?.flushEnvs) actions.push('flushed');
       if (result.results?.revokeCollaborators) actions.push('collaborators revoked');
 
-      alert(`Panic actions executed successfully!\n\nActions: ${actions.join(', ')}`);
-      
-      // Reload projects to reflect changes
+      toastSuccess(`Panic actions executed: ${actions.join(', ')}`);
       loadProjects();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to execute panic actions');
+      toastError(err.response?.data?.error || 'Failed to execute panic actions');
     } finally {
       setPanicLoading(false);
     }

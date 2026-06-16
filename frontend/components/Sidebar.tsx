@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
 import { Button } from './ui/Button';
 
 interface NavItem {
@@ -21,6 +23,54 @@ export function Sidebar({ onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
   const { user } = useAuth();
+  const { currentOrg } = useOrganization();
+
+  const orgPermissions = (currentOrg?.permissions ?? []) as OrgPermission[];
+  const orgNavItems: NavItem[] =
+    currentOrg?.type === 'team'
+      ? [
+          {
+            name: 'Members',
+            href: `/organizations/${currentOrg._id}/members`,
+            icon: (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            ),
+          },
+          ...(hasOrgPermission(currentOrg.role, orgPermissions, 'org:update')
+            ? [{
+                name: 'Org Settings',
+                href: `/organizations/${currentOrg._id}/settings`,
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                ),
+              }]
+            : []),
+          ...(hasOrgPermission(currentOrg.role, orgPermissions, 'org:audit')
+            ? [{
+                name: 'Audit Log',
+                href: `/organizations/${currentOrg._id}/audit`,
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                ),
+              }]
+            : []),
+        ].filter((item) => {
+          if (item.href.includes('/members')) {
+            return (
+              hasOrgPermission(currentOrg.role, orgPermissions, 'org:invite') ||
+              hasOrgPermission(currentOrg.role, orgPermissions, 'org:manage_members')
+            );
+          }
+          return true;
+        })
+      : [];
 
   const navItems: NavItem[] = [
     {
@@ -91,6 +141,30 @@ export function Sidebar({ onLogout }: SidebarProps) {
             return (
               <Link
                 key={`${item.href}-${index}`}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/30'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--foreground)]'
+                }`}
+                title={isCollapsed ? item.name : undefined}
+              >
+                <span className="flex-shrink-0">{item.icon}</span>
+                {!isCollapsed && <span className="text-sm font-medium">{item.name}</span>}
+              </Link>
+            );
+          })}
+
+          {orgNavItems.length > 0 && !isCollapsed && (
+            <p className="px-3 pt-4 pb-1 text-xs font-medium uppercase text-[var(--text-muted)]">
+              {currentOrg?.name}
+            </p>
+          )}
+          {orgNavItems.map((item, index) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            return (
+              <Link
+                key={`org-${item.href}-${index}`}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                   isActive

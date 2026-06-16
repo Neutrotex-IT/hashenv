@@ -6,6 +6,7 @@ import { envAPI } from '@/lib/api';
 import { formatPermission } from '@/lib/permissions';
 import { UploadEnvButton } from './ui/UploadEnvButton';
 import { Button } from './ui/Button';
+import { useToast } from '@/contexts/ToastContext';
 
 interface ProjectMember {
   userId: {
@@ -35,6 +36,7 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
   const { user } = useAuth();
+  const { error: toastError } = useToast();
   
   // Check if user is the project owner (created it)
   const isProjectOwner = project.createdBy._id === user?.id;
@@ -53,7 +55,7 @@ export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
     try {
       await envAPI.download(project._id, environment);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download file');
+      toastError(err.response?.data?.error || 'Failed to download file');
     }
   };
 

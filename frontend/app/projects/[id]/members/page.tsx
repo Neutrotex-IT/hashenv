@@ -9,8 +9,12 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { OrgMemberSelect } from '@/components/ui/OrgMemberSelect';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
+import { EditProjectMemberModal } from '@/components/ui/EditProjectMemberModal';
+import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { formatPermission, formatProjectPermission, ProjectPermission } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
 
 interface Project {
   _id: string;
@@ -43,6 +47,16 @@ export default function ManageMembersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [editingMember, setEditingMember] = useState<{
+    userId: string;
+    name: string;
+    email: string;
+    permission: 'read' | 'write';
+    permissions: ProjectPermission[];
+  } | null>(null);
+
+  const { confirm } = useConfirm();
+  const { success: toastSuccess } = useToast();
 
   const grantablePermissions = (permissionInfo?.grantable ?? []) as ProjectPermission[];
   const canInvite = permissionInfo?.effective.includes('project:invite') ?? false;
@@ -95,6 +109,7 @@ export default function ManageMembersPage() {
       setSelectedMember(null);
       setSelectedPermission('read');
       setSelectedCapabilities([]);
+      toastSuccess('Member added');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to add member');
     } finally {
@@ -117,6 +132,7 @@ export default function ManageMembersPage() {
       setInvitePermission('read');
       setInviteCapabilities([]);
       await loadData();
+      toastSuccess('Invitation sent');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to send invitation');
     } finally {
@@ -125,27 +141,48 @@ export default function ManageMembersPage() {
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm('Are you sure you want to remove this member?')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Remove member?',
+      message: 'This person will lose access to this project.',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await projectsAPI.removeMember(projectId, userId);
       await loadData();
+      toastSuccess('Member removed');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to remove member');
     }
   };
 
   const handleRevokeInvite = async (inviteId: string) => {
-    if (!confirm('Revoke this invitation?')) return;
+    const ok = await confirm({
+      title: 'Revoke invitation?',
+      message: 'The invitee will no longer be able to accept this invitation.',
+      confirmLabel: 'Revoke',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await projectsAPI.revokeInvite(projectId, inviteId);
       await loadData();
+      toastSuccess('Invitation revoked');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to revoke invitation');
     }
+  };
+
+  const handleUpdateMember = async (
+    userId: string,
+    data: { permission: 'read' | 'write'; permissions: ProjectPermission[] }
+  ) => {
+    await projectsAPI.updateMember(projectId, userId, data);
+    toastSuccess('Member updated');
+    await loadData();
   };
 
   if (loading) {
@@ -220,6 +257,15 @@ export default function ManageMembersPage() {
               <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
+            )}
+
+            {permissionInfo && (
+              <EffectivePermissionsPanel
+                scope="project"
+                catalog={permissionInfo.catalog.project}
+                effective={permissionInfo.effective}
+                className="mb-6"
+              />
             )}
 
             {canInvite && (
@@ -373,6 +419,7 @@ export default function ManageMembersPage() {
                       {project.members.map((member, idx) => {
                         const userId = typeof member.userId === 'object' ? member.userId._id : member.userId;
                         const userName = typeof member.userId === 'object' ? member.userId.name : 'Unknown';
+                        const userEmail = typeof member.userId === 'object' ? member.userId.email : '';
                         return (
                           <tr key={idx} className="hover:bg-[var(--surface-elevated)] transition-colors">
                             <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--foreground)]">
@@ -394,12 +441,28 @@ export default function ManageMembersPage() {
                             </td>
                             {canManageMembers && (
                               <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                <button
-                                  onClick={() => handleRemoveMember(userId)}
-                                  className="text-[var(--error)] hover:text-[#F85149] transition-colors"
-                                >
-                                  Remove
-                                </button>
+                                <div className="flex items-center justify-end gap-3">
+                                  <button
+                                    onClick={() =>
+                                      setEditingMember({
+                                        userId,
+                                        name: userName,
+                                        email: userEmail,
+                                        permission: member.permission,
+                                        permissions: (member.permissions ?? []) as ProjectPermission[],
+                                      })
+                                    }
+                                    className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveMember(userId)}
+                                    className="text-[var(--error)] hover:text-[#F85149] transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
                               </td>
                             )}
                           </tr>
@@ -413,6 +476,18 @@ export default function ManageMembersPage() {
           </div>
         </div>
       </AuthenticatedLayout>
+
+      {editingMember && (
+        <EditProjectMemberModal
+          memberName={editingMember.name}
+          memberEmail={editingMember.email}
+          permission={editingMember.permission}
+          capabilities={editingMember.permissions}
+          grantablePermissions={grantablePermissions}
+          onSave={(data) => handleUpdateMember(editingMember.userId, data)}
+          onClose={() => setEditingMember(null)}
+        />
+      )}
     </ProtectedRoute>
   );
 }

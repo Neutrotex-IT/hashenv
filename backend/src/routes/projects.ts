@@ -25,6 +25,7 @@ import {
   sanitizeProjectPermissions,
 } from '../lib/permissions';
 import { createAndSendProjectInvite } from '../lib/projectInvite';
+import { auditProject } from '../lib/audit';
 
 const router = express.Router();
 
@@ -306,6 +307,116 @@ router.post(
     } catch (error) {
       console.error('Add member error:', error instanceof Error ? error.message : 'Failed to add member');
       res.status(500).json({ error: 'Failed to add member' });
+    }
+  }
+);
+
+/**
+ * Update a project member's permission and ABAC capabilities (requires project:manage_members)
+ * PATCH /api/projects/:id/members/:userId
+ */
+router.patch(
+  '/:id/members/:userId',
+  authenticate,
+  validateProjectId(),
+  validateUserId(),
+  requireProjectMembershipManagement(),
+  [
+    body('permission')
+      .optional()
+      .isIn(['read', 'write'])
+      .withMessage('Permission must be "read" or "write"'),
+    body('permissions')
+      .optional()
+      .isArray()
+      .withMessage('Permissions must be an array'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const projectId = req.params.id;
+      const userId = req.params.userId;
+      const nextPermission = req.body.permission as Permission | undefined;
+      const nextPermissions = req.body.permissions
+        ? sanitizeProjectPermissions(req.body.permissions)
+        : undefined;
+
+      if (!nextPermission && !nextPermissions) {
+        res.status(400).json({ error: 'Provide permission and/or permissions to update' });
+        return;
+      }
+
+      if (!isValidObjectId(userId)) {
+        res.status(400).json({ error: 'Invalid user ID format' });
+        return;
+      }
+
+      const project = (req as AuthRequestWithOrg).project as IProject;
+
+      if (project.createdBy.toString() === userId) {
+        res.status(403).json({ error: 'Cannot change project owner access' });
+        return;
+      }
+
+      const memberIndex = project.members.findIndex((m) => m.userId.toString() === userId);
+      if (memberIndex < 0) {
+        res.status(404).json({ error: 'Member not found' });
+        return;
+      }
+
+      const actorContext = await getProjectMemberAttributes(
+        req.user!.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+
+      const targetPermission = nextPermission ?? project.members[memberIndex].permission;
+      const targetPermissions = nextPermissions ?? project.members[memberIndex].permissions;
+
+      const grantCheck = canGrantProjectPermissions(
+        { ...actorContext, orgRole: (req as AuthRequestWithOrg).orgRole ?? null },
+        { accessLevel: targetPermission, targetPermissions }
+      );
+      if (!grantCheck.allowed) {
+        res.status(403).json({ error: grantCheck.reason || 'Invalid permission grant' });
+        return;
+      }
+
+      if (nextPermission) {
+        project.members[memberIndex].permission = nextPermission;
+      }
+      if (nextPermissions) {
+        project.members[memberIndex].permissions = nextPermissions;
+      }
+
+      await project.save();
+
+      await auditProject(
+        projectId,
+        project.organizationId.toString(),
+        req.user!.userId,
+        'update_member',
+        {
+          targetUserId: userId,
+          permission: project.members[memberIndex].permission,
+          permissions: project.members[memberIndex].permissions,
+        },
+        req
+      );
+
+      const populatedProject = await Project.findById(projectId)
+        .populate('createdBy', 'name email')
+        .populate('members.userId', 'name email');
+
+      res.json(populatedProject);
+    } catch (error) {
+      console.error('Update member error:', error instanceof Error ? error.message : 'Failed to update member');
+      res.status(500).json({ error: 'Failed to update member' });
     }
   }
 );
