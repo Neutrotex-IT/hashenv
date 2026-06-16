@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
-import { envAPI } from '@/lib/api';
+import { envAPI, environmentsAPI } from '@/lib/api';
+import { formatEnvLabel } from '@/lib/environments';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -13,23 +13,29 @@ export default function UploadEnvPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const projectId = params.id as string;
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState('');
   const [uploadMethod, setUploadMethod] = useState<'file' | 'text'>('file');
-  const [environment, setEnvironment] = useState<'dev' | 'staging' | 'prod'>(
-    (searchParams.get('environment') as 'dev' | 'staging' | 'prod') || 'dev'
-  );
+  const [environment, setEnvironment] = useState(searchParams.get('environment') || 'dev');
+  const [envOptions, setEnvOptions] = useState<string[]>(['dev', 'staging', 'prod']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const envParam = searchParams.get('environment');
-    if (envParam && ['dev', 'staging', 'prod'].includes(envParam)) {
-      setEnvironment(envParam as 'dev' | 'staging' | 'prod');
-    }
-  }, [searchParams]);
+    environmentsAPI.list(projectId).then((envs) => {
+      const slugs = envs.map((e) => e.slug);
+      if (slugs.length > 0) {
+        setEnvOptions(slugs);
+        const envParam = searchParams.get('environment');
+        if (envParam && slugs.includes(envParam)) {
+          setEnvironment(envParam);
+        } else if (!slugs.includes(environment)) {
+          setEnvironment(slugs[0]);
+        }
+      }
+    }).catch(() => {});
+  }, [projectId, searchParams]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -109,12 +115,14 @@ export default function UploadEnvPage() {
                 <select
                   id="environment"
                   value={environment}
-                  onChange={(e) => setEnvironment(e.target.value as 'dev' | 'staging' | 'prod')}
+                  onChange={(e) => setEnvironment(e.target.value)}
                   className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                 >
-                  <option value="dev">Development</option>
-                  <option value="staging">Staging</option>
-                  <option value="prod">Production</option>
+                  {envOptions.map((slug) => (
+                    <option key={slug} value={slug}>
+                      {formatEnvLabel(slug)} ({slug})
+                    </option>
+                  ))}
                 </select>
               </div>
 

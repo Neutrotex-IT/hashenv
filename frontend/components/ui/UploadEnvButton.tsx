@@ -4,7 +4,7 @@ import { Button } from './Button';
 
 interface UploadEnvButtonProps {
   projectId: string;
-  environment?: 'dev' | 'staging' | 'prod';
+  environment?: string;
   size?: 'sm' | 'md' | 'lg';
   variant?: 'primary' | 'secondary' | 'outline';
   className?: string;

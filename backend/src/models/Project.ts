@@ -13,6 +13,8 @@ export interface IProject extends Document {
   organizationId: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   members: IProjectMember[];
+  /** Allowed environment slugs for this project. */
+  environments: string[];
   createdAt: Date;
 }
 
@@ -56,6 +58,10 @@ const ProjectSchema: Schema = new Schema(
     members: {
       type: [ProjectMemberSchema],
       default: [],
+    },
+    environments: {
+      type: [String],
+      default: ['dev', 'staging', 'prod'],
     },
   },
   {

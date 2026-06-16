@@ -1,0 +1,81 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { environmentsAPI, projectsAPI, ProjectEnvironment } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
+import { ManageEnvironmentsPanel } from '@/components/ui/ManageEnvironmentsPanel';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { useAuth } from '@/contexts/AuthContext';
+
+export default function ProjectEnvironmentsPage() {
+  const params = useParams();
+  const { user } = useAuth();
+  const projectId = params.id as string;
+
+  const [project, setProject] = useState<{ name: string; createdBy: { _id: string }; members: Array<{ userId: { _id: string }; permission: string }> } | null>(null);
+  const [environments, setEnvironments] = useState<ProjectEnvironment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    try {
+      const [projectData, envData] = await Promise.all([
+        projectsAPI.get(projectId),
+        environmentsAPI.list(projectId),
+      ]);
+      setProject(projectData);
+      setEnvironments(envData);
+      setError('');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setError(axiosErr.response?.data?.error || 'Failed to load environments');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  const isOwner = project?.createdBy._id === user?.id;
+  const userPermission = project?.members.find((m) => m.userId._id === user?.id)?.permission;
+  const canWrite = isOwner || userPermission === 'write';
+
+  return (
+    <ProtectedRoute>
+      <AuthenticatedLayout>
+        <div className="p-6 lg:p-8 max-w-3xl">
+          <Link
+            href={`/projects/${projectId}`}
+            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block"
+          >
+            ← Back to project
+          </Link>
+          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Manage environments</h1>
+          <p className="text-sm text-[var(--text-muted)] mb-6">
+            Add custom environment names beyond dev, staging, and prod.
+          </p>
+
+          {loading ? (
+            <SkeletonCard />
+          ) : error ? (
+            <div className="rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+              <p className="text-sm text-[var(--error)]">{error}</p>
+            </div>
+          ) : (
+            <ManageEnvironmentsPanel
+              projectId={projectId}
+              environments={environments}
+              canWrite={Boolean(canWrite)}
+              onChanged={load}
+            />
+          )}
+        </div>
+      </AuthenticatedLayout>
+    </ProtectedRoute>
+  );
+}

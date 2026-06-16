@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import inviteRoutes from './routes/invites';
 import organizationRoutes from './routes/organizations';
 import projectRoutes from './routes/projects';
+import environmentRoutes from './routes/environments';
 import envRoutes from './routes/env';
 import secretsRoutes from './routes/secrets';
 import associatedAccountsRoutes from './routes/associatedAccounts';
@@ -18,6 +19,8 @@ import publicApiRoutes from './routes/api';
 import { securityHeaders, apiRateLimiter } from './middleware/security';
 import { sanitizeError } from './middleware/security';
 import { bootstrapEncryption, getEncryptionStatus } from './crypto';
+import Project from './models/Project';
+import { DEFAULT_ENVIRONMENTS } from './lib/environments';
 
 // Load environment variables
 dotenv.config();
@@ -82,7 +85,7 @@ const corsOptions: cors.CorsOptions = {
   origin: getCorsOrigins(),
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   // Expose rate limit headers for API clients
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
@@ -131,6 +134,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects', environmentRoutes);
 app.use('/api/projects', envRoutes);
 app.use('/api/projects', secretsRoutes);
 app.use('/api/projects', associatedAccountsRoutes);
@@ -210,6 +214,19 @@ mongoose
     } catch (error) {
       console.error('FATAL: Encryption bootstrap failed:', error instanceof Error ? error.message : 'Unknown error');
       process.exit(1);
+    }
+
+    // Backfill default environments for existing projects
+    try {
+      const result = await Project.updateMany(
+        { $or: [{ environments: { $exists: false } }, { environments: { $size: 0 } }] },
+        { $set: { environments: [...DEFAULT_ENVIRONMENTS] } }
+      );
+      if (result.modifiedCount > 0) {
+        console.log(`Backfilled environments for ${result.modifiedCount} project(s)`);
+      }
+    } catch (error) {
+      console.warn('Environment backfill warning:', error instanceof Error ? error.message : 'Unknown error');
     }
     
     // Start server

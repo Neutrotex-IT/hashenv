@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { envAPI } from '@/lib/api';
+import { envAPI, environmentsAPI } from '@/lib/api';
+import { formatEnvLabel } from '@/lib/environments';
 import { formatPermission } from '@/lib/permissions';
 import { UploadEnvButton } from './ui/UploadEnvButton';
 import { Button } from './ui/Button';
@@ -37,6 +39,13 @@ interface ProjectCardProps {
 export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
   const { user } = useAuth();
   const { error: toastError } = useToast();
+  const [envSlugs, setEnvSlugs] = useState<string[]>(['dev', 'staging', 'prod']);
+
+  useEffect(() => {
+    environmentsAPI.list(project._id).then((envs) => {
+      if (envs.length > 0) setEnvSlugs(envs.map((e) => e.slug));
+    }).catch(() => {});
+  }, [project._id]);
   
   // Check if user is the project owner (created it)
   const isProjectOwner = project.createdBy._id === user?.id;
@@ -49,7 +58,7 @@ export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
   // Project owner or members with read/write can read
   const canRead = isProjectOwner || userPermission === 'read' || userPermission === 'write';
 
-  const handleQuickDownload = async (e: React.MouseEvent, environment: 'dev' | 'staging' | 'prod') => {
+  const handleQuickDownload = async (e: React.MouseEvent, environment: string) => {
     e.preventDefault();
     e.stopPropagation();
     try {
@@ -107,14 +116,14 @@ export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
 
         {/* Environment Quick Download Buttons */}
         {canRead && (
-          <div className="grid grid-cols-3 gap-2">
-            {(['dev', 'staging', 'prod'] as const).map((env) => (
+          <div className={`grid gap-2 ${envSlugs.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            {envSlugs.slice(0, 6).map((env) => (
               <Button
                 key={env}
                 variant="outline"
                 size="sm"
                 onClick={(e) => handleQuickDownload(e, env)}
-                className="text-xs capitalize"
+                className="text-xs"
                 title={`Download latest ${env} environment file`}
               >
                 <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

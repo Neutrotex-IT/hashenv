@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, apiTokensAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
+import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -51,6 +51,8 @@ export default function ProjectApiTokensPage() {
   const [editingToken, setEditingToken] = useState<ApiToken | null>(null);
   const [expandedExample, setExpandedExample] = useState<string | null>('get-env');
   const [copiedExample, setCopiedExample] = useState<string | null>(null);
+  const [exampleEnv, setExampleEnv] = useState('dev');
+  const [envOptions, setEnvOptions] = useState<string[]>(['dev', 'staging', 'prod']);
   const { confirm } = useConfirm();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -60,13 +62,17 @@ export default function ProjectApiTokensPage() {
 
   const loadData = async () => {
     try {
-      const [projectData, tokensData] = await Promise.all([
+      const [projectData, tokensData, envs] = await Promise.all([
         projectsAPI.get(projectId),
         apiTokensAPI.list(projectId),
+        environmentsAPI.list(projectId),
       ]);
       setProject(projectData);
       setTokens(tokensData);
-      setError('');
+      if (envs.length > 0) {
+        setEnvOptions(envs.map((e) => e.slug));
+        setExampleEnv(envs[0].slug);
+      }
     } catch (err: any) {
       const status = err.response?.status;
       if (status === 403) {
@@ -159,7 +165,7 @@ export default function ProjectApiTokensPage() {
       scope: 'read',
       description: 'Returns the latest decrypted .env content for an environment.',
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
-  "${apiBase}/api/v1/projects/${projectId}/env?environment=dev"`,
+  "${apiBase}/api/v1/projects/${projectId}/env?environment=${exampleEnv}"`,
     },
     {
       id: 'list-env',
@@ -176,7 +182,7 @@ export default function ProjectApiTokensPage() {
       description: 'Creates a new version from raw key=value content.',
       curl: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"environment": "dev", "content": "KEY=value\\nOTHER=value"}' \\
+  -d '{"environment": "${exampleEnv}", "content": "KEY=value\\nOTHER=value"}' \\
   "${apiBase}/api/v1/projects/${projectId}/env"`,
     },
     {
@@ -541,6 +547,23 @@ export default function ProjectApiTokensPage() {
               Authenticate with <code className="font-mono text-xs">Authorization: Bearer YOUR_TOKEN</code>.
               Rate limit: 100 requests per minute per token.
             </p>
+            <div className="mb-4 flex items-center gap-3">
+              <label htmlFor="example-env" className="text-sm text-[var(--text-secondary)]">
+                Example environment slug:
+              </label>
+              <select
+                id="example-env"
+                value={exampleEnv}
+                onChange={(e) => setExampleEnv(e.target.value)}
+                className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm font-mono"
+              >
+                {envOptions.map((slug) => (
+                  <option key={slug} value={slug}>
+                    {slug}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-2">
               {apiExamples.map((example) => {
                 const isOpen = expandedExample === example.id;

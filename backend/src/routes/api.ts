@@ -11,8 +11,10 @@ import {
 } from '../lib/apiTokenAuth';
 import { EnvFile } from '../models/EnvFile';
 import { Secret } from '../models/Secret';
+import Project from '../models/Project';
 import { encryptProjectData, decryptProjectData } from '../crypto';
 import { auditEnv, auditSecret } from '../lib/audit';
+import { assertEnvAllowed } from '../lib/environments';
 
 const router = express.Router();
 
@@ -35,9 +37,23 @@ router.get(
         res.status(400).json({ error: 'Environment query parameter is required' });
         return;
       }
+
+      const project = await Project.findById(projectId);
+      if (!project) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      let envSlug: string;
+      try {
+        envSlug = assertEnvAllowed(project, environment);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
       
       // Find the latest env file for this environment
-      const envFile = await EnvFile.findOne({ projectId, environment })
+      const envFile = await EnvFile.findOne({ projectId, environment: envSlug })
         .sort({ version: -1 });
       
       if (!envFile) {
@@ -122,6 +138,20 @@ router.put(
         res.status(400).json({ error: 'Environment is required' });
         return;
       }
+
+      const project = await Project.findById(projectId);
+      if (!project) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      let envSlug: string;
+      try {
+        envSlug = assertEnvAllowed(project, environment);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
       
       if (content === undefined || typeof content !== 'string') {
         res.status(400).json({ error: 'Content is required' });
@@ -135,7 +165,7 @@ router.put(
       );
       
       // Get current max version
-      const latestEnv = await EnvFile.findOne({ projectId, environment })
+      const latestEnv = await EnvFile.findOne({ projectId, environment: envSlug })
         .sort({ version: -1 });
       
       const newVersion = (latestEnv?.version || 0) + 1;
@@ -143,7 +173,7 @@ router.put(
       // Create new version
       const envFile = await EnvFile.create({
         projectId,
-        environment: environment.trim(),
+        environment: envSlug,
         encryptedContent: ciphertext,
         nonce,
         authTag,

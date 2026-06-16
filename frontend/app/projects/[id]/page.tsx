@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, envAPI, secretsAPI, accountsAPI, ProjectPermissionsResponse } from '@/lib/api';
+import { projectsAPI, envAPI, secretsAPI, accountsAPI, environmentsAPI, ProjectPermissionsResponse, ProjectEnvironment } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +13,8 @@ import { formatPermission } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
+import { EnvCompareModal } from '@/components/ui/EnvCompareModal';
+import { formatEnvLabel } from '@/lib/environments';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -37,7 +39,7 @@ interface Project {
 
 interface EnvVersion {
   _id: string;
-  environment: 'dev' | 'staging' | 'prod';
+  environment: string;
   version: number;
   uploadedBy: {
     _id: string;
@@ -101,10 +103,12 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
   const [envVersions, setEnvVersions] = useState<EnvVersion[]>([]);
+  const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironment[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [accounts, setAccounts] = useState<AssociatedAccount[]>([]);
   const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets' | 'accounts'>('environments');
-  const [selectedEnv, setSelectedEnv] = useState<'dev' | 'staging' | 'prod'>('dev');
+  const [selectedEnv, setSelectedEnv] = useState<string>('dev');
+  const [compareOpen, setCompareOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretFormOpen, setSecretFormOpen] = useState(false);
@@ -154,12 +158,17 @@ export default function ProjectDetailPage() {
 
   const loadProject = async () => {
     try {
-      const [data, permissionsData] = await Promise.all([
+      const [data, permissionsData, envList] = await Promise.all([
         projectsAPI.get(projectId),
         projectsAPI.getPermissions(projectId),
+        environmentsAPI.list(projectId),
       ]);
       setProject(data);
       setPermissionInfo(permissionsData);
+      setProjectEnvironments(envList);
+      if (envList.length > 0 && !envList.some((e) => e.slug === selectedEnv)) {
+        setSelectedEnv(envList[0].slug);
+      }
       setError('');
     } catch (err: any) {
       const status = err.response?.status;
@@ -237,10 +246,26 @@ export default function ProjectDetailPage() {
   const handleDownload = async (environment: string, version?: number) => {
     try {
       await envAPI.download(projectId, environment, version);
-      // Refresh versions list after download
       loadEnvVersions();
     } catch (err: any) {
       toastError(err.response?.data?.error || 'Failed to download file');
+    }
+  };
+
+  const handleRollback = async (version: number) => {
+    const ok = await confirm({
+      title: `Rollback to version ${version}?`,
+      message: `This creates a new version with the content from v${version}. Current history is preserved.`,
+      confirmLabel: 'Rollback',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await envAPI.rollback(projectId, selectedEnv, version);
+      toastSuccess(`Rolled back to version ${version}`);
+      loadEnvVersions();
+    } catch (err: any) {
+      toastError(err.response?.data?.error || 'Failed to rollback');
     }
   };
 
@@ -565,7 +590,19 @@ export default function ProjectDetailPage() {
               ← Back to Dashboard
             </Link>
             <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">{project.name}</h1>
-            <p className="text-sm text-[var(--text-muted)]">Manage environment files for this project</p>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <p className="text-[var(--text-muted)]">Manage environment files for this project</p>
+              {canRead && (
+                <Link href={`/projects/${projectId}/activity`} className="text-[var(--accent)] hover:underline">
+                  Activity
+                </Link>
+              )}
+              {canWrite && (
+                <Link href={`/projects/${projectId}/settings`} className="text-[var(--accent)] hover:underline">
+                  Settings
+                </Link>
+              )}
+            </div>
           </div>
 
           {error && (
@@ -625,21 +662,29 @@ export default function ProjectDetailPage() {
           {selectedTab === 'environments' && (
             <div className="mb-6">
               <div className="border-b border-[var(--border)]">
-                <nav className="-mb-px flex space-x-8">
-                  {(['dev', 'staging', 'prod'] as const).map((env) => (
+                <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                  {projectEnvironments.map((env) => (
                     <button
-                      key={env}
-                      onClick={() => setSelectedEnv(env)}
+                      key={env.slug}
+                      onClick={() => setSelectedEnv(env.slug)}
                       className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                        selectedEnv === env
+                        selectedEnv === env.slug
                           ? 'border-[var(--accent)] text-[var(--accent)]'
                           : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
                       }`}
                     >
-                      {env.charAt(0).toUpperCase() + env.slice(1)}
+                      {formatEnvLabel(env.slug)}
                     </button>
                   ))}
                 </nav>
+                {canWrite && (
+                  <Link
+                    href={`/projects/${projectId}/environments`}
+                    className="text-xs text-[var(--accent)] hover:underline mt-2 inline-block"
+                  >
+                    Manage environments
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -677,17 +722,14 @@ export default function ProjectDetailPage() {
                       label="Upload New Version"
                     />
                   )}
-                  {isProjectOwner && (
-                    <Button
-                      variant="outline"
-                      size="md"
-                      asLink
-                      href={`/projects/${projectId}/logs`}
-                    >
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      View Logs
+                  {canRead && filteredVersions.length >= 2 && (
+                    <Button variant="outline" size="md" onClick={() => setCompareOpen(true)}>
+                      Compare
+                    </Button>
+                  )}
+                  {canRead && (
+                    <Button variant="outline" size="md" asLink href={`/projects/${projectId}/activity`}>
+                      Activity
                     </Button>
                   )}
                 </div>
@@ -733,6 +775,22 @@ export default function ProjectDetailPage() {
                               className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                             >
                               Download
+                            </button>
+                          )}
+                          {canRead && filteredVersions.length >= 2 && (
+                            <button
+                              onClick={() => setCompareOpen(true)}
+                              className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                            >
+                              Compare
+                            </button>
+                          )}
+                          {canWrite && latestVersion && version.version !== latestVersion.version && (
+                            <button
+                              onClick={() => handleRollback(version.version)}
+                              className="text-[var(--warning)] hover:opacity-80 transition-colors"
+                            >
+                              Rollback
                             </button>
                           )}
                           {isProjectOwner && (
@@ -1345,6 +1403,15 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
+
+        {compareOpen && filteredVersions.length >= 2 && (
+          <EnvCompareModal
+            projectId={projectId}
+            environment={selectedEnv}
+            versions={filteredVersions}
+            onClose={() => setCompareOpen(false)}
+          />
+        )}
 
         {sensitiveModal && (
           <SensitiveValueModal

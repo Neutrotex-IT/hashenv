@@ -58,7 +58,7 @@ export async function audit(options: AuditOptions): Promise<void> {
 export async function auditEnv(
   projectId: string,
   actorId: string,
-  action: 'upload' | 'download' | 'edit' | 'delete' | 'view',
+  action: 'upload' | 'download' | 'edit' | 'delete' | 'view' | 'rollback',
   envFileId?: string,
   metadata?: Record<string, any>,
   req?: Request

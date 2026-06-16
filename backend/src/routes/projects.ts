@@ -13,6 +13,7 @@ import {
   Permission,
   AuthRequestWithOrg,
   getUserOrgRole,
+  isProjectOwner,
 } from '../lib/authorization';
 import { validateProjectId, validateUserId, validateProjectName, validatePermission, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
@@ -26,6 +27,10 @@ import {
 } from '../lib/permissions';
 import { createAndSendProjectInvite } from '../lib/projectInvite';
 import { auditProject } from '../lib/audit';
+import EnvFile from '../models/EnvFile';
+import Secret from '../models/Secret';
+import AssociatedAccount from '../models/AssociatedAccount';
+import { ProjectApiToken } from '../models/ProjectApiToken';
 
 const router = express.Router();
 
@@ -770,6 +775,99 @@ router.post(
           : 500;
       console.error('Resend project invite error:', message);
       res.status(status).json({ error: message });
+    }
+  }
+);
+
+/**
+ * Update project name
+ * PATCH /api/projects/:id
+ */
+router.patch(
+  '/:id',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('write'),
+  [validateProjectName()],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const project = (req as AuthRequestWithOrg).project!;
+      const { name } = req.body;
+
+      project.name = name;
+      await project.save();
+
+      await auditProject(
+        project._id.toString(),
+        project.organizationId.toString(),
+        req.user!.userId,
+        'update',
+        { name },
+        req
+      );
+
+      const populatedProject = await Project.findById(project._id)
+        .populate('createdBy', 'name email')
+        .populate('members.userId', 'name email');
+
+      res.json(populatedProject);
+    } catch (error) {
+      console.error('Update project error:', error instanceof Error ? error.message : 'Failed to update project');
+      res.status(500).json({ error: 'Failed to update project' });
+    }
+  }
+);
+
+/**
+ * Delete project with cascade
+ * DELETE /api/projects/:id
+ */
+router.delete(
+  '/:id',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('write'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const project = (req as AuthRequestWithOrg).project!;
+      const projectId = project._id.toString();
+
+      const owner = await isProjectOwner(req.user!.userId, project);
+      if (!owner) {
+        res.status(403).json({ error: 'Only the project owner can delete this project' });
+        return;
+      }
+
+      await Promise.all([
+        EnvFile.deleteMany({ projectId: project._id }),
+        Secret.deleteMany({ projectId: project._id }),
+        AssociatedAccount.deleteMany({ projectId: project._id }),
+        ProjectApiToken.deleteMany({ projectId: project._id }),
+        ProjectInvite.deleteMany({ projectId: project._id }),
+      ]);
+
+      await deleteProjectEncryptionKey(projectId);
+      await Project.findByIdAndDelete(project._id);
+
+      await auditProject(
+        projectId,
+        project.organizationId.toString(),
+        req.user!.userId,
+        'delete',
+        { name: project.name },
+        req
+      );
+
+      res.json({ message: 'Project deleted successfully' });
+    } catch (error) {
+      console.error('Delete project error:', error instanceof Error ? error.message : 'Failed to delete project');
+      res.status(500).json({ error: 'Failed to delete project' });
     }
   }
 );

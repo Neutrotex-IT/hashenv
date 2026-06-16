@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { envAPI } from '@/lib/api';
+import { formatEnvLabel } from '@/lib/environments';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +17,7 @@ export default function EditEnvPage() {
   const { user } = useAuth();
   const projectId = params.id as string;
   const envFileId = params.envFileId as string;
-  const environment = searchParams.get('environment') as 'dev' | 'staging' | 'prod';
+  const environment = searchParams.get('environment') || 'dev';
   
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -97,7 +98,7 @@ export default function EditEnvPage() {
               </Link>
               <h1 className="text-3xl font-bold text-[var(--foreground)]">Edit Environment File</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Editing {environment} environment file
+                Editing {formatEnvLabel(environment)} ({environment})
               </p>
             </div>
 

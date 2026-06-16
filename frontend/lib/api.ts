@@ -396,6 +396,14 @@ export const projectsAPI = {
     const response = await api.patch(`/projects/${projectId}/members/${userId}`, data);
     return response.data;
   },
+  update: async (projectId: string, data: { name: string }) => {
+    const response = await api.patch(`/projects/${projectId}`, data);
+    return response.data;
+  },
+  delete: async (projectId: string) => {
+    const response = await api.delete(`/projects/${projectId}`);
+    return response.data;
+  },
   searchUsers: async (orgId: string, query: string, limit: number = 10) => {
     const params = new URLSearchParams({ orgId, limit: limit.toString() });
     if (query && query.trim().length > 0) {
@@ -471,6 +479,10 @@ export const envAPI = {
     const response = await api.get(`/projects/${projectId}/env/logs${params ? `?${params}` : ''}`);
     return response.data;
   },
+  rollback: async (projectId: string, environment: string, version: number) => {
+    const response = await api.post(`/projects/${projectId}/env/rollback`, { environment, version });
+    return response.data;
+  },
   downloadLogs: async (projectId: string, environment?: string) => {
     const params = environment ? new URLSearchParams({ environment }) : '';
     const response = await api.get(`/projects/${projectId}/env/logs/download${params ? `?${params}` : ''}`, {
@@ -486,6 +498,33 @@ export const envAPI = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+};
+
+export interface ProjectEnvironment {
+  slug: string;
+  hasFiles: boolean;
+  latestVersion: number | null;
+  updatedAt: string | null;
+  versionCount: number;
+}
+
+export const environmentsAPI = {
+  list: async (projectId: string): Promise<ProjectEnvironment[]> => {
+    const response = await api.get(`/projects/${projectId}/environments`);
+    return response.data;
+  },
+  create: async (projectId: string, name: string): Promise<ProjectEnvironment> => {
+    const response = await api.post(`/projects/${projectId}/environments`, { name });
+    return response.data;
+  },
+  rename: async (projectId: string, slug: string, name: string): Promise<ProjectEnvironment> => {
+    const response = await api.patch(`/projects/${projectId}/environments/${slug}`, { name });
+    return response.data;
+  },
+  delete: async (projectId: string, slug: string, force = false): Promise<void> => {
+    const params = force ? '?force=true' : '';
+    await api.delete(`/projects/${projectId}/environments/${slug}${params}`);
   },
 };
 

@@ -380,7 +380,7 @@ export default function Home() {
                   3
                 </div>
                 <div className="text-base text-[var(--text-secondary)] font-[var(--font-inter)]">
-                  Environments per project. Separate dev, staging, and production with independent versioning.
+                  Environments per project. Use dev, staging, prod, or add custom names like qa and preview — each with independent versioning.
                 </div>
               </div>
               <div className="lg:px-8">
@@ -455,7 +455,7 @@ export default function Home() {
                     Upload Environment Files
                   </h3>
                   <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
-                    Upload your .env files via file upload or paste content directly. Choose dev, staging, or production environments. Files are automatically encrypted server-side with AES-256-GCM, versioned, and tracked with complete metadata.
+                    Upload your .env files via file upload or paste content directly. Choose from default or custom environments. Files are automatically encrypted server-side with AES-256-GCM, versioned, and tracked with complete metadata.
                   </p>
                 </div>
               </div>
@@ -519,7 +519,7 @@ export default function Home() {
               },
               {
                 question: 'Can I use HashEnv for multiple environments?',
-                answer: 'Yes! HashEnv supports three environment types per project: development, staging, and production. Upload separate .env files for each environment, and all files are automatically versioned and tracked. You can download, edit, and manage versions independently for each environment.',
+                answer: 'Yes! Every project includes dev, staging, and prod by default, and you can add custom environment names (e.g. qa, preview, uat). Upload separate .env files for each environment, and all files are automatically versioned and tracked. You can download, compare, rollback, and manage versions independently for each environment.',
                 link: { text: 'Explore features', href: '/features' }
               },
               {

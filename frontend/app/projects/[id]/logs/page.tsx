@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { envAPI } from '@/lib/api';
+import { envAPI, environmentsAPI } from '@/lib/api';
+import { formatEnvLabel } from '@/lib/environments';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -13,17 +14,11 @@ import { useToast } from '@/contexts/ToastContext';
 
 interface LogEntry {
   _id: string;
-  action: 'upload' | 'download' | 'edit' | 'delete' | 'access';
-  environment: 'dev' | 'staging' | 'prod';
-  version?: number;
-  performedByName: string;
-  performedByEmail: string;
+  action: string;
+  metadata?: { environment?: string; version?: number };
+  actorEmail?: string;
+  actorId: string;
   createdAt: string;
-  metadata?: {
-    oldVersion?: number;
-    newVersion?: number;
-    fileName?: string;
-  };
 }
 
 export default function LogsPage() {
@@ -35,8 +30,15 @@ export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedEnv, setSelectedEnv] = useState<'dev' | 'staging' | 'prod' | 'all'>('all');
+  const [selectedEnv, setSelectedEnv] = useState<string>('all');
+  const [envSlugs, setEnvSlugs] = useState<string[]>(['dev', 'staging', 'prod']);
   const { error: toastError } = useToast();
+
+  useEffect(() => {
+    environmentsAPI.list(projectId).then((envs) => {
+      setEnvSlugs(envs.map((e) => e.slug));
+    }).catch(() => {});
+  }, [projectId]);
 
   useEffect(() => {
     loadLogs();
@@ -183,7 +185,7 @@ export default function LogsPage() {
                 >
                   All
                 </button>
-                {(['dev', 'staging', 'prod'] as const).map((env) => (
+                {envSlugs.map((env) => (
                   <button
                     key={env}
                     onClick={() => setSelectedEnv(env)}
@@ -193,7 +195,7 @@ export default function LogsPage() {
                         : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
                     }`}
                   >
-                    {env.charAt(0).toUpperCase() + env.slice(1)}
+                    {formatEnvLabel(env)}
                   </button>
                 ))}
               </nav>
@@ -233,16 +235,13 @@ export default function LogsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-secondary)]">
-                        <span className="capitalize">{log.environment}</span>
+                        <span className="font-mono">{log.metadata?.environment || '—'}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-secondary)]">
-                        {log.version || '-'}
+                        {log.metadata?.version ?? '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-secondary)]">
-                        <div>
-                          <div className="font-medium text-[var(--foreground)]">{log.performedByName}</div>
-                          <div className="text-xs text-[var(--text-muted)]">{log.performedByEmail}</div>
-                        </div>
+                        {log.actorEmail || log.actorId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-secondary)]">
                         {new Date(log.createdAt).toLocaleString()}
