@@ -408,6 +408,76 @@ router.delete(
 );
 
 /**
+ * Resend a pending organization invite (requires org:invite)
+ * POST /api/organizations/:orgId/invites/:inviteId/resend
+ */
+router.post(
+  '/:orgId/invites/:inviteId/resend',
+  authenticate,
+  requireOrgPermission('org:invite'),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { inviteId } = req.params;
+
+      if (!isValidObjectId(inviteId)) {
+        res.status(400).json({ error: 'Invalid invite ID format' });
+        return;
+      }
+
+      const invite = await OrgInvite.findById(inviteId);
+      if (!invite || invite.organizationId.toString() !== req.params.orgId) {
+        res.status(404).json({ error: 'Invite not found' });
+        return;
+      }
+
+      if (invite.status !== 'pending') {
+        res.status(400).json({ error: 'Only pending invites can be resent' });
+        return;
+      }
+
+      if (invite.expiresAt < new Date()) {
+        res.status(400).json({ error: 'This invite has expired' });
+        return;
+      }
+
+      const inviterAttributes = {
+        role: req.orgRole!,
+        permissions: req.orgPermissions ?? [],
+      };
+
+      const resent = await createAndSendOrgInvite(
+        req.params.orgId,
+        invite.email,
+        invite.role,
+        req.user.userId,
+        invite.role === 'admin' ? [] : sanitizeOrgPermissions(invite.permissions),
+        inviterAttributes
+      );
+
+      res.json({
+        id: resent._id,
+        email: resent.email,
+        role: resent.role,
+        permissions: resent.permissions,
+        status: resent.status,
+        expiresAt: resent.expiresAt,
+        createdAt: resent.createdAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resend invite';
+      const status = message.includes('cannot') || message.includes('already a member') ? 400 : 500;
+      console.error('Resend invite error:', message);
+      res.status(status).json({ error: message });
+    }
+  }
+);
+
+/**
  * Update member role and ABAC permissions (requires org:manage_members)
  * PATCH /api/organizations/:orgId/members/:memberId
  */

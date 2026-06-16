@@ -54,6 +54,7 @@ export default function ManageMembersPage() {
     permission: 'read' | 'write';
     permissions: ProjectPermission[];
   } | null>(null);
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
 
   const { confirm } = useConfirm();
   const { success: toastSuccess } = useToast();
@@ -183,6 +184,20 @@ export default function ManageMembersPage() {
     await projectsAPI.updateMember(projectId, userId, data);
     toastSuccess('Member updated');
     await loadData();
+  };
+
+  const handleResendInvite = async (inviteId: string) => {
+    setResendingInviteId(inviteId);
+    setError('');
+    try {
+      await projectsAPI.resendInvite(projectId, inviteId);
+      toastSuccess('Invitation resent');
+      await loadData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to resend invitation');
+    } finally {
+      setResendingInviteId(null);
+    }
   };
 
   if (loading) {
@@ -332,13 +347,24 @@ export default function ManageMembersPage() {
                           {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
                         </p>
                       </div>
-                      {canManageMembers && (
-                        <button
-                          onClick={() => handleRevokeInvite(invite.id)}
-                          className="text-sm text-[var(--error)] hover:text-[#F85149]"
-                        >
-                          Revoke
-                        </button>
+                      {canInvite && (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleResendInvite(invite.id)}
+                            disabled={resendingInviteId === invite.id}
+                            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:opacity-50"
+                          >
+                            {resendingInviteId === invite.id ? 'Sending...' : 'Resend'}
+                          </button>
+                          {canManageMembers && (
+                            <button
+                              onClick={() => handleRevokeInvite(invite.id)}
+                              className="text-sm text-[var(--error)] hover:text-[#F85149]"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}

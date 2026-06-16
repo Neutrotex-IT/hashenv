@@ -307,6 +307,10 @@ export const organizationsAPI = {
   revokeInvite: async (orgId: string, inviteId: string): Promise<void> => {
     await api.delete(`/organizations/${orgId}/invites/${inviteId}`);
   },
+  resendInvite: async (orgId: string, inviteId: string): Promise<OrgInvite> => {
+    const response = await api.post(`/organizations/${orgId}/invites/${inviteId}/resend`);
+    return response.data;
+  },
   updateMember: async (
     orgId: string,
     memberId: string,
@@ -375,6 +379,10 @@ export const projectsAPI = {
   },
   revokeInvite: async (projectId: string, inviteId: string): Promise<void> => {
     await api.delete(`/projects/${projectId}/invites/${inviteId}`);
+  },
+  resendInvite: async (projectId: string, inviteId: string): Promise<ProjectInvite> => {
+    const response = await api.post(`/projects/${projectId}/invites/${inviteId}/resend`);
+    return response.data;
   },
   removeMember: async (projectId: string, userId: string) => {
     const response = await api.delete(`/projects/${projectId}/members/${userId}`);

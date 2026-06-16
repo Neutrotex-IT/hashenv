@@ -49,6 +49,8 @@ export default function ProjectApiTokensPage() {
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingToken, setEditingToken] = useState<ApiToken | null>(null);
+  const [expandedExample, setExpandedExample] = useState<string | null>('get-env');
+  const [copiedExample, setCopiedExample] = useState<string | null>(null);
   const { confirm } = useConfirm();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -146,6 +148,60 @@ export default function ProjectApiTokensPage() {
     (m) => m.userId._id === user?.id
   )?.permission || null;
   const canWrite = isProjectOwner || userPermission === 'write';
+
+  const apiBase =
+    typeof window !== 'undefined' ? window.location.origin : 'https://your-hashenv-instance.com';
+
+  const apiExamples = [
+    {
+      id: 'get-env',
+      title: 'GET /env — Download environment file',
+      scope: 'read',
+      description: 'Returns the latest decrypted .env content for an environment.',
+      curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
+  "${apiBase}/api/v1/projects/${projectId}/env?environment=dev"`,
+    },
+    {
+      id: 'list-env',
+      title: 'GET /env/list — List environments',
+      scope: 'read',
+      description: 'Lists each environment with its latest version number.',
+      curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
+  "${apiBase}/api/v1/projects/${projectId}/env/list"`,
+    },
+    {
+      id: 'put-env',
+      title: 'PUT /env — Upload environment file',
+      scope: 'write',
+      description: 'Creates a new version from raw key=value content.',
+      curl: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"environment": "dev", "content": "KEY=value\\nOTHER=value"}' \\
+  "${apiBase}/api/v1/projects/${projectId}/env"`,
+    },
+    {
+      id: 'list-secrets',
+      title: 'GET /secrets — List secrets',
+      scope: 'read',
+      description: 'Returns secret names and metadata (not values).',
+      curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
+  "${apiBase}/api/v1/projects/${projectId}/secrets"`,
+    },
+    {
+      id: 'get-secret',
+      title: 'GET /secrets/:name — Get secret value',
+      scope: 'read',
+      description: 'Returns the decrypted content for a secret by name.',
+      curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
+  "${apiBase}/api/v1/projects/${projectId}/secrets/MY_SECRET"`,
+    },
+  ];
+
+  const handleCopyExample = async (id: string, text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedExample(id);
+    setTimeout(() => setCopiedExample(null), 2000);
+  };
 
   if (loading) {
     return (
@@ -478,34 +534,64 @@ export default function ProjectApiTokensPage() {
 
           {/* Usage Examples */}
           <div className="mt-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-              Usage Examples
+            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">
+              API Reference
             </h3>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)] mb-2">
-                  Download environment file:
-                </p>
-                <pre className="p-3 rounded-md bg-[var(--background)] border border-[var(--border)] text-sm overflow-x-auto">
-                  <code className="text-[var(--text-secondary)]">
-{`curl -H "Authorization: Bearer YOUR_TOKEN" \\
-  "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/projects/${projectId}/env?environment=dev"`}
-                  </code>
-                </pre>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)] mb-2">
-                  Upload environment file:
-                </p>
-                <pre className="p-3 rounded-md bg-[var(--background)] border border-[var(--border)] text-sm overflow-x-auto">
-                  <code className="text-[var(--text-secondary)]">
-{`curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"environment": "dev", "content": "KEY=value"}' \\
-  "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/projects/${projectId}/env"`}
-                  </code>
-                </pre>
-              </div>
+            <p className="text-sm text-[var(--text-muted)] mb-4">
+              Authenticate with <code className="font-mono text-xs">Authorization: Bearer YOUR_TOKEN</code>.
+              Rate limit: 100 requests per minute per token.
+            </p>
+            <div className="space-y-2">
+              {apiExamples.map((example) => {
+                const isOpen = expandedExample === example.id;
+                return (
+                  <div
+                    key={example.id}
+                    className="rounded-md border border-[var(--border)] bg-[var(--background)] overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setExpandedExample(isOpen ? null : example.id)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left"
+                      aria-expanded={isOpen}
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[var(--foreground)]">{example.title}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                          Requires <span className="font-mono">{example.scope}</span> scope
+                        </p>
+                      </div>
+                      <svg
+                        className={`h-5 w-5 shrink-0 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-[var(--border)] px-4 py-3">
+                        <p className="text-sm text-[var(--text-secondary)] mb-3">{example.description}</p>
+                        <div className="relative">
+                          <pre className="p-3 pr-20 rounded-md bg-[var(--surface)] border border-[var(--border)] text-sm overflow-x-auto">
+                            <code className="text-[var(--text-secondary)] whitespace-pre-wrap break-all">
+                              {example.curl}
+                            </code>
+                          </pre>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyExample(example.id, example.curl)}
+                            className="absolute top-2 right-2 rounded px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
+                          >
+                            {copiedExample === example.id ? 'Copied!' : 'Copy'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

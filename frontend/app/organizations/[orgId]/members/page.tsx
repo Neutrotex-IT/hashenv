@@ -11,6 +11,7 @@ import { EditOrgMemberModal } from '@/components/ui/EditOrgMemberModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { formatOrgPermission, hasOrgPermission, OrgPermission } from '@/lib/permissions';
 import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function OrganizationMembersPage() {
   const params = useParams();
@@ -19,6 +20,9 @@ export default function OrganizationMembersPage() {
 
   const org = organizations.find((item) => item._id === orgId);
   const { confirm } = useConfirm();
+  const { success: toastSuccess } = useToast();
+
+  const customPermissions = (org?.permissions ?? []) as OrgPermission[];
 
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [invites, setInvites] = useState<OrgInvite[]>([]);
@@ -31,8 +35,8 @@ export default function OrganizationMembersPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
 
-  const customPermissions = (org?.permissions ?? []) as OrgPermission[];
   const canInvite = org
     ? hasOrgPermission(org.role, customPermissions, 'org:invite')
     : false;
@@ -133,6 +137,20 @@ export default function OrganizationMembersPage() {
       await loadData();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to remove member');
+    }
+  };
+
+  const handleResendInvite = async (inviteId: string) => {
+    setResendingInviteId(inviteId);
+    setError('');
+    try {
+      await organizationsAPI.resendInvite(orgId, inviteId);
+      toastSuccess('Invitation resent');
+      await loadData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to resend invitation');
+    } finally {
+      setResendingInviteId(null);
     }
   };
 
@@ -251,14 +269,25 @@ export default function OrganizationMembersPage() {
                           {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
                         </p>
                       </div>
-                      {canRevokeInvites && (
-                        <button
-                          onClick={() => handleRevokeInvite(invite.id)}
-                          className="text-sm text-[var(--error)] hover:text-[#F85149]"
-                        >
-                          Revoke
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {canInvite && (
+                          <button
+                            onClick={() => handleResendInvite(invite.id)}
+                            disabled={resendingInviteId === invite.id}
+                            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:opacity-50"
+                          >
+                            {resendingInviteId === invite.id ? 'Sending...' : 'Resend'}
+                          </button>
+                        )}
+                        {canRevokeInvites && (
+                          <button
+                            onClick={() => handleRevokeInvite(invite.id)}
+                            className="text-sm text-[var(--error)] hover:text-[#F85149]"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

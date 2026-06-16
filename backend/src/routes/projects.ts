@@ -695,4 +695,83 @@ router.delete(
   }
 );
 
+/**
+ * Resend a pending project invite (requires project:invite)
+ * POST /api/projects/:id/invites/:inviteId/resend
+ */
+router.post(
+  '/:id/invites/:inviteId/resend',
+  authenticate,
+  validateProjectId(),
+  requireProjectInvitePermission(),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { inviteId } = req.params;
+
+      if (!isValidObjectId(inviteId)) {
+        res.status(400).json({ error: 'Invalid invite ID format' });
+        return;
+      }
+
+      const invite = await ProjectInvite.findById(inviteId);
+      if (!invite || invite.projectId.toString() !== req.params.id) {
+        res.status(404).json({ error: 'Invite not found' });
+        return;
+      }
+
+      if (invite.status !== 'pending') {
+        res.status(400).json({ error: 'Only pending invites can be resent' });
+        return;
+      }
+
+      if (invite.expiresAt < new Date()) {
+        res.status(400).json({ error: 'This invite has expired' });
+        return;
+      }
+
+      const project = (req as AuthRequestWithOrg).project as IProject;
+      const inviterContext = await getProjectMemberAttributes(
+        req.user.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+
+      const resent = await createAndSendProjectInvite(
+        project._id.toString(),
+        invite.email,
+        invite.permission,
+        sanitizeProjectPermissions(invite.permissions),
+        req.user.userId,
+        { ...inviterContext, orgRole: (req as AuthRequestWithOrg).orgRole ?? null }
+      );
+
+      res.json({
+        id: resent._id,
+        email: resent.email,
+        permission: resent.permission,
+        permissions: resent.permissions,
+        status: resent.status,
+        expiresAt: resent.expiresAt,
+        createdAt: resent.createdAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resend invite';
+      const status =
+        message.includes('already a member') ||
+        message.includes('organization') ||
+        message.includes('cannot grant') ||
+        message.includes('permission')
+          ? 400
+          : 500;
+      console.error('Resend project invite error:', message);
+      res.status(status).json({ error: message });
+    }
+  }
+);
+
 export default router;
