@@ -25,6 +25,8 @@ export default function SettingsPage() {
   const [flushDuration, setFlushDuration] = useState<number | null>(null);
   const [panicButton, setPanicButton] = useState({
     flushEnvs: false,
+    flushSecrets: false,
+    revokeApiTokens: false,
     revokeCollaborators: false,
     downloadEnvs: false,
     askConfirmation: true,
@@ -229,7 +231,7 @@ export default function SettingsPage() {
           <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
             <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Panic Button Settings</h2>
             <p className="text-sm text-[var(--text-muted)] mb-4">
-              Configure what happens when you press the panic button. Use this in emergency situations.
+              Configure what happens when you press the panic button. Affects projects you created and projects in orgs where you are owner or admin. Your password is always required server-side.
             </p>
             <form onSubmit={handleSaveSettings} className="space-y-4">
               <div className="space-y-3">
@@ -241,6 +243,26 @@ export default function SettingsPage() {
                     className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
                   />
                   <span className="text-sm text-[var(--foreground)]">Flush Envs Immediately</span>
+                </label>
+
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={panicButton.flushSecrets}
+                    onChange={(e) => setPanicButton({ ...panicButton, flushSecrets: e.target.checked })}
+                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                  />
+                  <span className="text-sm text-[var(--foreground)]">Flush Secrets and Associated Accounts</span>
+                </label>
+
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={panicButton.revokeApiTokens}
+                    onChange={(e) => setPanicButton({ ...panicButton, revokeApiTokens: e.target.checked })}
+                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                  />
+                  <span className="text-sm text-[var(--foreground)]">Revoke All API Tokens</span>
                 </label>
 
                 <label className="flex items-center space-x-3 cursor-pointer">

@@ -84,9 +84,9 @@ export default function DashboardPage() {
       return;
     }
 
-    const { flushEnvs, revokeCollaborators, downloadEnvs, askConfirmation } = panicButtonSettings;
+    const { flushEnvs, flushSecrets, revokeApiTokens, revokeCollaborators, downloadEnvs, askConfirmation } = panicButtonSettings;
 
-    if (!flushEnvs && !revokeCollaborators && !downloadEnvs) {
+    if (!flushEnvs && !flushSecrets && !revokeApiTokens && !revokeCollaborators && !downloadEnvs) {
       toastError('No panic actions configured. Please configure panic button settings first.');
       return;
     }
@@ -96,20 +96,28 @@ export default function DashboardPage() {
         `Are you sure you want to execute panic actions?\n\n` +
         `${downloadEnvs ? '• Download all environment files\n' : ''}` +
         `${flushEnvs ? '• Delete all environment files\n' : ''}` +
+        `${flushSecrets ? '• Delete all secrets and associated accounts\n' : ''}` +
+        `${revokeApiTokens ? '• Revoke all API tokens\n' : ''}` +
         `${revokeCollaborators ? '• Revoke all collaborator access\n' : ''}`;
 
       const ok = await confirm({
         title: 'Execute panic actions?',
         message: confirmMessage,
-        confirmLabel: 'Execute',
+        confirmLabel: 'Continue',
         variant: 'danger',
       });
       if (!ok) return;
     }
 
+    const password = window.prompt('Enter your password to execute panic actions:');
+    if (!password) {
+      toastError('Password is required to execute panic actions');
+      return;
+    }
+
     setPanicLoading(true);
     try {
-      const result = await settingsAPI.panic();
+      const result = await settingsAPI.panic(password);
 
       if (result.results?.downloadEnvs && result.results?.downloadContent) {
         const blob = new Blob([result.results.downloadContent], { type: 'text/plain' });
@@ -125,7 +133,9 @@ export default function DashboardPage() {
 
       const actions = [];
       if (result.results?.downloadEnvs) actions.push('downloaded');
-      if (result.results?.flushEnvs) actions.push('flushed');
+      if (result.results?.flushEnvs) actions.push('envs flushed');
+      if (result.results?.flushSecrets) actions.push('secrets flushed');
+      if (result.results?.revokeApiTokens) actions.push('API tokens revoked');
       if (result.results?.revokeCollaborators) actions.push('collaborators revoked');
 
       toastSuccess(`Panic actions executed: ${actions.join(', ')}`);

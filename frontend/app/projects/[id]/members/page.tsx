@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { projectsAPI, OrgMember, ProjectInvite, ProjectPermissionsResponse } from '@/lib/api';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { OrgMemberSelect } from '@/components/ui/OrgMemberSelect';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
@@ -202,36 +200,28 @@ export default function ManageMembersPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
-            <SkeletonCard className="mb-6" />
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <>
+        <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
+        <SkeletonCard className="mb-6" />
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </>
     );
   }
 
   if (!project) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="flex min-h-screen items-center justify-center">
-            <div className="text-center">
-              <p className="text-[var(--error)] mb-4">Project not found</p>
-              <Button variant="primary" size="md" asLink href="/dashboard">
-                Back to Dashboard
-              </Button>
-            </div>
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <p className="text-[var(--error)] mb-4">Project not found</p>
+          <Button variant="primary" size="md" asLink href="/dashboard">
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -243,20 +233,12 @@ export default function ManageMembersPage() {
   );
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mx-auto max-w-4xl">
-            <div className="mb-6">
-              <Link
-                href={`/projects/${projectId}`}
-                className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4"
-              >
-                ← Back to Project
-              </Link>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">
-                Manage Members - {project.name}
-              </h1>
+    <>
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-[var(--foreground)]">
+            Manage Members - {project.name}
+          </h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
                 Add organization members directly or invite by email with granular project permissions.
               </p>
@@ -500,8 +482,7 @@ export default function ManageMembersPage() {
               )}
             </div>
           </div>
-        </div>
-      </AuthenticatedLayout>
+      </div>
 
       {editingMember && (
         <EditProjectMemberModal
@@ -514,6 +495,6 @@ export default function ManageMembersPage() {
           onClose={() => setEditingMember(null)}
         />
       )}
-    </ProtectedRoute>
+    </>
   );
 }

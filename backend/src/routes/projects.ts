@@ -26,7 +26,7 @@ import {
   sanitizeProjectPermissions,
 } from '../lib/permissions';
 import { createAndSendProjectInvite } from '../lib/projectInvite';
-import { auditProject } from '../lib/audit';
+import { auditProject, auditMember } from '../lib/audit';
 import { assertEnvAllowed } from '../lib/environments';
 import EnvFile from '../models/EnvFile';
 import Secret from '../models/Secret';
@@ -382,6 +382,19 @@ router.post(
 
       await project.save();
 
+      await auditMember(
+        projectId,
+        req.user!.userId,
+        existingMemberIndex >= 0 ? 'update' : 'add',
+        userId,
+        {
+          email: user.email,
+          permission: permission as Permission,
+          permissions: memberPermissions,
+        },
+        req
+      );
+
       const populatedProject = await Project.findById(projectId)
         .populate('createdBy', 'name email')
         .populate('members.userId', 'name email');
@@ -479,13 +492,14 @@ router.patch(
 
       await project.save();
 
-      await auditProject(
+      const targetUser = await User.findById(userId).select('email');
+      await auditMember(
         projectId,
-        project.organizationId.toString(),
         req.user!.userId,
-        'update_member',
+        'update',
+        userId,
         {
-          targetUserId: userId,
+          email: targetUser?.email,
           permission: project.members[memberIndex].permission,
           permissions: project.members[memberIndex].permissions,
         },
@@ -525,14 +539,35 @@ router.delete(
       }
       
       const project = (req as AuthRequestWithOrg).project as IProject;
-      
+      const projectId = project._id.toString();
+
+      const removedMember = project.members.find((m) => m.userId.toString() === userId);
+      const removedUser = removedMember
+        ? await User.findById(userId).select('email')
+        : null;
+
       // Remove member
       project.members = project.members.filter(
         (m) => m.userId.toString() !== userId
       );
-      
+
       await project.save();
-      
+
+      if (removedMember) {
+        await auditMember(
+          projectId,
+          req.user!.userId,
+          'remove',
+          userId,
+          {
+            email: removedUser?.email,
+            permission: removedMember.permission,
+            permissions: removedMember.permissions,
+          },
+          req
+        );
+      }
+
       const populatedProject = await Project.findById(req.params.id)
         .populate('createdBy', 'name email')
         .populate('members.userId', 'name email');

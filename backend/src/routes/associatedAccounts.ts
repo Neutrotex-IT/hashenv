@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from '../lib/auth';
 import { requireProjectAccess } from '../lib/authorization';
 import { validateProjectId, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
+import { auditAccount } from '../lib/audit';
 
 const router = express.Router();
 
@@ -155,6 +156,15 @@ router.post(
         .populate('createdBy', 'name email')
         .select(CREDENTIALS_SELECT);
 
+      await auditAccount(
+        projectId,
+        req.user.userId,
+        'create',
+        account._id.toString(),
+        { name: account.label, provider: account.provider },
+        req
+      );
+
       res.status(201).json(populated);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
@@ -229,6 +239,17 @@ router.get(
       }
 
       const credentials = await decryptCredentials(projectId, account.encryptedData, account.iv, account.authTag);
+
+      if (req.user) {
+        await auditAccount(
+          projectId,
+          req.user.userId,
+          'read',
+          account._id.toString(),
+          { name: account.label, provider: account.provider },
+          req
+        );
+      }
 
       res.json({
         _id: account._id,
@@ -406,6 +427,15 @@ router.put(
 
       await account.save();
 
+      await auditAccount(
+        projectId,
+        req.user.userId,
+        'update',
+        account._id.toString(),
+        { name: account.label, provider: account.provider },
+        req
+      );
+
       const populated = await AssociatedAccount.findById(account._id)
         .populate('createdBy', 'name email')
         .select(CREDENTIALS_SELECT);
@@ -449,6 +479,17 @@ router.delete(
       if (!account) {
         res.status(404).json({ error: 'Associated account not found' });
         return;
+      }
+
+      if (req.user) {
+        await auditAccount(
+          projectId,
+          req.user.userId,
+          'delete',
+          account._id.toString(),
+          { name: account.label, provider: account.provider },
+          req
+        );
       }
 
       res.json({ message: 'Associated account deleted successfully' });

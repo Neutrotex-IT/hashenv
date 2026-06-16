@@ -679,7 +679,7 @@ export const settingsAPI = {
     const response = await api.get('/settings');
     return response.data;
   },
-  update: async (data: { flushDuration?: number | null; panicButton?: { flushEnvs?: boolean; revokeCollaborators?: boolean; downloadEnvs?: boolean; askConfirmation?: boolean } }) => {
+  update: async (data: { flushDuration?: number | null; panicButton?: { flushEnvs?: boolean; flushSecrets?: boolean; revokeApiTokens?: boolean; revokeCollaborators?: boolean; downloadEnvs?: boolean; askConfirmation?: boolean } }) => {
     const response = await api.put('/settings', data);
     return response.data;
   },
@@ -691,8 +691,8 @@ export const settingsAPI = {
     const response = await api.put('/settings/profile', data);
     return response.data;
   },
-  panic: async () => {
-    const response = await api.post('/settings/panic');
+  panic: async (password: string) => {
+    const response = await api.post('/settings/panic', { password });
     return response.data;
   },
 };

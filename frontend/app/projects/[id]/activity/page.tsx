@@ -38,7 +38,7 @@ function formatActivityLabel(entry: ActivityEntry): string {
     case 'api_token':
       return `API token ${action}`;
     case 'member':
-      return `Member ${action.replace('_', ' ')}`;
+      return `Member ${action}${metadata?.email ? `: ${metadata.email}` : ''}`;
     default:
       return `${resourceType} ${action}`;
   }

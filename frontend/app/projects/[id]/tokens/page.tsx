@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
@@ -201,6 +198,34 @@ export default function ProjectApiTokensPage() {
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
   "${apiBase}/api/v1/projects/${projectId}/secrets/MY_SECRET"`,
     },
+    {
+      id: 'post-secret',
+      title: 'POST /secrets — Create secret',
+      scope: 'write',
+      description: 'Creates a new secret with the given name and content.',
+      curl: `curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "MY_SECRET", "content": "secret-value"}' \\
+  "${apiBase}/api/v1/projects/${projectId}/secrets"`,
+    },
+    {
+      id: 'put-secret',
+      title: 'PUT /secrets/:name — Update secret',
+      scope: 'write',
+      description: 'Updates the content of an existing secret.',
+      curl: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"content": "new-secret-value"}' \\
+  "${apiBase}/api/v1/projects/${projectId}/secrets/MY_SECRET"`,
+    },
+    {
+      id: 'delete-secret',
+      title: 'DELETE /secrets/:name — Delete secret',
+      scope: 'write',
+      description: 'Permanently deletes a secret by name.',
+      curl: `curl -X DELETE -H "Authorization: Bearer YOUR_TOKEN" \\
+  "${apiBase}/api/v1/projects/${projectId}/secrets/MY_SECRET"`,
+    },
   ];
 
   const handleCopyExample = async (id: string, text: string) => {
@@ -211,57 +236,44 @@ export default function ProjectApiTokensPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <>
+        <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </>
     );
   }
 
   if (!project || error) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="flex min-h-screen items-center justify-center p-6">
-            <div className="text-center max-w-md">
-              <div className="mb-6">
-                <svg className="mx-auto h-16 w-16 text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">Error</h2>
-              <p className="text-[var(--text-secondary)] mb-6">{error}</p>
-              <Button variant="primary" size="md" asLink href="/dashboard">
-                Back to Dashboard
-              </Button>
-            </div>
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center max-w-md">
+          <div className="mb-6">
+            <svg className="mx-auto h-16 w-16 text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
           </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+          <h2 className="text-xl font-bold text-[var(--foreground)] mb-2">Error</h2>
+          <p className="text-[var(--text-secondary)] mb-6">{error}</p>
+          <Button variant="primary" size="md" asLink href="/dashboard">
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mb-6">
-            <Link href={`/projects/${projectId}`} className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block">
-              Back to Project
-            </Link>
-            <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">API Tokens</h1>
-            <p className="text-sm text-[var(--text-muted)]">
-              Manage API tokens for programmatic access to {project.name}
-            </p>
-          </div>
+    <>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">API Tokens</h1>
+        <p className="text-sm text-[var(--text-muted)]">
+          Manage API tokens for programmatic access to {project.name}
+        </p>
+      </div>
 
           {/* New Token Display */}
           {newToken && (
@@ -617,8 +629,6 @@ export default function ProjectApiTokensPage() {
               })}
             </div>
           </div>
-        </div>
-
         {editingToken && (
           <EditApiTokenModal
             token={editingToken}
@@ -626,7 +636,6 @@ export default function ProjectApiTokensPage() {
             onClose={() => setEditingToken(null)}
           />
         )}
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </>
   );
 }

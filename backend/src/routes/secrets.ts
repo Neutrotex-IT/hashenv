@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from '../lib/auth';
 import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
 import { validateProjectId, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
+import { auditSecret } from '../lib/audit';
 
 const router = express.Router();
 
@@ -81,6 +82,15 @@ router.post(
         authTag,
         createdBy: req.user.userId,
       });
+
+      await auditSecret(
+        projectId,
+        req.user.userId,
+        'create',
+        secret._id.toString(),
+        { secretName: secret.name },
+        req
+      );
 
       // Return secret metadata (without encrypted data)
       const populatedSecret = await Secret.findById(secret._id)
@@ -170,6 +180,17 @@ router.get(
 
       // Decrypt the secret content using project-specific key
       const decryptedContent = await decryptProjectData(projectId, secret.encryptedData, secret.iv, secret.authTag);
+
+      if (req.user) {
+        await auditSecret(
+          projectId,
+          req.user.userId,
+          'read',
+          secret._id.toString(),
+          { secretName: secret.name },
+          req
+        );
+      }
 
       res.json({
         _id: secret._id,
@@ -276,6 +297,15 @@ router.put(
 
       await secret.save();
 
+      await auditSecret(
+        projectId,
+        req.user.userId,
+        'update',
+        secret._id.toString(),
+        { secretName: secret.name },
+        req
+      );
+
       // Return updated secret metadata
       const populatedSecret = await Secret.findById(secret._id)
         .populate('createdBy', 'name email')
@@ -326,6 +356,17 @@ router.delete(
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
+      }
+
+      if (req.user) {
+        await auditSecret(
+          projectId,
+          req.user.userId,
+          'delete',
+          secret._id.toString(),
+          { secretName: secret.name },
+          req
+        );
       }
 
       res.json({ message: 'Secret deleted successfully' });

@@ -19,6 +19,7 @@ import publicApiRoutes from './routes/api';
 import { securityHeaders, apiRateLimiter } from './middleware/security';
 import { sanitizeError } from './middleware/security';
 import { bootstrapEncryption, getEncryptionStatus } from './crypto';
+import { runAutoFlush } from './lib/autoFlush';
 import Project from './models/Project';
 import { DEFAULT_ENVIRONMENTS } from './lib/environments';
 
@@ -282,6 +283,14 @@ mongoose
     } else {
       console.log('[Health Ping] Skipped in development mode');
     }
+
+    // Auto-flush cron: check every hour for users with flushDuration configured
+    cron.schedule('0 * * * *', () => {
+      runAutoFlush().catch((error) => {
+        console.error('[AutoFlush] Job failed:', error instanceof Error ? error.message : 'Unknown error');
+      });
+    });
+    console.log('[AutoFlush] Cron job started - checking hourly');
   })
   .catch((error) => {
     // Security: Don't log full connection string

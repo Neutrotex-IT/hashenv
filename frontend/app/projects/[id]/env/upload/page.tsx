@@ -2,11 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { envAPI, environmentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 
 export default function UploadEnvPage() {
@@ -86,18 +83,9 @@ export default function UploadEnvPage() {
   };
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mx-auto max-w-2xl">
-            <div className="mb-6">
-              <Link
-                href={`/projects/${projectId}`}
-                className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4"
-              >
-                ← Back to Project
-              </Link>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">Upload Environment File</h1>
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-[var(--foreground)]">Upload Environment File</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">Upload a new version of your .env file</p>
             </div>
 
@@ -238,9 +226,6 @@ export default function UploadEnvPage() {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </div>
   );
 }

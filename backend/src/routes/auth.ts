@@ -177,6 +177,7 @@ router.post(
       const isPasswordValid = await comparePassword(password, user.password);
       
       if (!isPasswordValid) {
+        await auditSession(user._id.toString(), 'login_failed', { email: user.email }, req);
         res.status(401).json({ error: 'Invalid email or password' });
         return;
       }
@@ -425,6 +426,9 @@ router.post(
       user.passwordResetToken = undefined;
       user.passwordResetExpires = undefined;
       await user.save();
+
+      // Invalidate all existing sessions after password reset
+      await RefreshToken.deleteMany({ userId: user._id });
       
       res.json({ message: 'Password reset successful. You can now log in with your new password.' });
     } catch (error) {

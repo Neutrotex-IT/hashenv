@@ -643,7 +643,17 @@ router.get(
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const AuditLog = (await import('../models/AuditLog')).default;
-      const logs = await AuditLog.find({ organizationId: req.params.orgId })
+      const Project = (await import('../models/Project')).default;
+      const orgId = req.params.orgId;
+
+      const projectIds = await Project.find({ organizationId: orgId }).distinct('_id');
+
+      const logs = await AuditLog.find({
+        $or: [
+          { organizationId: orgId },
+          ...(projectIds.length > 0 ? [{ projectId: { $in: projectIds } }] : []),
+        ],
+      })
         .sort({ createdAt: -1 })
         .limit(1000);
       

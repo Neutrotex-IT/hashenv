@@ -2,19 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
 import { envAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 
 export default function EditEnvPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const projectId = params.id as string;
   const envFileId = params.envFileId as string;
   const environment = searchParams.get('environment') || 'dev';
@@ -69,34 +64,19 @@ export default function EditEnvPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <div className="mx-auto max-w-4xl">
-              <div className="animate-pulse">
-                <div className="h-8 bg-[var(--surface-elevated)] rounded w-1/3 mb-4"></div>
-                <div className="h-64 bg-[var(--surface-elevated)] rounded"></div>
-              </div>
-            </div>
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <div className="mx-auto max-w-4xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-[var(--surface-elevated)] rounded w-1/3 mb-4"></div>
+          <div className="h-64 bg-[var(--surface-elevated)] rounded"></div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mx-auto max-w-4xl">
-            <div className="mb-6">
-              <Link
-                href={`/projects/${projectId}`}
-                className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4"
-              >
-                ← Back to Project
-              </Link>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">Edit Environment File</h1>
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-[var(--foreground)]">Edit Environment File</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
                 Editing {formatEnvLabel(environment)} ({environment})
               </p>
@@ -158,9 +138,6 @@ export default function EditEnvPage() {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </div>
   );
 }

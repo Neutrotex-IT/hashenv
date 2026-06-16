@@ -5,9 +5,12 @@ import UserSettings from '../models/UserSettings';
 import Project from '../models/Project';
 import EnvFile from '../models/EnvFile';
 import Secret from '../models/Secret';
-import { authenticate, AuthRequest } from '../lib/auth';
+import AssociatedAccount from '../models/AssociatedAccount';
+import { ProjectApiToken } from '../models/ProjectApiToken';
+import { authenticate, AuthRequest, comparePassword } from '../lib/auth';
 import { decryptProjectData } from '../crypto';
 import { auditPanic } from '../lib/audit';
+import { getPanicEligibleProjects } from '../lib/panicProjects';
 
 const router = express.Router();
 
@@ -30,6 +33,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
         flushDuration: null, // Default disabled
         panicButton: {
           flushEnvs: false,
+          flushSecrets: false,
+          revokeApiTokens: false,
           revokeCollaborators: false,
           downloadEnvs: false,
           askConfirmation: true,
@@ -76,6 +81,14 @@ router.put(
       .optional()
       .isBoolean()
       .withMessage('flushEnvs must be a boolean'),
+    body('panicButton.flushSecrets')
+      .optional()
+      .isBoolean()
+      .withMessage('flushSecrets must be a boolean'),
+    body('panicButton.revokeApiTokens')
+      .optional()
+      .isBoolean()
+      .withMessage('revokeApiTokens must be a boolean'),
     body('panicButton.revokeCollaborators')
       .optional()
       .isBoolean()
@@ -112,6 +125,8 @@ router.put(
           flushDuration: flushDuration === null || flushDuration === undefined || flushDuration === '' ? null : Number(flushDuration),
           panicButton: panicButton || {
             flushEnvs: false,
+            flushSecrets: false,
+            revokeApiTokens: false,
             revokeCollaborators: false,
             downloadEnvs: false,
             askConfirmation: true,
@@ -260,14 +275,36 @@ router.put(
 /**
  * Execute panic button actions
  * POST /api/settings/panic
- * 
- * NOTE: Only affects projects owned by the user (createdBy = userId).
- * Does NOT affect projects where the user is a collaborator.
+ * Body: { password: string } — server-side re-authentication required
+ *
+ * Affects projects the user created or projects in orgs where they are owner/admin.
  */
-router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post(
+  '/panic',
+  authenticate,
+  [body('password').notEmpty().withMessage('Password is required to execute panic actions')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const user = await User.findById(req.user.userId).select('+password');
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const passwordValid = await comparePassword(req.body.password, user.password);
+    if (!passwordValid) {
+      res.status(401).json({ error: 'Invalid password' });
       return;
     }
 
@@ -277,21 +314,29 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const { flushEnvs, revokeCollaborators, downloadEnvs } = settings.panicButton;
+    const {
+      flushEnvs,
+      flushSecrets,
+      revokeApiTokens,
+      revokeCollaborators,
+      downloadEnvs,
+    } = settings.panicButton;
 
-    if (!flushEnvs && !revokeCollaborators && !downloadEnvs) {
+    if (!flushEnvs && !flushSecrets && !revokeApiTokens && !revokeCollaborators && !downloadEnvs) {
       res.status(400).json({ error: 'No panic actions configured' });
       return;
     }
 
-    const results: any = {
+    const results: Record<string, unknown> = {
       downloadEnvs: false,
       flushEnvs: false,
+      flushSecrets: false,
+      revokeApiTokens: false,
       revokeCollaborators: false,
     };
 
-    // Get only projects owned by the user (not projects where user is a collaborator)
-    const projects = await Project.find({ createdBy: req.user.userId });
+    const projects = await getPanicEligibleProjects(req.user.userId);
+    const projectIds = projects.map((p) => p._id);
 
     // 1. Download all envs first (if enabled)
     if (downloadEnvs) {
@@ -301,7 +346,6 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
         for (const project of projects) {
           const projectEnvs = await EnvFile.find({ projectId: project._id }).sort({ createdAt: -1 });
           
-          // Get latest version of each environment
           const latestByEnv: { [key: string]: any } = {};
           for (const envFile of projectEnvs) {
             const env = envFile.environment;
@@ -331,7 +375,6 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
           }
         }
 
-        // Format as downloadable text
         let downloadContent = `# HashEnv Backup - ${new Date().toISOString()}\n\n`;
         for (const envFile of envFiles) {
           downloadContent += `# Project: ${envFile.projectName} - Environment: ${envFile.environment} - Version: ${envFile.version}\n`;
@@ -350,22 +393,46 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
     // 2. Flush envs (if enabled)
     if (flushEnvs) {
       try {
-        const projectIds = projects.map(p => p._id);
-        // Count before deletion
         const countBefore = await EnvFile.countDocuments({ projectId: { $in: projectIds } });
-        
-        for (const project of projects) {
-          await EnvFile.deleteMany({ projectId: project._id });
-        }
+        await EnvFile.deleteMany({ projectId: { $in: projectIds } });
         results.flushEnvs = true;
-        results.flushedCount = countBefore;
+        results.flushedEnvCount = countBefore;
       } catch (error) {
         console.error('Flush envs error:', error);
         results.flushError = error instanceof Error ? error.message : 'Failed to flush envs';
       }
     }
 
-    // 3. Revoke all collaborator access (if enabled)
+    // 3. Flush secrets and associated accounts (if enabled)
+    if (flushSecrets) {
+      try {
+        const secretCount = await Secret.countDocuments({ projectId: { $in: projectIds } });
+        const accountCount = await AssociatedAccount.countDocuments({ projectId: { $in: projectIds } });
+        await Secret.deleteMany({ projectId: { $in: projectIds } });
+        await AssociatedAccount.deleteMany({ projectId: { $in: projectIds } });
+        results.flushSecrets = true;
+        results.flushedSecretCount = secretCount;
+        results.flushedAccountCount = accountCount;
+      } catch (error) {
+        console.error('Flush secrets error:', error);
+        results.flushSecretsError = error instanceof Error ? error.message : 'Failed to flush secrets';
+      }
+    }
+
+    // 4. Revoke API tokens (if enabled)
+    if (revokeApiTokens) {
+      try {
+        const tokenCount = await ProjectApiToken.countDocuments({ projectId: { $in: projectIds } });
+        await ProjectApiToken.deleteMany({ projectId: { $in: projectIds } });
+        results.revokeApiTokens = true;
+        results.revokedTokenCount = tokenCount;
+      } catch (error) {
+        console.error('Revoke API tokens error:', error);
+        results.revokeTokensError = error instanceof Error ? error.message : 'Failed to revoke API tokens';
+      }
+    }
+
+    // 5. Revoke all collaborator access (if enabled)
     if (revokeCollaborators) {
       try {
         for (const project of projects) {
@@ -379,13 +446,22 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
       }
     }
 
-    // Audit the panic action
-    await auditPanic(req.user.userId, {
+    const affectedOrgIds = [...new Set(projects.map((p) => p.organizationId.toString()))];
+    const panicMetadata = {
       downloadEnvs: results.downloadEnvs,
       flushEnvs: results.flushEnvs,
+      flushSecrets: results.flushSecrets,
+      revokeApiTokens: results.revokeApiTokens,
       revokeCollaborators: results.revokeCollaborators,
       projectCount: projects.length,
-    }, req);
+    };
+
+    for (const organizationId of affectedOrgIds) {
+      await auditPanic(req.user.userId, panicMetadata, req, organizationId);
+    }
+    if (affectedOrgIds.length === 0) {
+      await auditPanic(req.user.userId, panicMetadata, req);
+    }
 
     res.json({
       success: true,
@@ -395,6 +471,7 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
     console.error('Panic button error:', error instanceof Error ? error.message : 'Failed to execute panic actions');
     res.status(500).json({ error: 'Failed to execute panic actions' });
   }
-});
+  }
+);
 
 export default router;

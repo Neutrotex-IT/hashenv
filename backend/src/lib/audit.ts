@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import AuditLog, { ResourceType, ActorType } from '../models/AuditLog';
+import Project from '../models/Project';
 
 export interface AuditOptions {
   organizationId?: string;
@@ -14,9 +15,16 @@ export interface AuditOptions {
   req?: Request;
 }
 
+async function resolveOrganizationId(projectId?: string): Promise<string | undefined> {
+  if (!projectId) {
+    return undefined;
+  }
+  const project = await Project.findById(projectId).select('organizationId');
+  return project?.organizationId?.toString();
+}
+
 export async function audit(options: AuditOptions): Promise<void> {
   const {
-    organizationId,
     projectId,
     resourceType,
     resourceId,
@@ -27,6 +35,11 @@ export async function audit(options: AuditOptions): Promise<void> {
     metadata,
     req,
   } = options;
+
+  let organizationId = options.organizationId;
+  if (!organizationId && projectId) {
+    organizationId = await resolveOrganizationId(projectId);
+  }
 
   try {
     const ipAddress = req
@@ -152,11 +165,13 @@ export async function auditOrg(
 
 export async function auditSession(
   actorId: string,
-  action: 'login' | 'logout' | 'refresh' | 'register',
+  action: 'login' | 'logout' | 'refresh' | 'register' | 'login_failed',
   metadata?: Record<string, any>,
-  req?: Request
+  req?: Request,
+  organizationId?: string
 ): Promise<void> {
   await audit({
+    organizationId,
     resourceType: 'session',
     action,
     actorId,
@@ -168,11 +183,32 @@ export async function auditSession(
 export async function auditPanic(
   actorId: string,
   metadata?: Record<string, any>,
+  req?: Request,
+  organizationId?: string
+): Promise<void> {
+  await audit({
+    organizationId,
+    resourceType: 'panic',
+    action: 'execute',
+    actorId,
+    metadata,
+    req,
+  });
+}
+
+export async function auditMember(
+  projectId: string,
+  actorId: string,
+  action: 'add' | 'remove' | 'update',
+  memberUserId?: string,
+  metadata?: Record<string, any>,
   req?: Request
 ): Promise<void> {
   await audit({
-    resourceType: 'panic',
-    action: 'execute',
+    projectId,
+    resourceType: 'member',
+    resourceId: memberUserId,
+    action,
     actorId,
     metadata,
     req,
