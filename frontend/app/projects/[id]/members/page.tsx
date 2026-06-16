@@ -1,28 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI } from '@/lib/api';
+import { projectsAPI, OrgMember, ProjectInvite, ProjectPermissionsResponse } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
-import { UserSearchInput } from '@/components/ui/UserSearchInput';
-import { formatPermission } from '@/lib/permissions';
+import { OrgMemberSelect } from '@/components/ui/OrgMemberSelect';
+import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
+import { formatPermission, formatProjectPermission, ProjectPermission } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
-
-interface User {
-  _id: string;
-  name: string;
-  username: string;
-  email: string;
-  role: string;
-}
 
 interface Project {
   _id: string;
   name: string;
+  organizationId: string | { _id: string };
   members: Array<{
     userId: {
       _id: string;
@@ -30,20 +23,30 @@ interface Project {
       email: string;
     };
     permission: 'read' | 'write';
+    permissions?: string[];
   }>;
 }
 
 export default function ManageMembersPage() {
   const params = useParams();
-  const router = useRouter();
-  const { user } = useAuth();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
+  const [invites, setInvites] = useState<ProjectInvite[]>([]);
+  const [selectedMember, setSelectedMember] = useState<OrgMember | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<'read' | 'write'>('read');
+  const [selectedCapabilities, setSelectedCapabilities] = useState<ProjectPermission[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePermission, setInvitePermission] = useState<'read' | 'write'>('read');
+  const [inviteCapabilities, setInviteCapabilities] = useState<ProjectPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const grantablePermissions = (permissionInfo?.grantable ?? []) as ProjectPermission[];
+  const canInvite = permissionInfo?.effective.includes('project:invite') ?? false;
+  const canManageMembers = permissionInfo?.effective.includes('project:manage_members') ?? false;
 
   useEffect(() => {
     loadData();
@@ -52,8 +55,19 @@ export default function ManageMembersPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const projectData = await projectsAPI.get(projectId);
+      const [projectData, permissionsData] = await Promise.all([
+        projectsAPI.get(projectId),
+        projectsAPI.getPermissions(projectId),
+      ]);
       setProject(projectData);
+      setPermissionInfo(permissionsData);
+
+      if (permissionsData.effective.includes('project:invite')) {
+        const invitesData = await projectsAPI.getInvites(projectId);
+        setInvites(invitesData);
+      } else {
+        setInvites([]);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load data');
     } finally {
@@ -63,8 +77,8 @@ export default function ManageMembersPage() {
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser) {
-      setError('Please select a user');
+    if (!selectedMember) {
+      setError('Please select an organization member');
       return;
     }
 
@@ -73,16 +87,40 @@ export default function ManageMembersPage() {
 
     try {
       await projectsAPI.addMember(projectId, {
-        userId: selectedUser._id,
+        userId: selectedMember.user._id,
         permission: selectedPermission,
+        permissions: selectedCapabilities,
       });
       await loadData();
-      setSelectedUser(null);
+      setSelectedMember(null);
       setSelectedPermission('read');
+      setSelectedCapabilities([]);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to add member');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleInviteByEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteSubmitting(true);
+    setError('');
+
+    try {
+      await projectsAPI.inviteMember(projectId, {
+        email: inviteEmail,
+        permission: invitePermission,
+        permissions: inviteCapabilities,
+      });
+      setInviteEmail('');
+      setInvitePermission('read');
+      setInviteCapabilities([]);
+      await loadData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to send invitation');
+    } finally {
+      setInviteSubmitting(false);
     }
   };
 
@@ -96,6 +134,17 @@ export default function ManageMembersPage() {
       await loadData();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to remove member');
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    if (!confirm('Revoke this invitation?')) return;
+
+    try {
+      await projectsAPI.revokeInvite(projectId, inviteId);
+      await loadData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to revoke invitation');
     }
   };
 
@@ -134,6 +183,9 @@ export default function ManageMembersPage() {
     );
   }
 
+  const orgId =
+    typeof project.organizationId === 'string' ? project.organizationId : project.organizationId._id;
+
   const memberUserIds = project.members.map((m) =>
     typeof m.userId === 'object' ? m.userId._id : m.userId
   );
@@ -154,8 +206,14 @@ export default function ManageMembersPage() {
                 Manage Members - {project.name}
               </h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Add or remove team members from this project. Search for users by name.
+                Add organization members directly or invite by email with granular project permissions.
               </p>
+              <Link
+                href={`/organizations/${orgId}/members`}
+                className="mt-2 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
+              >
+                Manage organization invites →
+              </Link>
             </div>
 
             {error && (
@@ -164,57 +222,136 @@ export default function ManageMembersPage() {
               </div>
             )}
 
-            {/* Add Member Form */}
-            <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Add Member</h2>
-              <form onSubmit={handleAddMember} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                    Search Users
-                  </label>
-                  <UserSearchInput
-                    value={selectedUser ? selectedUser.name : ''}
-                    onChange={setSelectedUser}
-                    excludeUserIds={memberUserIds}
-                    placeholder="Type to search users by name..."
-                    className="w-full"
-                  />
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    Start typing to search. Users who are already members will not appear.
-                  </p>
-                </div>
+            {canInvite && (
+              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Invite by Email</h2>
+                <form onSubmit={handleInviteByEmail} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Email address</label>
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      required
+                      placeholder="colleague@company.com"
+                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                    />
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      The invitee must already be a member of the organization.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Access level</label>
+                    <select
+                      value={invitePermission}
+                      onChange={(e) => setInvitePermission(e.target.value as 'read' | 'write')}
+                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                    >
+                      <option value="read">Read Only</option>
+                      <option value="write">Read/Write</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                      Additional capabilities
+                    </label>
+                    <ProjectPermissionPicker
+                      grantable={grantablePermissions}
+                      selected={inviteCapabilities}
+                      onChange={setInviteCapabilities}
+                    />
+                  </div>
+                  <div className="flex justify-end pt-4 border-t border-[var(--border)]">
+                    <Button variant="primary" size="md" type="submit" disabled={inviteSubmitting}>
+                      {inviteSubmitting ? 'Sending...' : 'Send Invitation'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                    Permission Level
-                  </label>
-                  <select
-                    value={selectedPermission}
-                    onChange={(e) => setSelectedPermission(e.target.value as 'read' | 'write')}
-                    className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  >
-                    <option value="read">Read Only</option>
-                    <option value="write">Read/Write</option>
-                  </select>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    <strong>Read Only:</strong> Can view and download environment files. <strong>Read/Write:</strong> Can upload, view, and download environment files.
-                  </p>
+            {canInvite && invites.length > 0 && (
+              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Pending Invitations</h2>
+                <div className="space-y-3">
+                  {invites.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between rounded-md border border-[var(--border)] px-4 py-3">
+                      <div>
+                        <p className="font-medium text-[var(--foreground)]">{invite.email}</p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          Access: {formatPermission(invite.permission)}
+                          {invite.permissions && invite.permissions.length > 0 && (
+                            <> · {invite.permissions.map((p) => formatProjectPermission(p as ProjectPermission)).join(', ')}</>
+                          )}
+                          {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {canManageMembers && (
+                        <button
+                          onClick={() => handleRevokeInvite(invite.id)}
+                          className="text-sm text-[var(--error)] hover:text-[#F85149]"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
+              </div>
+            )}
 
-                <div className="flex justify-end pt-4 border-t border-[var(--border)]">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    type="submit"
-                    disabled={submitting || !selectedUser}
-                  >
-                    {submitting ? 'Adding...' : 'Add Member'}
-                  </Button>
-                </div>
-              </form>
-            </div>
+            {canInvite && (
+              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Add Existing Member</h2>
+                <form onSubmit={handleAddMember} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                      Organization Member
+                    </label>
+                    <OrgMemberSelect
+                      orgId={orgId}
+                      value={selectedMember}
+                      onChange={setSelectedMember}
+                      excludeUserIds={memberUserIds}
+                      placeholder="Search organization members..."
+                      className="w-full"
+                    />
+                  </div>
 
-            {/* Members List */}
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                      Access Level
+                    </label>
+                    <select
+                      value={selectedPermission}
+                      onChange={(e) => setSelectedPermission(e.target.value as 'read' | 'write')}
+                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                    >
+                      <option value="read">Read Only</option>
+                      <option value="write">Read/Write</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                      Additional capabilities
+                    </label>
+                    <ProjectPermissionPicker
+                      grantable={grantablePermissions}
+                      selected={selectedCapabilities}
+                      onChange={setSelectedCapabilities}
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-[var(--border)]">
+                    <Button variant="primary" size="md" type="submit" disabled={submitting || !selectedMember}>
+                      {submitting ? 'Adding...' : 'Add Member'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
               <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Current Members</h2>
               {project.members.length === 0 ? (
@@ -224,22 +361,18 @@ export default function ManageMembersPage() {
                   <table className="min-w-full divide-y divide-[var(--border)]">
                     <thead className="bg-[var(--surface-elevated)]">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                          User
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                          Permission
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                          Actions
-                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">User</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Access</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Capabilities</th>
+                        {canManageMembers && (
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actions</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
                       {project.members.map((member, idx) => {
                         const userId = typeof member.userId === 'object' ? member.userId._id : member.userId;
                         const userName = typeof member.userId === 'object' ? member.userId.name : 'Unknown';
-                        const userEmail = typeof member.userId === 'object' ? member.userId.email : '';
                         return (
                           <tr key={idx} className="hover:bg-[var(--surface-elevated)] transition-colors">
                             <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--foreground)]">
@@ -250,14 +383,25 @@ export default function ManageMembersPage() {
                                 {formatPermission(member.permission)}
                               </span>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                              <button
-                                onClick={() => handleRemoveMember(userId)}
-                                className="text-[var(--error)] hover:text-[#F85149] transition-colors"
-                              >
-                                Remove
-                              </button>
+                            <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">
+                              {member.permissions && member.permissions.length > 0 ? (
+                                <span className="text-xs">
+                                  {member.permissions.map((p) => formatProjectPermission(p as ProjectPermission)).join(', ')}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-[var(--text-muted)]">None</span>
+                              )}
                             </td>
+                            {canManageMembers && (
+                              <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                                <button
+                                  onClick={() => handleRemoveMember(userId)}
+                                  className="text-[var(--error)] hover:text-[#F85149] transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}

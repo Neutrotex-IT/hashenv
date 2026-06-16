@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { projectsAPI, settingsAPI } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
@@ -9,10 +10,17 @@ import { CreateProjectButton } from '@/components/ui/CreateProjectButton';
 import { ProjectCard } from '@/components/ProjectCard';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
+import { OrgSwitcher } from '@/components/OrgSwitcher';
 
 interface Project {
   _id: string;
   name: string;
+  organizationId?: {
+    _id: string;
+    name: string;
+    slug: string;
+    type: 'personal' | 'team';
+  };
   createdBy: {
     _id: string;
     name: string;
@@ -31,36 +39,36 @@ interface Project {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { currentOrg } = useOrganization();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [panicButtonSettings, setPanicButtonSettings] = useState<any>(null);
   const [panicLoading, setPanicLoading] = useState(false);
 
+  const loadProjects = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await projectsAPI.list(currentOrg?._id);
+      setProjects(data);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load projects');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentOrg?._id]);
+
   useEffect(() => {
     loadProjects();
     loadPanicSettings();
-  }, []);
+  }, [loadProjects]);
 
   const loadPanicSettings = async () => {
     try {
       const settings = await settingsAPI.get();
       setPanicButtonSettings(settings.panicButton);
     } catch (err) {
-      // Silent fail - panic button settings are optional
       console.error('Failed to load panic button settings:', err);
-    }
-  };
-
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await projectsAPI.list();
-      setProjects(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load projects');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -145,11 +153,14 @@ export default function DashboardPage() {
 
           {/* Header Section */}
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">Dashboard</h1>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Manage your environment files across all projects
-              </p>
+            <div className="flex items-center gap-4">
+              <OrgSwitcher />
+              <div>
+                <h1 className="text-3xl font-bold text-[var(--foreground)]">Dashboard</h1>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  {currentOrg ? `Projects in ${currentOrg.name}` : 'Manage your environment files'}
+                </p>
+              </div>
             </div>
             <CreateProjectButton size="lg" />
           </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, envAPI, secretsAPI } from '@/lib/api';
+import { projectsAPI, envAPI, secretsAPI, accountsAPI } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
@@ -55,6 +55,40 @@ interface Secret {
   updatedAt: string;
 }
 
+interface AssociatedAccount {
+  _id: string;
+  label: string;
+  provider: string;
+  providerOther?: string;
+  email: string;
+  loginUrl?: string;
+  usesSSO: boolean;
+  ssoProvider?: string;
+  createdBy: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+const ACCOUNT_PROVIDERS = [
+  { value: 'google', label: 'Google' },
+  { value: 'microsoft', label: 'Microsoft' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'aws', label: 'AWS' },
+  { value: 'slack', label: 'Slack' },
+  { value: 'stripe', label: 'Stripe' },
+  { value: 'vercel', label: 'Vercel' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+function formatProvider(provider: string, providerOther?: string) {
+  if (provider === 'other' && providerOther) return providerOther;
+  return ACCOUNT_PROVIDERS.find((p) => p.value === provider)?.label || provider;
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -63,7 +97,8 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [envVersions, setEnvVersions] = useState<EnvVersion[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
-  const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets'>('environments');
+  const [accounts, setAccounts] = useState<AssociatedAccount[]>([]);
+  const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets' | 'accounts'>('environments');
   const [selectedEnv, setSelectedEnv] = useState<'dev' | 'staging' | 'prod'>('dev');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -72,6 +107,18 @@ export default function ProjectDetailPage() {
   const [secretName, setSecretName] = useState('');
   const [secretContent, setSecretContent] = useState('');
   const [submittingSecret, setSubmittingSecret] = useState(false);
+  const [accountFormOpen, setAccountFormOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AssociatedAccount | null>(null);
+  const [accountLabel, setAccountLabel] = useState('');
+  const [accountProvider, setAccountProvider] = useState('google');
+  const [accountProviderOther, setAccountProviderOther] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountLoginUrl, setAccountLoginUrl] = useState('');
+  const [accountUsesSSO, setAccountUsesSSO] = useState(false);
+  const [accountSsoProvider, setAccountSsoProvider] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountNotes, setAccountNotes] = useState('');
+  const [submittingAccount, setSubmittingAccount] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -85,6 +132,8 @@ export default function ProjectDetailPage() {
         loadEnvVersions();
       } else if (selectedTab === 'secrets') {
         loadSecrets();
+      } else if (selectedTab === 'accounts') {
+        loadAccounts();
       }
     }
   }, [project, projectId, selectedEnv, selectedTab]);
@@ -147,6 +196,23 @@ export default function ProjectDetailPage() {
         console.error('Failed to load secrets:', err);
       }
       setSecrets([]);
+    }
+  };
+
+  const loadAccounts = async () => {
+    if (!project) {
+      return;
+    }
+
+    try {
+      const data = await accountsAPI.list(projectId);
+      setAccounts(data);
+    } catch (err: any) {
+      const status = err.response?.status;
+      if (status !== 403) {
+        console.error('Failed to load associated accounts:', err);
+      }
+      setAccounts([]);
     }
   };
 
@@ -255,6 +321,135 @@ export default function ProjectDetailPage() {
     setSecretContent('');
   };
 
+  const resetAccountForm = () => {
+    setAccountLabel('');
+    setAccountProvider('google');
+    setAccountProviderOther('');
+    setAccountEmail('');
+    setAccountLoginUrl('');
+    setAccountUsesSSO(false);
+    setAccountSsoProvider('');
+    setAccountPassword('');
+    setAccountNotes('');
+  };
+
+  const closeAccountForm = () => {
+    setAccountFormOpen(false);
+    setEditingAccount(null);
+    resetAccountForm();
+  };
+
+  const openCreateAccountForm = () => {
+    setEditingAccount(null);
+    resetAccountForm();
+    setAccountFormOpen(true);
+  };
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!accountLabel.trim() || !accountEmail.trim()) {
+      alert('Label and email/username are required');
+      return;
+    }
+
+    if (accountProvider === 'other' && !accountProviderOther.trim()) {
+      alert('Please specify the provider name');
+      return;
+    }
+
+    if (accountUsesSSO && !accountSsoProvider.trim()) {
+      alert('Please specify the SSO provider');
+      return;
+    }
+
+    if (!accountUsesSSO && !editingAccount && !accountPassword.trim()) {
+      alert('Password is required when SSO is not used');
+      return;
+    }
+
+    setSubmittingAccount(true);
+    try {
+      const payload = {
+        label: accountLabel.trim(),
+        provider: accountProvider,
+        providerOther: accountProvider === 'other' ? accountProviderOther.trim() : undefined,
+        email: accountEmail.trim(),
+        loginUrl: accountLoginUrl.trim() || undefined,
+        usesSSO: accountUsesSSO,
+        ssoProvider: accountUsesSSO ? accountSsoProvider.trim() : undefined,
+        password: accountUsesSSO ? '' : accountPassword || undefined,
+        notes: accountNotes.trim() || undefined,
+      };
+
+      if (editingAccount) {
+        await accountsAPI.update(projectId, editingAccount._id, payload);
+      } else {
+        await accountsAPI.create(projectId, payload);
+      }
+
+      closeAccountForm();
+      loadAccounts();
+    } catch (err: any) {
+      alert(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save account');
+    } finally {
+      setSubmittingAccount(false);
+    }
+  };
+
+  const handleEditAccount = async (account: AssociatedAccount) => {
+    try {
+      const data = await accountsAPI.getCredentials(projectId, account._id);
+      setEditingAccount(account);
+      setAccountLabel(data.label);
+      setAccountProvider(data.provider);
+      setAccountProviderOther(data.providerOther || '');
+      setAccountEmail(data.email);
+      setAccountLoginUrl(data.loginUrl || '');
+      setAccountUsesSSO(data.usesSSO);
+      setAccountSsoProvider(data.ssoProvider || '');
+      setAccountPassword(data.password || '');
+      setAccountNotes(data.notes || '');
+      setAccountFormOpen(true);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to load account credentials');
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!confirm('Are you sure you want to delete this associated account? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await accountsAPI.delete(projectId, accountId);
+      loadAccounts();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete account');
+    }
+  };
+
+  const handleViewAccount = async (account: AssociatedAccount) => {
+    try {
+      const data = await accountsAPI.getCredentials(projectId, account._id);
+      const lines = [
+        `Label: ${data.label}`,
+        `Provider: ${formatProvider(data.provider, data.providerOther)}`,
+        `Email/Username: ${data.email}`,
+      ];
+      if (data.loginUrl) lines.push(`Login URL: ${data.loginUrl}`);
+      if (data.usesSSO) {
+        lines.push(`SSO: Yes (${data.ssoProvider})`);
+      } else {
+        lines.push(`Password: ${data.password || '(not set)'}`);
+      }
+      if (data.notes) lines.push(`Notes: ${data.notes}`);
+      alert(lines.join('\n'));
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to load account credentials');
+    }
+  };
+
   // Check if user is the project owner (created it) or check their membership permission
   const isProjectOwner = project && project.createdBy._id === user?.id;
   const userPermission = project?.members.find(
@@ -361,6 +556,16 @@ export default function ProjectDetailPage() {
                 >
                   Other Secrets
                 </button>
+                <button
+                  onClick={() => setSelectedTab('accounts')}
+                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
+                    selectedTab === 'accounts'
+                      ? 'border-[var(--accent)] text-[var(--accent)]'
+                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  Associated Accounts
+                </button>
               </nav>
             </div>
           </div>
@@ -388,9 +593,8 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {selectedTab === 'environments' ? (
+          {selectedTab === 'environments' && (
             <>
-              {/* Actions */}
               <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
                   {latestVersion && (
@@ -531,7 +735,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
             </>
-          ) : (
+          )}
+
+          {selectedTab === 'secrets' && (
             <>
               {/* Secrets Section */}
               <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
@@ -732,32 +938,352 @@ export default function ProjectDetailPage() {
             </>
           )}
 
-          {/* Members Section (Project Owner only) */}
-          {isProjectOwner && (
-            <div className="mt-12">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-[var(--foreground)]">Project Members</h2>
-                <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/members`}>
-                  Manage Members
-                </Button>
-              </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                {project.members.length === 0 ? (
-                  <p className="text-[var(--text-muted)] text-center py-4">No members added yet.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {project.members.map((member, idx) => (
-                      <li key={idx} className="flex items-center justify-between p-3 rounded-md bg-[var(--surface-elevated)]">
-                        <p className="text-sm font-medium text-[var(--foreground)]">
-                          {typeof member.userId === 'object' ? member.userId.name : 'Unknown'}
-                        </p>
-                        <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
-                          {formatPermission(member.permission)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+          {selectedTab === 'accounts' && (
+            <>
+              <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Store credentials for services linked to this project (e.g. Google, AWS, GitHub).
+                  </p>
+                  <p className="text-sm text-[var(--text-muted)] mt-1">
+                    {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+                  </p>
+                </div>
+                {canWrite && (
+                  <Button variant="primary" size="md" onClick={openCreateAccountForm}>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Account
+                  </Button>
                 )}
+              </div>
+
+              {accountFormOpen && (
+                <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-[var(--foreground)]">
+                      {editingAccount ? 'Edit Associated Account' : 'Add Associated Account'}
+                    </h3>
+                    <button
+                      onClick={closeAccountForm}
+                      className="text-[var(--text-muted)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <form onSubmit={handleCreateAccount} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Label
+                        </label>
+                        <input
+                          type="text"
+                          value={accountLabel}
+                          onChange={(e) => setAccountLabel(e.target.value)}
+                          placeholder="e.g., Google Workspace Admin"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={100}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Provider
+                        </label>
+                        <select
+                          value={accountProvider}
+                          onChange={(e) => setAccountProvider(e.target.value)}
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                        >
+                          {ACCOUNT_PROVIDERS.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {accountProvider === 'other' && (
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Provider Name
+                        </label>
+                        <input
+                          type="text"
+                          value={accountProviderOther}
+                          onChange={(e) => setAccountProviderOther(e.target.value)}
+                          placeholder="e.g., DigitalOcean"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={50}
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Email / Username
+                        </label>
+                        <input
+                          type="text"
+                          value={accountEmail}
+                          onChange={(e) => setAccountEmail(e.target.value)}
+                          placeholder="account@company.com"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={200}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Login URL (optional)
+                        </label>
+                        <input
+                          type="url"
+                          value={accountLoginUrl}
+                          onChange={(e) => setAccountLoginUrl(e.target.value)}
+                          placeholder="https://accounts.google.com"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          maxLength={500}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={accountUsesSSO}
+                          onChange={(e) => setAccountUsesSSO(e.target.checked)}
+                          className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                        />
+                        <span className="text-sm font-medium text-[var(--foreground)]">
+                          This account uses SSO (Single Sign-On)
+                        </span>
+                      </label>
+                      {accountUsesSSO && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                            SSO Provider
+                          </label>
+                          <input
+                            type="text"
+                            value={accountSsoProvider}
+                            onChange={(e) => setAccountSsoProvider(e.target.value)}
+                            placeholder="e.g., Okta, Azure AD, Google Workspace SSO"
+                            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                            required={accountUsesSSO}
+                            maxLength={100}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {!accountUsesSSO && (
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Password
+                        </label>
+                        <input
+                          type="password"
+                          value={accountPassword}
+                          onChange={(e) => setAccountPassword(e.target.value)}
+                          placeholder={editingAccount ? 'Leave blank to keep current password' : 'Enter password'}
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required={!editingAccount}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                        Notes (optional)
+                      </label>
+                      <textarea
+                        value={accountNotes}
+                        onChange={(e) => setAccountNotes(e.target.value)}
+                        placeholder="Recovery codes, 2FA details, or other notes..."
+                        rows={3}
+                        className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] text-sm"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="md"
+                        onClick={closeAccountForm}
+                        disabled={submittingAccount}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="md"
+                        disabled={submittingAccount || !accountLabel.trim() || !accountEmail.trim()}
+                      >
+                        {submittingAccount ? 'Saving...' : editingAccount ? 'Update Account' : 'Add Account'}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {accounts.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                  <table className="min-w-full divide-y divide-[var(--border)]">
+                    <thead className="bg-[var(--surface-elevated)]">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Label
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Provider
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Email / Username
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Auth
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
+                      {accounts.map((account) => (
+                        <tr key={account._id} className="hover:bg-[var(--surface-elevated)] transition-colors">
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-[var(--foreground)]">
+                            {account.label}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                            {formatProvider(account.provider, account.providerOther)}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                            {account.email}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm">
+                            {account.usesSSO ? (
+                              <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
+                                SSO: {account.ssoProvider}
+                              </span>
+                            ) : (
+                              <span className="text-[var(--text-muted)]">Password</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-3">
+                              {canRead && (
+                                <button
+                                  onClick={() => handleViewAccount(account)}
+                                  className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {canWrite && (
+                                <>
+                                  <button
+                                    onClick={() => handleEditAccount(account)}
+                                    className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAccount(account._id)}
+                                    className="text-[var(--error)] hover:text-[#F85149] transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+                  <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <p className="text-[var(--text-secondary)]">No associated accounts added yet.</p>
+                  {canWrite && (
+                    <Button variant="primary" size="lg" onClick={openCreateAccountForm} className="mt-4">
+                      Add the first account
+                    </Button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Settings Section (Project Owner only) */}
+          {isProjectOwner && (
+            <div className="mt-12 grid gap-6 md:grid-cols-2">
+              {/* Members Card */}
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-[var(--foreground)]">Project Members</h2>
+                  <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/members`}>
+                    Manage Members
+                  </Button>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                  {project.members.length === 0 ? (
+                    <p className="text-[var(--text-muted)] text-center py-4">No members added yet.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {project.members.slice(0, 3).map((member, idx) => (
+                        <li key={idx} className="flex items-center justify-between p-3 rounded-md bg-[var(--surface-elevated)]">
+                          <p className="text-sm font-medium text-[var(--foreground)]">
+                            {typeof member.userId === 'object' ? member.userId.name : 'Unknown'}
+                          </p>
+                          <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
+                            {formatPermission(member.permission)}
+                          </span>
+                        </li>
+                      ))}
+                      {project.members.length > 3 && (
+                        <p className="text-sm text-[var(--text-muted)] text-center">
+                          +{project.members.length - 3} more members
+                        </p>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* API Tokens Card */}
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-[var(--foreground)]">API Tokens</h2>
+                  <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/tokens`}>
+                    Manage Tokens
+                  </Button>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                  <p className="text-[var(--text-muted)] text-sm mb-4">
+                    Create API tokens for programmatic access to this project's environment files and secrets.
+                  </p>
+                  <Button variant="primary" size="sm" asLink href={`/projects/${projectId}/tokens`}>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    Manage API Tokens
+                  </Button>
+                </div>
               </div>
             </div>
           )}

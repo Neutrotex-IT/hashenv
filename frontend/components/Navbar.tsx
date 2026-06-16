@@ -19,13 +19,10 @@ export function Navbar() {
     e.preventDefault();
     setCheckingAuth(true);
     
-    // Check for token in localStorage
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Token exists, redirect to dashboard
+    // Use auth context state to determine authentication
+    if (isAuthenticated) {
       router.push('/dashboard');
     } else {
-      // No token, redirect to login
       router.push('/login');
     }
     setCheckingAuth(false);

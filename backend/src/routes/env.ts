@@ -2,10 +2,10 @@ import express, { Response } from 'express';
 import multer from 'multer';
 import { query, body, validationResult } from 'express-validator';
 import EnvFile from '../models/EnvFile';
-import { encryptEnv, decryptEnv } from '../lib/crypto';
+import { encryptProjectData, decryptProjectData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
-import { logEnvAction } from '../lib/logging';
+import { requireProjectAccess } from '../lib/authorization';
+import { auditEnv } from '../lib/audit';
 import { validateProjectId, validateEnvFileId, validateEnvironment, validateEnvironmentQuery, validateFileContent, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
 
@@ -104,8 +104,8 @@ router.post(
         return;
       }
       
-      // Encrypt the data (server-side only)
-      const { encryptedData, iv, authTag } = encryptEnv(plaintextData);
+      // Encrypt the data using project-specific key
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
       
       // Find the latest version for this project+environment
       const latestEnvFile = await EnvFile.findOne({
@@ -128,16 +128,11 @@ router.post(
         uploadedBy: req.user.userId,
       });
       
-      // Log the upload action
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'upload',
+      // Audit the upload action
+      await auditEnv(projectId, req.user.userId, 'upload', envFile._id.toString(), {
         environment,
-        { newVersion: nextVersion },
-        envFile._id.toString(),
-        nextVersion
-      );
+        version: nextVersion,
+      }, req);
       
       // Return metadata (never return encrypted data or plaintext)
       const populatedEnvFile = await EnvFile.findById(envFile._id)
@@ -192,14 +187,14 @@ router.get(
         return;
       }
       
-      // Decrypt the data (server-side only)
-      const plaintextData = decryptEnv(
+      // Decrypt the data using project-specific key
+      const plaintextData = await decryptProjectData(
+        projectId,
         envFile.encryptedData,
         envFile.iv,
         envFile.authTag
       );
       
-      // Return content as JSON for editing
       res.json({ content: plaintextData });
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -261,28 +256,24 @@ router.get(
         return;
       }
       
-      // Decrypt the data (server-side only)
-      // SECURITY: Never log the decrypted content
-      const plaintextData = decryptEnv(
+      // Decrypt the data using project-specific key
+      const plaintextData = await decryptProjectData(
+        projectId,
         envFile.encryptedData,
         envFile.iv,
         envFile.authTag
       );
       
-      // Log the download action
       if (!req.user) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'download',
-        environment as 'dev' | 'staging' | 'prod',
-        { fileName: '.env' },
-        envFile._id.toString(),
-        envFile.version
-      );
+      
+      // Audit the download action
+      await auditEnv(projectId, req.user.userId, 'download', envFile._id.toString(), {
+        environment,
+        version: envFile.version,
+      }, req);
       
       // Return as downloadable file
       res.setHeader('Content-Type', 'text/plain');
@@ -337,16 +328,16 @@ router.get(
 );
 
 /**
- * Edit an environment file (owners only)
+ * Edit an environment file
  * PUT /api/projects/:projectId/env/:envFileId
- * Requires: project ownership
+ * Requires: write permission
  */
 router.put(
   '/:projectId/env/:envFileId',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  validateEnvFileId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  validateEnvFileId(),
+  requireProjectAccess('write'),
   [validateFileContent()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -378,8 +369,8 @@ router.put(
       
       const oldVersion = envFile.version;
       
-      // Encrypt the new content
-      const { encryptedData, iv, authTag } = encryptEnv(content);
+      // Encrypt the new content using project-specific key
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
       
       // Update the env file
       envFile.encryptedData = encryptedData;
@@ -387,16 +378,11 @@ router.put(
       envFile.authTag = authTag;
       await envFile.save();
       
-      // Log the edit action
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'edit',
-        envFile.environment,
-        { oldVersion, newVersion: oldVersion },
-        envFileId,
-        oldVersion
-      );
+      // Audit the edit action
+      await auditEnv(projectId, req.user.userId, 'edit', envFileId, {
+        environment: envFile.environment,
+        version: oldVersion,
+      }, req);
       
       // Return updated metadata
       const populatedEnvFile = await EnvFile.findById(envFile._id)
@@ -416,16 +402,16 @@ router.put(
 );
 
 /**
- * Delete an environment file (owners only)
+ * Delete an environment file
  * DELETE /api/projects/:projectId/env/:envFileId
- * Requires: project ownership
+ * Requires: write permission
  */
 router.delete(
   '/:projectId/env/:envFileId',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  validateEnvFileId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  validateEnvFileId(),
+  requireProjectAccess('write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -456,16 +442,11 @@ router.delete(
       const environment = envFile.environment;
       const version = envFile.version;
       
-      // Log the delete action before deletion
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'delete',
+      // Audit the delete action before deletion
+      await auditEnv(projectId, req.user.userId, 'delete', envFileId, {
         environment,
-        { oldVersion: version },
-        envFileId,
-        version
-      );
+        version,
+      }, req);
       
       // Delete the env file
       await EnvFile.findByIdAndDelete(envFileId);
@@ -480,30 +461,24 @@ router.delete(
 );
 
 /**
- * Get logs for a project (owners only)
+ * Get logs for a project
  * GET /api/projects/:projectId/env/logs?environment=prod
- * Requires: project ownership
+ * Requires: read permission
  */
 router.get(
   '/:projectId/env/logs',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  requireProjectAccess('read'),
   [validateEnvironmentQuery()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
-      const environment = req.query.environment as string | undefined;
       
-      const query: any = { projectId };
-      if (environment) {
-        query.environment = environment;
-      }
-      
-      const EnvLog = (await import('../models/EnvLog')).default;
-      const logs = await EnvLog.find(query)
+      const AuditLog = (await import('../models/AuditLog')).default;
+      const logs = await AuditLog.find({ projectId, resourceType: 'env' })
         .sort({ createdAt: -1 })
-        .limit(1000); // Limit to last 1000 logs
+        .limit(1000);
       
       res.json(logs);
     } catch (error) {
@@ -515,37 +490,26 @@ router.get(
 );
 
 /**
- * Download logs as text file (owners only)
- * GET /api/projects/:projectId/env/logs/download?environment=prod
- * Requires: project ownership
+ * Download logs as text file
+ * GET /api/projects/:projectId/env/logs/download
+ * Requires: read permission
  */
 router.get(
   '/:projectId/env/logs/download',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
-  [validateEnvironmentQuery()],
+  validateProjectId(),
+  requireProjectAccess('read'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
-      const environment = req.query.environment as string | undefined;
       
-      const query: any = { projectId };
-      if (environment) {
-        query.environment = environment;
-      }
-      
-      const EnvLog = (await import('../models/EnvLog')).default;
-      const logs = await EnvLog.find(query)
+      const AuditLog = (await import('../models/AuditLog')).default;
+      const logs = await AuditLog.find({ projectId, resourceType: 'env' })
         .sort({ createdAt: -1 })
         .limit(1000);
       
-      // Format logs as text
       let logText = `HashEnv Activity Logs\n`;
       logText += `Project ID: ${projectId}\n`;
-      if (environment) {
-        logText += `Environment: ${environment}\n`;
-      }
       logText += `Generated: ${new Date().toISOString()}\n`;
       logText += `${'='.repeat(80)}\n\n`;
       
@@ -555,32 +519,19 @@ router.get(
         logs.forEach((log) => {
           const date = new Date(log.createdAt).toLocaleString();
           logText += `[${date}] ${log.action.toUpperCase()}\n`;
-          logText += `  Environment: ${log.environment}\n`;
-          if (log.version) {
-            logText += `  Version: ${log.version}\n`;
+          if (log.metadata?.environment) {
+            logText += `  Environment: ${log.metadata.environment}\n`;
           }
-          logText += `  Performed by: ${log.performedByName} (${log.performedByEmail})\n`;
-          if (log.metadata && Object.keys(log.metadata).length > 0) {
-            // Security: Sanitize metadata to prevent injection in logs
-            try {
-              const sanitizedMetadata = JSON.stringify(log.metadata);
-              logText += `  Details: ${sanitizedMetadata}\n`;
-            } catch (e) {
-              logText += `  Details: [Metadata unavailable]\n`;
-            }
+          if (log.metadata?.version) {
+            logText += `  Version: ${log.metadata.version}\n`;
+          }
+          logText += `  Actor: ${log.actorEmail || log.actorId}\n`;
+          if (log.ipAddress) {
+            logText += `  IP: ${log.ipAddress}\n`;
           }
           logText += '\n';
         });
       }
-      
-      // Log the access action (viewing logs)
-      await logEnvAction(
-        projectId,
-        req.user!.userId,
-        'access',
-        environment as 'dev' | 'staging' | 'prod' || 'dev',
-        { fileName: 'logs.txt' }
-      );
       
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', `attachment; filename="hashenv-logs-${Date.now()}.txt"`);

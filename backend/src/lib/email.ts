@@ -293,3 +293,163 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
     throw new Error(`Failed to send password reset email: ${errorMessage}`);
   }
 }
+
+/**
+ * Send organization invite email via Brevo API (send-only)
+ */
+export async function sendOrgInviteEmail(
+  email: string,
+  token: string,
+  organizationName: string,
+  inviterName: string
+): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log('\n========== ORG INVITE (DEVELOPMENT MODE) ==========');
+    console.log(`To: ${email}`);
+    console.log(`Subject: You've been invited to join ${organizationName} on HashEnv`);
+    console.log(`Invite URL: ${inviteUrl}`);
+    console.log('===================================================\n');
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff !important; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>You're invited to join ${organizationName}</h2>
+        <p>Hello,</p>
+        <p>${inviterName} has invited you to join <strong>${organizationName}</strong> on HashEnv.</p>
+        <p>Click the button below to accept the invitation. If you don't have an account yet, you'll be asked to create one first.</p>
+        <a href="${inviteUrl}" class="button" style="display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff !important; text-decoration: none; border-radius: 4px; margin: 20px 0; font-weight: bold;">Accept Invitation</a>
+        <p>Or copy and paste this link into your browser:</p>
+        <p><a href="${inviteUrl}">${inviteUrl}</a></p>
+        <p>This invitation will expire in 7 days.</p>
+        <div class="footer">
+          <p>Best regards,<br>The HashEnv Team</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const textContent = `Hello,\n\n${inviterName} has invited you to join ${organizationName} on HashEnv.\n\nAccept the invitation by visiting:\n\n${inviteUrl}\n\nThis invitation will expire in 7 days.\n\nBest regards,\nThe HashEnv Team`;
+
+  try {
+    await sendEmailViaBrevo(
+      [{ email }],
+      `You've been invited to join ${organizationName} on HashEnv`,
+      htmlContent,
+      textContent
+    );
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✓ Organization invite email sent successfully via Brevo');
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    console.error('Failed to send organization invite email via Brevo:', {
+      error: errorMessage,
+      email,
+    });
+
+    console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+    console.log(`Email: ${email}`);
+    console.log(`Invite URL: ${inviteUrl}`);
+    console.log('====================================================================\n');
+
+    throw new Error(`Failed to send organization invite email: ${errorMessage}`);
+  }
+}
+
+/**
+ * Send project invite email via Brevo API (send-only)
+ */
+export async function sendProjectInviteEmail(
+  email: string,
+  token: string,
+  projectName: string,
+  inviterName: string
+): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log('\n========== PROJECT INVITE (DEVELOPMENT MODE) ==========');
+    console.log(`To: ${email}`);
+    console.log(`Subject: You've been invited to collaborate on ${projectName} on HashEnv`);
+    console.log(`Invite URL: ${inviteUrl}`);
+    console.log('=======================================================\n');
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff !important; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>You're invited to collaborate on ${projectName}</h2>
+        <p>Hello,</p>
+        <p>${inviterName} has invited you to collaborate on <strong>${projectName}</strong> on HashEnv.</p>
+        <p>You must already be a member of the project's organization. If you are not, ask your admin for an organization invite first.</p>
+        <a href="${inviteUrl}" class="button" style="display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff !important; text-decoration: none; border-radius: 4px; margin: 20px 0; font-weight: bold;">Accept Invitation</a>
+        <p>Or copy and paste this link into your browser:</p>
+        <p><a href="${inviteUrl}">${inviteUrl}</a></p>
+        <p>This invitation will expire in 7 days.</p>
+        <div class="footer">
+          <p>Best regards,<br>The HashEnv Team</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const textContent = `Hello,\n\n${inviterName} has invited you to collaborate on ${projectName} on HashEnv.\n\nAccept the invitation by visiting:\n\n${inviteUrl}\n\nThis invitation will expire in 7 days.\n\nBest regards,\nThe HashEnv Team`;
+
+  try {
+    await sendEmailViaBrevo(
+      [{ email }],
+      `You've been invited to collaborate on ${projectName} on HashEnv`,
+      htmlContent,
+      textContent
+    );
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✓ Project invite email sent successfully via Brevo');
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    console.error('Failed to send project invite email via Brevo:', {
+      error: errorMessage,
+      email,
+    });
+
+    console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+    console.log(`Email: ${email}`);
+    console.log(`Invite URL: ${inviteUrl}`);
+    console.log('====================================================================\n');
+
+    throw new Error(`Failed to send project invite email: ${errorMessage}`);
+  }
+}

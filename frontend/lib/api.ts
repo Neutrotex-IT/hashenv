@@ -1,6 +1,35 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+
+// In-memory token storage (never persisted to localStorage)
+let accessToken: string | null = null;
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+// Token management functions
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+export function clearAccessToken(): void {
+  accessToken = null;
+}
+
+// Subscribe to token refresh
+function subscribeToTokenRefresh(callback: (token: string) => void): void {
+  refreshSubscribers.push(callback);
+}
+
+// Notify all subscribers when token is refreshed
+function onTokenRefreshed(token: string): void {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+}
 
 // Create axios instance with default config
 const api = axios.create({
@@ -8,31 +37,68 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send cookies with requests
 });
 
 // Add token to requests if available
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors with automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear token and redirect to login (unauthorized - not authenticated)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    
+    // If 401 and not already retrying, attempt to refresh the token
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      // Skip refresh for auth endpoints to avoid infinite loops
+      if (originalRequest.url?.includes('/auth/login') || 
+          originalRequest.url?.includes('/auth/refresh') ||
+          originalRequest.url?.includes('/auth/register')) {
+        return Promise.reject(error);
+      }
+      
+      if (isRefreshing) {
+        // Wait for the refresh to complete
+        return new Promise((resolve) => {
+          subscribeToTokenRefresh((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+      
+      originalRequest._retry = true;
+      isRefreshing = true;
+      
+      try {
+        const response = await api.post('/auth/refresh');
+        const newAccessToken = response.data.accessToken;
+        
+        setAccessToken(newAccessToken);
+        onTokenRefreshed(newAccessToken);
+        isRefreshing = false;
+        
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        isRefreshing = false;
+        refreshSubscribers = [];
+        clearAccessToken();
+        
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(refreshError);
       }
     }
+    
     // 403 errors (forbidden) are handled by components - don't redirect
     // These indicate access control restrictions, not authentication issues
     return Promise.reject(error);
@@ -41,15 +107,127 @@ api.interceptors.response.use(
 
 export default api;
 
+// Types
+export interface Organization {
+  _id: string;
+  name: string;
+  slug: string;
+  type: 'personal' | 'team';
+  createdBy: string;
+  role: 'owner' | 'admin' | 'member';
+  permissions?: string[];
+  createdAt: string;
+}
+
+export interface OrgMember {
+  id: string;
+  user: {
+    _id: string;
+    name: string;
+    username: string;
+    email: string;
+  };
+  role: 'owner' | 'admin' | 'member';
+  permissions?: string[];
+  createdAt: string;
+}
+
+export interface OrgInvite {
+  id: string;
+  email: string;
+  role: 'member' | 'admin';
+  permissions?: string[];
+  status: 'pending' | 'accepted' | 'revoked';
+  expiresAt: string;
+  invitedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+}
+
+export interface ProjectInvite {
+  id: string;
+  email: string;
+  permission: 'read' | 'write';
+  permissions?: string[];
+  status: 'pending' | 'accepted' | 'revoked';
+  expiresAt: string;
+  invitedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+}
+
+export interface OrgPermissionsResponse {
+  catalog: {
+    org: Record<string, string>;
+    roleDefaults: Record<string, string[]>;
+  };
+  effective: string[];
+  grantable: string[];
+}
+
+export interface ProjectPermissionsResponse {
+  catalog: {
+    project: Record<string, string>;
+  };
+  effective: string[];
+  grantable: string[];
+}
+
+export interface InvitePreview {
+  type: 'organization' | 'project';
+  email: string;
+  role?: 'member' | 'admin';
+  permission?: 'read' | 'write';
+  permissions?: string[];
+  status: 'pending' | 'accepted' | 'revoked';
+  expired: boolean;
+  organization: {
+    _id: string;
+    name: string;
+    slug: string;
+    type: 'personal' | 'team';
+  } | null;
+  project?: {
+    _id: string;
+    name: string;
+  } | null;
+  requiresRegistration: boolean;
+  canAccept: boolean;
+}
+
 // Auth API
 export const authAPI = {
-  register: async (data: { name: string; username: string; email: string; password: string }) => {
+  register: async (data: { name: string; username: string; email: string; password: string; inviteToken?: string }) => {
     const response = await api.post('/auth/register', data);
     return response.data;
   },
   login: async (data: { email: string; password: string }) => {
     const response = await api.post('/auth/login', data);
+    // Store access token in memory
+    if (response.data.accessToken) {
+      setAccessToken(response.data.accessToken);
+    }
     return response.data;
+  },
+  refresh: async () => {
+    const response = await api.post('/auth/refresh');
+    if (response.data.accessToken) {
+      setAccessToken(response.data.accessToken);
+    }
+    return response.data;
+  },
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      clearAccessToken();
+    }
   },
   me: async () => {
     const response = await api.get('/auth/me');
@@ -73,37 +251,121 @@ export const authAPI = {
   },
 };
 
+// Organizations API
+export const organizationsAPI = {
+  list: async (): Promise<Organization[]> => {
+    const response = await api.get('/organizations');
+    return response.data;
+  },
+  get: async (orgId: string): Promise<Organization> => {
+    const response = await api.get(`/organizations/${orgId}`);
+    return response.data;
+  },
+  create: async (data: { name: string; slug: string }): Promise<Organization> => {
+    const response = await api.post('/organizations', data);
+    return response.data;
+  },
+  update: async (orgId: string, data: { name?: string }): Promise<Organization> => {
+    const response = await api.patch(`/organizations/${orgId}`, data);
+    return response.data;
+  },
+  getMembers: async (orgId: string): Promise<OrgMember[]> => {
+    const response = await api.get(`/organizations/${orgId}/members`);
+    return response.data;
+  },
+  getPermissions: async (orgId: string): Promise<OrgPermissionsResponse> => {
+    const response = await api.get(`/organizations/${orgId}/permissions`);
+    return response.data;
+  },
+  inviteMember: async (
+    orgId: string,
+    data: { email: string; role: 'member' | 'admin'; permissions?: string[] }
+  ): Promise<OrgInvite> => {
+    const response = await api.post(`/organizations/${orgId}/members`, data);
+    return response.data;
+  },
+  getInvites: async (orgId: string): Promise<OrgInvite[]> => {
+    const response = await api.get(`/organizations/${orgId}/invites`);
+    return response.data;
+  },
+  revokeInvite: async (orgId: string, inviteId: string): Promise<void> => {
+    await api.delete(`/organizations/${orgId}/invites/${inviteId}`);
+  },
+  updateMember: async (
+    orgId: string,
+    memberId: string,
+    data: { role?: 'member' | 'admin'; permissions?: string[] }
+  ): Promise<OrgMember> => {
+    const response = await api.patch(`/organizations/${orgId}/members/${memberId}`, data);
+    return response.data;
+  },
+  removeMember: async (orgId: string, memberId: string): Promise<void> => {
+    await api.delete(`/organizations/${orgId}/members/${memberId}`);
+  },
+};
+
+// Invites API
+export const invitesAPI = {
+  preview: async (token: string): Promise<InvitePreview> => {
+    const response = await api.get(`/invites/preview?token=${encodeURIComponent(token)}`);
+    return response.data;
+  },
+  accept: async (token: string) => {
+    const response = await api.post('/invites/accept', { token });
+    return response.data;
+  },
+};
+
 // Projects API
 export const projectsAPI = {
-  list: async () => {
-    const response = await api.get('/projects');
+  list: async (orgId?: string) => {
+    const params = orgId ? `?orgId=${orgId}` : '';
+    const response = await api.get(`/projects${params}`);
     return response.data;
   },
   get: async (id: string) => {
     const response = await api.get(`/projects/${id}`);
     return response.data;
   },
-  create: async (data: { name: string }) => {
+  getPermissions: async (projectId: string): Promise<ProjectPermissionsResponse> => {
+    const response = await api.get(`/projects/${projectId}/permissions`);
+    return response.data;
+  },
+  create: async (data: { name: string; organizationId: string }) => {
     const response = await api.post('/projects', data);
     return response.data;
   },
-  addMember: async (projectId: string, data: { userId: string; permission: 'read' | 'write' }) => {
+  addMember: async (
+    projectId: string,
+    data: { userId: string; permission: 'read' | 'write'; permissions?: string[] }
+  ) => {
     const response = await api.post(`/projects/${projectId}/members`, data);
     return response.data;
+  },
+  inviteMember: async (
+    projectId: string,
+    data: { email: string; permission: 'read' | 'write'; permissions?: string[] }
+  ): Promise<ProjectInvite> => {
+    const response = await api.post(`/projects/${projectId}/invites`, data);
+    return response.data;
+  },
+  getInvites: async (projectId: string): Promise<ProjectInvite[]> => {
+    const response = await api.get(`/projects/${projectId}/invites`);
+    return response.data;
+  },
+  revokeInvite: async (projectId: string, inviteId: string): Promise<void> => {
+    await api.delete(`/projects/${projectId}/invites/${inviteId}`);
   },
   removeMember: async (projectId: string, userId: string) => {
     const response = await api.delete(`/projects/${projectId}/members/${userId}`);
     return response.data;
   },
-  searchUsers: async (query: string, limit: number = 10) => {
-    if (!query || query.trim().length === 0) {
-      return [];
+  searchUsers: async (orgId: string, query: string, limit: number = 10) => {
+    const params = new URLSearchParams({ orgId, limit: limit.toString() });
+    if (query && query.trim().length > 0) {
+      params.append('q', query);
     }
-    const response = await api.get(`/projects/users/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-    return response.data;
-  },
-  listUsers: async () => {
-    const response = await api.get('/projects/users/list');
+    const response = await api.get(`/projects/users/search?${params.toString()}`);
     return response.data;
   },
 };
@@ -212,6 +474,103 @@ export const secretsAPI = {
   delete: async (projectId: string, secretId: string) => {
     const response = await api.delete(`/projects/${projectId}/secrets/${secretId}`);
     return response.data;
+  },
+};
+
+// Associated Accounts API
+export const accountsAPI = {
+  list: async (projectId: string) => {
+    const response = await api.get(`/projects/${projectId}/accounts`);
+    return response.data;
+  },
+  getCredentials: async (projectId: string, accountId: string) => {
+    const response = await api.get(`/projects/${projectId}/accounts/${accountId}/credentials`);
+    return response.data;
+  },
+  create: async (
+    projectId: string,
+    data: {
+      label: string;
+      provider: string;
+      providerOther?: string;
+      email: string;
+      loginUrl?: string;
+      usesSSO: boolean;
+      ssoProvider?: string;
+      password?: string;
+      notes?: string;
+    }
+  ) => {
+    const response = await api.post(`/projects/${projectId}/accounts`, data);
+    return response.data;
+  },
+  update: async (
+    projectId: string,
+    accountId: string,
+    data: {
+      label?: string;
+      provider?: string;
+      providerOther?: string;
+      email?: string;
+      loginUrl?: string;
+      usesSSO?: boolean;
+      ssoProvider?: string;
+      password?: string;
+      notes?: string;
+    }
+  ) => {
+    const response = await api.put(`/projects/${projectId}/accounts/${accountId}`, data);
+    return response.data;
+  },
+  delete: async (projectId: string, accountId: string) => {
+    const response = await api.delete(`/projects/${projectId}/accounts/${accountId}`);
+    return response.data;
+  },
+};
+
+// API Tokens API
+export interface ApiToken {
+  _id: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: ('read' | 'write')[];
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdBy: {
+    _id: string;
+    name: string;
+    username: string;
+    email: string;
+  };
+  createdAt: string;
+}
+
+export interface CreateApiTokenResponse extends ApiToken {
+  token: string; // Only returned on creation
+}
+
+export const apiTokensAPI = {
+  list: async (projectId: string): Promise<ApiToken[]> => {
+    const response = await api.get(`/projects/${projectId}/tokens`);
+    return response.data;
+  },
+  create: async (
+    projectId: string,
+    data: { name: string; scopes?: ('read' | 'write')[]; expiresIn?: number }
+  ): Promise<CreateApiTokenResponse> => {
+    const response = await api.post(`/projects/${projectId}/tokens`, data);
+    return response.data;
+  },
+  update: async (
+    projectId: string,
+    tokenId: string,
+    data: { name?: string; scopes?: ('read' | 'write')[] }
+  ): Promise<ApiToken> => {
+    const response = await api.patch(`/projects/${projectId}/tokens/${tokenId}`, data);
+    return response.data;
+  },
+  delete: async (projectId: string, tokenId: string): Promise<void> => {
+    await api.delete(`/projects/${projectId}/tokens/${tokenId}`);
   },
 };
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { OrganizationProvider } from "@/contexts/OrganizationContext";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -40,7 +41,9 @@ export default function RootLayout({
         className={`${inter.variable} ${outfit.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <OrganizationProvider>
+            {children}
+          </OrganizationProvider>
         </AuthProvider>
       </body>
     </html>

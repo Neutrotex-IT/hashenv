@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -128,16 +129,14 @@ function ResetPasswordForm() {
                 <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
                   New Password
                 </label>
-                <input
+                <PasswordInput
                   id="password"
                   name="password"
-                  type="password"
+                  value={password}
+                  onChange={setPassword}
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter new password (min 8 characters)"
                 />
               </div>
@@ -146,16 +145,14 @@ function ResetPasswordForm() {
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
                   Confirm Password
                 </label>
-                <input
+                <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
-                  type="password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
                 />
               </div>
@@ -177,10 +174,16 @@ function ResetPasswordForm() {
                 </button>
               </div>
 
-              <div className="text-center pt-2">
+              <div className="text-center pt-2 space-y-2">
+                <Link
+                  href="/forgot-password"
+                  className="block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                >
+                  Request a new reset link
+                </Link>
                 <Link
                   href="/login"
-                  className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                  className="block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
                 >
                   Back to Login
                 </Link>

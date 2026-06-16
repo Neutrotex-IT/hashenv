@@ -1,16 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 import { authAPI } from '@/lib/api';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
-export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+  const initialRegister = searchParams.get('register') === '1';
+  const invitedEmail = searchParams.get('email');
+
+  const [isLogin, setIsLogin] = useState(!initialRegister);
+  const [email, setEmail] = useState(invitedEmail || '');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -21,12 +27,12 @@ export default function LoginPage() {
   const { login, register, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect if already authenticated (using useEffect to avoid render-time navigation)
+  // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.push('/dashboard');
+      router.push(inviteToken ? `/accept-invite?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, inviteToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,15 +44,19 @@ export default function LoginPage() {
     try {
       if (isLogin) {
         await login(email, password);
-        router.push('/dashboard');
+        router.push(inviteToken ? `/accept-invite?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
       } else {
-        await register(name, username, email, password);
-        setSuccess('Registration successful! Please check your email to verify your account before logging in.');
-        setIsLogin(true); // Switch to login view
-            setEmail(email); // Keep email filled
-            setName(''); // Clear name
-            setUsername(''); // Clear username
-            setPassword(''); // Clear password
+        await register(name, username, email, password, inviteToken || undefined);
+        setSuccess(
+          inviteToken
+            ? 'Registration successful! Please verify your email, then return to the invite link to join the organization.'
+            : 'Registration successful! Please check your email to verify your account before logging in.'
+        );
+        setIsLogin(true);
+        setEmail(email);
+        setName('');
+        setUsername('');
+        setPassword('');
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'An error occurred';
@@ -168,7 +178,11 @@ export default function LoginPage() {
               {isLogin ? 'Sign in to your account' : 'Create your account'}
             </h2>
             <p className="mt-2 text-sm text-[var(--text-muted)] font-[var(--font-inter)]">
-              Secure Environment File Management
+              {inviteToken
+                ? isLogin
+                  ? 'Sign in to accept your organization invitation.'
+                  : 'Register with the invited email address to join the organization.'
+                : 'Secure Environment File Management'}
             </p>
           </div>
 
@@ -265,28 +279,38 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
+                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)] disabled:opacity-70"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
+                  readOnly={!!inviteToken && !!invitedEmail}
+                  disabled={!!inviteToken && !!invitedEmail}
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
-                  Password
-                </label>
-                <input
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)]">
+                    Password
+                  </label>
+                  {isLogin && (
+                    <Link
+                      href="/forgot-password"
+                      className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                    >
+                      Forgot password?
+                    </Link>
+                  )}
+                </div>
+                <PasswordInput
                   id="password"
                   name="password"
-                  type="password"
-                  autoComplete="current-password"
+                  value={password}
+                  onChange={setPassword}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
                   required
                   minLength={8}
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={isLogin ? 'Enter your password' : 'Create a password (min 8 characters)'}
                 />
               </div>
 
@@ -307,17 +331,7 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <div className="text-center pt-2 space-y-2">
-                {isLogin && (
-                  <div>
-                    <Link
-                      href="/forgot-password"
-                      className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
-                    >
-                      Forgot your password?
-                    </Link>
-                  </div>
-                )}
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -325,6 +339,7 @@ export default function LoginPage() {
                     setError('');
                     setSuccess('');
                     setShowResendVerification(false);
+                    setPassword('');
                   }}
                   className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
                 >
@@ -336,5 +351,19 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

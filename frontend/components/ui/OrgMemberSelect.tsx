@@ -1,78 +1,69 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { projectsAPI } from '@/lib/api';
+import { organizationsAPI, OrgMember } from '@/lib/api';
 
-interface User {
-  _id: string;
-  name: string;
-  username: string;
-  email: string;
-  role: string;
-}
-
-interface UserSearchInputProps {
-  value: string;
-  onChange: (user: User | null) => void;
+interface OrgMemberSelectProps {
+  orgId: string;
+  value: OrgMember | null;
+  onChange: (member: OrgMember | null) => void;
   excludeUserIds?: string[];
   placeholder?: string;
   className?: string;
 }
 
-export function UserSearchInput({
+export function OrgMemberSelect({
+  orgId,
   value,
   onChange,
   excludeUserIds = [],
-  placeholder = 'Search users by name...',
+  placeholder = 'Search organization members...',
   className = '',
-}: UserSearchInputProps) {
+}: OrgMemberSelectProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Debounce search
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    if (searchQuery.trim().length < 2) {
-      setUsers([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    setLoading(true);
-    searchTimeoutRef.current = setTimeout(async () => {
+    const loadMembers = async () => {
       try {
-        const results = await projectsAPI.searchUsers(searchQuery.trim(), 10);
-        // Filter out excluded users
-        const filtered = results.filter((user: User) => !excludeUserIds.includes(user._id));
-        setUsers(filtered);
-        setShowDropdown(filtered.length > 0);
-        setSelectedIndex(-1);
+        setLoading(true);
+        const data = await organizationsAPI.getMembers(orgId);
+        setMembers(data);
       } catch (error) {
-        console.error('Search error:', error);
-        setUsers([]);
-        setShowDropdown(false);
+        console.error('Failed to load organization members:', error);
+        setMembers([]);
       } finally {
         setLoading(false);
       }
-    }, 300);
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
     };
-  }, [searchQuery, excludeUserIds]);
 
-  // Close dropdown when clicking outside
+    if (orgId) {
+      loadMembers();
+    }
+  }, [orgId]);
+
+  const availableMembers = members.filter((member) => {
+    if (excludeUserIds.includes(member.user._id)) {
+      return false;
+    }
+
+    if (!searchQuery.trim()) {
+      return true;
+    }
+
+    const query = searchQuery.toLowerCase();
+    return (
+      member.user.name.toLowerCase().includes(query) ||
+      member.user.email.toLowerCase().includes(query) ||
+      member.user.username.toLowerCase().includes(query)
+    );
+  });
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -89,25 +80,25 @@ export function UserSearchInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectUser = (user: User) => {
-    onChange(user);
-    setSearchQuery(user.name);
+  const handleSelectMember = (member: OrgMember) => {
+    onChange(member);
+    setSearchQuery(member.user.name);
     setShowDropdown(false);
-    setUsers([]);
+    setSelectedIndex(-1);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showDropdown || users.length === 0) return;
+    if (!showDropdown || availableMembers.length === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < users.length - 1 ? prev + 1 : prev));
+      setSelectedIndex((prev) => (prev < availableMembers.length - 1 ? prev + 1 : prev));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
     } else if (e.key === 'Enter' && selectedIndex >= 0) {
       e.preventDefault();
-      handleSelectUser(users[selectedIndex]);
+      handleSelectMember(availableMembers[selectedIndex]);
     } else if (e.key === 'Escape') {
       setShowDropdown(false);
     }
@@ -116,7 +107,8 @@ export function UserSearchInput({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setSearchQuery(newValue);
-    if (!newValue || newValue.trim().length === 0) {
+    setShowDropdown(true);
+    if (!newValue.trim()) {
       onChange(null);
     }
   };
@@ -127,6 +119,12 @@ export function UserSearchInput({
     inputRef.current?.focus();
   };
 
+  useEffect(() => {
+    if (value) {
+      setSearchQuery(value.user.name);
+    }
+  }, [value]);
+
   return (
     <div className={`relative ${className}`}>
       <div className="relative">
@@ -136,13 +134,10 @@ export function UserSearchInput({
           value={searchQuery}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (users.length > 0) {
-              setShowDropdown(true);
-            }
-          }}
-          placeholder={placeholder}
-          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-10 pr-10 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          onFocus={() => setShowDropdown(true)}
+          placeholder={loading ? 'Loading members...' : placeholder}
+          disabled={loading}
+          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-10 pr-10 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
         />
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
           <svg className="h-5 w-5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,33 +157,33 @@ export function UserSearchInput({
         )}
       </div>
 
-      {/* Dropdown */}
       {showDropdown && (
         <div
           ref={dropdownRef}
           className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] shadow-lg"
         >
           {loading ? (
+            <div className="px-4 py-3 text-sm text-[var(--text-muted)]">Loading members...</div>
+          ) : availableMembers.length === 0 ? (
             <div className="px-4 py-3 text-sm text-[var(--text-muted)]">
-              Searching...
-            </div>
-          ) : users.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-[var(--text-muted)]">
-              No users found
+              {members.length === 0
+                ? 'No organization members found. Invite users to the organization first.'
+                : 'No matching members found.'}
             </div>
           ) : (
             <ul className="py-1">
-              {users.map((user, index) => (
+              {availableMembers.map((member, index) => (
                 <li
-                  key={user._id}
-                  onClick={() => handleSelectUser(user)}
+                  key={member.id}
+                  onClick={() => handleSelectMember(member)}
                   className={`cursor-pointer px-4 py-2 text-sm transition-colors ${
                     index === selectedIndex
                       ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
                       : 'text-[var(--foreground)] hover:bg-[var(--surface-elevated)]'
                   }`}
                 >
-                  <p className="font-medium">{user.name}</p>
+                  <p className="font-medium">{member.user.name}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{member.user.email}</p>
                 </li>
               ))}
             </ul>

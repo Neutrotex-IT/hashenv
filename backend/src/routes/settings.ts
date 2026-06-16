@@ -6,7 +6,8 @@ import Project from '../models/Project';
 import EnvFile from '../models/EnvFile';
 import Secret from '../models/Secret';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { decryptEnv } from '../lib/crypto';
+import { decryptProjectData } from '../crypto';
+import { auditPanic } from '../lib/audit';
 
 const router = express.Router();
 
@@ -312,7 +313,12 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
           for (const env of Object.keys(latestByEnv)) {
             const envFile = latestByEnv[env];
             try {
-              const decryptedContent = decryptEnv(envFile.encryptedData, envFile.iv, envFile.authTag);
+              const decryptedContent = await decryptProjectData(
+                project._id.toString(),
+                envFile.encryptedData,
+                envFile.iv,
+                envFile.authTag
+              );
               envFiles.push({
                 projectName: project.name,
                 environment: env,
@@ -372,6 +378,14 @@ router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Pro
         results.revokeError = error instanceof Error ? error.message : 'Failed to revoke collaborators';
       }
     }
+
+    // Audit the panic action
+    await auditPanic(req.user.userId, {
+      downloadEnvs: results.downloadEnvs,
+      flushEnvs: results.flushEnvs,
+      revokeCollaborators: results.revokeCollaborators,
+      projectCount: projects.length,
+    }, req);
 
     res.json({
       success: true,

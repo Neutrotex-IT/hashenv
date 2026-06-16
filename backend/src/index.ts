@@ -1,16 +1,23 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import morgan from 'morgan';
 import cron from 'node-cron';
 import authRoutes from './routes/auth';
+import inviteRoutes from './routes/invites';
+import organizationRoutes from './routes/organizations';
 import projectRoutes from './routes/projects';
 import envRoutes from './routes/env';
 import secretsRoutes from './routes/secrets';
+import associatedAccountsRoutes from './routes/associatedAccounts';
 import settingsRoutes from './routes/settings';
+import apiTokenRoutes from './routes/apiTokens';
+import publicApiRoutes from './routes/api';
 import { securityHeaders, apiRateLimiter } from './middleware/security';
 import { sanitizeError } from './middleware/security';
+import { bootstrapEncryption, getEncryptionStatus } from './crypto';
 
 // Load environment variables
 dotenv.config();
@@ -77,8 +84,8 @@ const corsOptions: cors.CorsOptions = {
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  // Security: Expose only necessary headers
-  exposedHeaders: [],
+  // Expose rate limit headers for API clients
+  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
   // Security: Max age for preflight requests (24 hours)
   maxAge: 86400,
   // Security: Validate origin in production
@@ -88,6 +95,9 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Cookie parser for refresh tokens
+app.use(cookieParser());
 
 // Security: Request size limits (prevent DoS)
 app.use(express.json({ limit: '100kb' })); // Limit JSON payloads
@@ -101,7 +111,16 @@ app.get('/health', (req, res) => {
 
 // /api/health - for application health checks and cron job pings
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const encryptionStatus = getEncryptionStatus();
+  res.json({
+    status: encryptionStatus.initialized ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    encryption: {
+      initialized: encryptionStatus.initialized,
+      hasInstanceKey: encryptionStatus.hasInstanceKey,
+      error: encryptionStatus.error,
+    },
+  });
 });
 
 // Security: Apply rate limiting to API routes
@@ -109,10 +128,17 @@ app.use('/api', apiRateLimiter);
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/invites', inviteRoutes);
+app.use('/api/organizations', organizationRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects', envRoutes);
 app.use('/api/projects', secretsRoutes);
+app.use('/api/projects', associatedAccountsRoutes);
+app.use('/api/projects', apiTokenRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// Public API (API token authenticated)
+app.use('/api/v1', publicApiRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -175,8 +201,16 @@ const mongoOptions: mongoose.ConnectOptions = {
 
 mongoose
   .connect(MONGODB_URI, mongoOptions)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    
+    // Bootstrap encryption system
+    try {
+      await bootstrapEncryption();
+    } catch (error) {
+      console.error('FATAL: Encryption bootstrap failed:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
     
     // Start server
     app.listen(PORT, () => {

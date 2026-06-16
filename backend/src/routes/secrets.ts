@@ -1,7 +1,7 @@
 import express, { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import Secret from '../models/Secret';
-import { encryptEnv, decryptEnv } from '../lib/crypto';
+import { encryptProjectData, decryptProjectData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
 import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
 import { validateProjectId, isValidObjectId } from '../middleware/validation';
@@ -68,9 +68,9 @@ router.post(
         return;
       }
 
-      // Encrypt the secret content
+      // Encrypt the secret content using project-specific key
       const plaintextData = content || '';
-      const { encryptedData, iv, authTag } = encryptEnv(plaintextData);
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
 
       // Create the secret
       const secret = await Secret.create({
@@ -168,8 +168,8 @@ router.get(
         return;
       }
 
-      // Decrypt the secret content
-      const decryptedContent = decryptEnv(secret.encryptedData, secret.iv, secret.authTag);
+      // Decrypt the secret content using project-specific key
+      const decryptedContent = await decryptProjectData(projectId, secret.encryptedData, secret.iv, secret.authTag);
 
       res.json({
         _id: secret._id,
@@ -266,9 +266,9 @@ router.put(
         secret.name = name.trim();
       }
 
-      // Update content if provided (re-encrypt)
+      // Update content if provided (re-encrypt with project-specific key)
       if (content !== undefined) {
-        const { encryptedData, iv, authTag } = encryptEnv(content);
+        const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
         secret.encryptedData = encryptedData;
         secret.iv = iv;
         secret.authTag = authTag;
