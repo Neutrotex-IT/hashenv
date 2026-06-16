@@ -162,6 +162,22 @@ export interface ProjectInvite {
   createdAt: string;
 }
 
+export interface AuditLogEntry {
+  _id: string;
+  organizationId?: string;
+  projectId?: string;
+  resourceType: 'env' | 'secret' | 'account' | 'project' | 'org' | 'member' | 'session' | 'api_token' | 'panic';
+  resourceId?: string;
+  action: string;
+  actorType: 'user' | 'api_token';
+  actorId: string;
+  actorEmail?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface OrgPermissionsResponse {
   catalog: {
     org: Record<string, string>;
@@ -301,6 +317,10 @@ export const organizationsAPI = {
   },
   removeMember: async (orgId: string, memberId: string): Promise<void> => {
     await api.delete(`/organizations/${orgId}/members/${memberId}`);
+  },
+  getAudit: async (orgId: string): Promise<AuditLogEntry[]> => {
+    const response = await api.get(`/organizations/${orgId}/audit`);
+    return response.data;
   },
 };
 

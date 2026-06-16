@@ -9,6 +9,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
 
 interface Project {
   _id: string;
@@ -45,6 +46,7 @@ export default function ProjectApiTokensPage() {
   
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingToken, setEditingToken] = useState<ApiToken | null>(null);
 
   useEffect(() => {
     loadData();
@@ -112,6 +114,14 @@ export default function ProjectApiTokensPage() {
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to revoke token');
     }
+  };
+
+  const handleUpdateToken = async (
+    tokenId: string,
+    data: { name: string; scopes: ('read' | 'write')[] }
+  ) => {
+    await apiTokensAPI.update(projectId, tokenId, data);
+    await loadData();
   };
 
   const handleCopyToken = async () => {
@@ -415,12 +425,20 @@ export default function ProjectApiTokensPage() {
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                         {canWrite && (
-                          <button
-                            onClick={() => handleDeleteToken(token._id, token.name)}
-                            className="text-[var(--error)] hover:text-[#F85149] transition-colors"
-                          >
-                            Revoke
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setEditingToken(token)}
+                              className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteToken(token._id, token.name)}
+                              className="text-[var(--error)] hover:text-[#F85149] transition-colors"
+                            >
+                              Revoke
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -482,6 +500,14 @@ export default function ProjectApiTokensPage() {
             </div>
           </div>
         </div>
+
+        {editingToken && (
+          <EditApiTokenModal
+            token={editingToken}
+            onSave={(data) => handleUpdateToken(editingToken._id, data)}
+            onClose={() => setEditingToken(null)}
+          />
+        )}
       </AuthenticatedLayout>
     </ProtectedRoute>
   );

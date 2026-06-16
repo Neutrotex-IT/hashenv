@@ -10,6 +10,8 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
+import { EditOrgMemberModal } from '@/components/ui/EditOrgMemberModal';
+import { OrgSubnav } from '@/components/OrgSubnav';
 import { formatOrgPermission, hasOrgPermission, OrgPermission } from '@/lib/permissions';
 
 export default function OrganizationMembersPage() {
@@ -29,6 +31,7 @@ export default function OrganizationMembersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
 
   const customPermissions = (org?.permissions ?? []) as OrgPermission[];
   const canInvite = org
@@ -122,6 +125,15 @@ export default function OrganizationMembersPage() {
     }
   };
 
+  const handleUpdateMember = async (
+    memberId: string,
+    data: { role: 'member' | 'admin'; permissions?: OrgPermission[] }
+  ) => {
+    await organizationsAPI.updateMember(orgId, memberId, data);
+    setSuccess('Member updated successfully');
+    await loadData();
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -151,6 +163,8 @@ export default function OrganizationMembersPage() {
                 Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects.
               </p>
             </div>
+
+            <OrgSubnav org={org} />
 
             {error && (
               <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
@@ -278,12 +292,20 @@ export default function OrganizationMembersPage() {
                         {canManageMembers && (
                           <td className="px-6 py-4 text-right text-sm">
                             {member.role !== 'owner' && (
-                              <button
-                                onClick={() => handleRemoveMember(member.id)}
-                                className="text-[var(--error)] hover:text-[#F85149]"
-                              >
-                                Remove
-                              </button>
+                              <div className="flex items-center justify-end gap-3">
+                                <button
+                                  onClick={() => setEditingMember(member)}
+                                  className="text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveMember(member.id)}
+                                  className="text-[var(--error)] hover:text-[#F85149]"
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             )}
                           </td>
                         )}
@@ -295,6 +317,16 @@ export default function OrganizationMembersPage() {
             </div>
           </div>
         </div>
+
+        {editingMember && (
+          <EditOrgMemberModal
+            member={editingMember}
+            grantablePermissions={grantablePermissions}
+            canAssignAdmin={org?.role === 'owner' || org?.role === 'admin'}
+            onSave={(data) => handleUpdateMember(editingMember.id, data)}
+            onClose={() => setEditingMember(null)}
+          />
+        )}
       </AuthenticatedLayout>
     </ProtectedRoute>
   );
