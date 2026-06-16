@@ -53,18 +53,43 @@ export function EnvCompareModal({
       setLoading(true);
       setError('');
       try {
-        const [fromData, toData] = await Promise.all([
-          envAPI.getFileContent(projectId, fromFile._id),
-          envAPI.getFileContent(projectId, toFile._id),
-        ]);
+        const serverDiff = await envAPI.diff(projectId, environment, fromVersion, toVersion);
         if (!cancelled) {
-          setDiffLines(diffEnvContent(fromData.content, toData.content));
+          const lines: EnvDiffLine[] = [
+            ...serverDiff.added.map((item) => ({
+              type: 'added' as const,
+              key: item.key,
+              newValue: item.newValue,
+            })),
+            ...serverDiff.removed.map((item) => ({
+              type: 'removed' as const,
+              key: item.key,
+              oldValue: item.oldValue,
+            })),
+            ...serverDiff.changed.map((item) => ({
+              type: 'changed' as const,
+              key: item.key,
+              oldValue: item.oldValue,
+              newValue: item.newValue,
+            })),
+          ].sort((a, b) => a.key.localeCompare(b.key));
+          setDiffLines(lines);
         }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          const axiosErr = err as { response?: { data?: { error?: string } } };
-          setError(axiosErr.response?.data?.error || 'Failed to load versions for comparison');
-          setDiffLines([]);
+      } catch {
+        try {
+          const [fromData, toData] = await Promise.all([
+            envAPI.getFileContent(projectId, fromFile._id),
+            envAPI.getFileContent(projectId, toFile._id),
+          ]);
+          if (!cancelled) {
+            setDiffLines(diffEnvContent(fromData.content, toData.content));
+          }
+        } catch (err: unknown) {
+          if (!cancelled) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setError(axiosErr.response?.data?.error || 'Failed to load versions for comparison');
+            setDiffLines([]);
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);

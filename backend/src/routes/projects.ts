@@ -27,10 +27,12 @@ import {
 } from '../lib/permissions';
 import { createAndSendProjectInvite } from '../lib/projectInvite';
 import { auditProject } from '../lib/audit';
+import { assertEnvAllowed } from '../lib/environments';
 import EnvFile from '../models/EnvFile';
 import Secret from '../models/Secret';
 import AssociatedAccount from '../models/AssociatedAccount';
 import { ProjectApiToken } from '../models/ProjectApiToken';
+import AuditLog from '../models/AuditLog';
 
 const router = express.Router();
 
@@ -108,6 +110,82 @@ router.get(
     } catch (error) {
       console.error('Get project error:', error instanceof Error ? error.message : 'Failed to fetch project');
       res.status(500).json({ error: 'Failed to fetch project' });
+    }
+  }
+);
+
+/**
+ * Unified project activity feed across resource types
+ * GET /api/projects/:id/activity?environment=dev&resourceType=env
+ */
+router.get(
+  '/:id/activity',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('read'),
+  [
+    query('environment').optional().isString().trim(),
+    query('resourceType')
+      .optional()
+      .isIn(['env', 'secret', 'account', 'project', 'api_token', 'member'])
+      .withMessage('Invalid resource type'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const projectId = req.params.id;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+      const resourceTypeParam = req.query.resourceType as string | undefined;
+
+      const activityTypes = ['env', 'secret', 'account', 'project', 'api_token', 'member'] as const;
+      const allowedTypes = resourceTypeParam ? [resourceTypeParam] : [...activityTypes];
+
+      let logQuery: Record<string, unknown>;
+
+      if (environmentParam) {
+        let envSlug: string;
+        try {
+          envSlug = assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+
+        const nonEnvTypes = allowedTypes.filter((t) => t !== 'env');
+        logQuery = {
+          projectId,
+          $or: [
+            ...(nonEnvTypes.length > 0 ? [{ resourceType: { $in: nonEnvTypes } }] : []),
+            ...(allowedTypes.includes('env')
+              ? [{ resourceType: 'env', 'metadata.environment': envSlug }]
+              : []),
+          ],
+        };
+        if ((logQuery.$or as unknown[]).length === 0) {
+          res.json([]);
+          return;
+        }
+      } else {
+        logQuery = {
+          projectId,
+          resourceType: { $in: allowedTypes },
+        };
+      }
+
+      const logs = await AuditLog.find(logQuery)
+        .sort({ createdAt: -1 })
+        .limit(1000);
+
+      res.json(logs);
+    } catch (error) {
+      console.error('Get project activity error:', error instanceof Error ? error.message : 'Failed to fetch activity');
+      res.status(500).json({ error: 'Failed to fetch project activity' });
     }
   }
 );
@@ -850,6 +928,7 @@ router.delete(
         AssociatedAccount.deleteMany({ projectId: project._id }),
         ProjectApiToken.deleteMany({ projectId: project._id }),
         ProjectInvite.deleteMany({ projectId: project._id }),
+        AuditLog.deleteMany({ projectId: project._id }),
       ]);
 
       await deleteProjectEncryptionKey(projectId);

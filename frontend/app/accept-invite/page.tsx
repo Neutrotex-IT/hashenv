@@ -8,6 +8,7 @@ import { invitesAPI, InvitePreview } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/contexts/ToastContext';
 
 function AcceptInviteForm() {
   const router = useRouter();
@@ -15,6 +16,7 @@ function AcceptInviteForm() {
   const token = searchParams.get('token');
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { refreshOrganizations } = useOrganization();
+  const { error: toastError } = useToast();
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,7 @@ function AcceptInviteForm() {
         await refreshOrganizations();
       } catch (err: any) {
         setError(err.response?.data?.error || 'Failed to accept invite');
+        toastError(err.response?.data?.error || 'Failed to accept invite');
       } finally {
         setAccepting(false);
       }

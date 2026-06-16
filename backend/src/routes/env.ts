@@ -10,6 +10,7 @@ import { validateProjectId, validateEnvFileId, validateEnvironment, validateEnvi
 import { uploadRateLimiter } from '../middleware/security';
 import { AuthRequestWithOrg } from '../lib/authorization';
 import { assertEnvAllowed, normalizeEnvSlug } from '../lib/environments';
+import { diffEnvContent } from '../lib/envDiff';
 
 const router = express.Router();
 
@@ -497,6 +498,76 @@ router.delete(
 );
 
 /**
+ * Compare two env file versions
+ * GET /api/projects/:projectId/env/diff?environment=dev&from=1&to=2
+ * Requires: read permission
+ */
+router.get(
+  '/:projectId/env/diff',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('read'),
+  [
+    validateEnvironmentQuery(),
+    query('from').isInt({ min: 1, max: 10000 }).withMessage('from version is required'),
+    query('to').isInt({ min: 1, max: 10000 }).withMessage('to version is required'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string;
+      const fromVersion = parseInt(req.query.from as string, 10);
+      const toVersion = parseInt(req.query.to as string, 10);
+
+      let environment: string;
+      try {
+        environment = assertEnvAllowed(project, environmentParam);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
+
+      if (fromVersion === toVersion) {
+        res.status(400).json({ error: 'from and to versions must be different' });
+        return;
+      }
+
+      const [fromFile, toFile] = await Promise.all([
+        EnvFile.findOne({ projectId, environment, version: fromVersion }),
+        EnvFile.findOne({ projectId, environment, version: toVersion }),
+      ]);
+
+      if (!fromFile) {
+        res.status(404).json({ error: `Version ${fromVersion} not found` });
+        return;
+      }
+      if (!toFile) {
+        res.status(404).json({ error: `Version ${toVersion} not found` });
+        return;
+      }
+
+      const [fromContent, toContent] = await Promise.all([
+        decryptProjectData(projectId, fromFile.encryptedData, fromFile.iv, fromFile.authTag),
+        decryptProjectData(projectId, toFile.encryptedData, toFile.iv, toFile.authTag),
+      ]);
+
+      res.json(diffEnvContent(fromContent, toContent));
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      console.error('Env diff error:', errMessage);
+      res.status(500).json({ error: 'Failed to diff environment versions' });
+    }
+  }
+);
+
+/**
  * Get logs for a project
  * GET /api/projects/:projectId/env/logs?environment=prod
  * Requires: read permission
@@ -644,12 +715,31 @@ router.get(
   authenticate,
   validateProjectId(),
   requireProjectAccess('read'),
+  [validateEnvironmentQuery()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
       const projectId = req.params.projectId;
-      
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+
+      const logQuery: Record<string, unknown> = { projectId, resourceType: 'env' };
+      if (environmentParam) {
+        try {
+          logQuery['metadata.environment'] = assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+      }
+
       const AuditLog = (await import('../models/AuditLog')).default;
-      const logs = await AuditLog.find({ projectId, resourceType: 'env' })
+      const logs = await AuditLog.find(logQuery)
         .sort({ createdAt: -1 })
         .limit(1000);
       

@@ -8,13 +8,13 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import Link from 'next/link';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   // Profile state
   const [name, setName] = useState('');
@@ -50,7 +50,7 @@ export default function SettingsPage() {
         setPanicButton(settings.panicButton);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load settings');
+      toastError(err.response?.data?.error || 'Failed to load settings');
     } finally {
       setLoading(false);
     }
@@ -59,14 +59,12 @@ export default function SettingsPage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       const updatedProfile = await settingsAPI.updateProfile({ name, username });
       setName(updatedProfile.name);
       setUsername(updatedProfile.username);
-      setSuccess('Profile updated successfully');
+      toastSuccess('Profile updated successfully');
       
       // Update auth context if needed
       if (user) {
@@ -74,7 +72,7 @@ export default function SettingsPage() {
         user.username = updatedProfile.username;
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to update profile');
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -85,22 +83,20 @@ export default function SettingsPage() {
     
     // Validate flush duration (only if not null/empty)
     if (flushDuration !== null && flushDuration !== undefined && (flushDuration < 1 || flushDuration > 1000)) {
-      setError('Flush duration must be between 1 and 1000 hours, or empty to disable');
+      toastError('Flush duration must be between 1 and 1000 hours, or empty to disable');
       return;
     }
-    
+
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       await settingsAPI.update({
         flushDuration: flushDuration === null || flushDuration === undefined || flushDuration === 0 ? null : flushDuration,
         panicButton,
       });
-      setSuccess('Settings saved successfully');
+      toastSuccess('Settings saved successfully');
     } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save settings');
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -131,18 +127,6 @@ export default function SettingsPage() {
             <h1 className="text-3xl font-bold text-[var(--foreground)]">Settings</h1>
             <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your account settings and preferences</p>
           </div>
-
-          {error && (
-            <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-              <p className="text-sm text-[var(--error)]">{error}</p>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 rounded-lg border border-green-500/50 bg-green-500/10 p-4">
-              <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
-            </div>
-          )}
 
           {/* Profile Section */}
           <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">

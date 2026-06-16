@@ -20,7 +20,7 @@ export default function OrganizationMembersPage() {
 
   const org = organizations.find((item) => item._id === orgId);
   const { confirm } = useConfirm();
-  const { success: toastSuccess } = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const customPermissions = (org?.permissions ?? []) as OrgPermission[];
 
@@ -32,8 +32,6 @@ export default function OrganizationMembersPage() {
   const [invitePermissions, setInvitePermissions] = useState<OrgPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
 
@@ -72,7 +70,7 @@ export default function OrganizationMembersPage() {
         setInvites([]);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load organization members');
+      toastError(err.response?.data?.error || 'Failed to load organization members');
     } finally {
       setLoading(false);
     }
@@ -85,8 +83,6 @@ export default function OrganizationMembersPage() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setError('');
-    setSuccess('');
 
     try {
       await organizationsAPI.inviteMember(orgId, {
@@ -97,10 +93,10 @@ export default function OrganizationMembersPage() {
       setEmail('');
       setRole('member');
       setInvitePermissions([]);
-      setSuccess('Invitation sent successfully');
+      toastSuccess('Invitation sent successfully');
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send invitation');
+      toastError(err.response?.data?.error || 'Failed to send invitation');
     } finally {
       setSubmitting(false);
     }
@@ -119,7 +115,7 @@ export default function OrganizationMembersPage() {
       await organizationsAPI.revokeInvite(orgId, inviteId);
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to revoke invitation');
+      toastError(err.response?.data?.error || 'Failed to revoke invitation');
     }
   };
 
@@ -136,19 +132,18 @@ export default function OrganizationMembersPage() {
       await organizationsAPI.removeMember(orgId, memberId);
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to remove member');
+      toastError(err.response?.data?.error || 'Failed to remove member');
     }
   };
 
   const handleResendInvite = async (inviteId: string) => {
     setResendingInviteId(inviteId);
-    setError('');
     try {
       await organizationsAPI.resendInvite(orgId, inviteId);
       toastSuccess('Invitation resent');
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to resend invitation');
+      toastError(err.response?.data?.error || 'Failed to resend invitation');
     } finally {
       setResendingInviteId(null);
     }
@@ -159,7 +154,7 @@ export default function OrganizationMembersPage() {
     data: { role: 'member' | 'admin'; permissions?: OrgPermission[] }
   ) => {
     await organizationsAPI.updateMember(orgId, memberId, data);
-    setSuccess('Member updated successfully');
+    toastSuccess('Member updated successfully');
     await loadData();
   };
 
@@ -181,18 +176,6 @@ export default function OrganizationMembersPage() {
             Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects.
           </p>
         </div>
-
-        {error && (
-          <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-            <p className="text-sm text-[var(--error)]">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-            <p className="text-sm text-green-400">{success}</p>
-          </div>
-        )}
 
         {permissionInfo && (
           <EffectivePermissionsPanel

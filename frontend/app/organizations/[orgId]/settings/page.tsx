@@ -7,11 +7,13 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function OrganizationSettingsPage() {
   const params = useParams();
   const orgId = params.orgId as string;
   const { organizations, refreshOrganizations, setCurrentOrg } = useOrganization();
+  const { success: toastSuccess, error: toastError } = useToast();
   const org = organizations.find((item) => item._id === orgId);
 
   const customPermissions = (org?.permissions ?? []) as OrgPermission[];
@@ -22,9 +24,7 @@ export default function OrganizationSettingsPage() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (org) {
@@ -38,9 +38,7 @@ export default function OrganizationSettingsPage() {
     if (!canUpdate) return;
 
     setSubmitting(true);
-    setError('');
     setFieldErrors({});
-    setSuccess('');
 
     try {
       const updated = await organizationsAPI.update(orgId, { name: name.trim() });
@@ -48,7 +46,7 @@ export default function OrganizationSettingsPage() {
       if (org) {
         setCurrentOrg({ ...org, name: updated.name });
       }
-      setSuccess('Organization renamed successfully');
+      toastSuccess('Organization renamed successfully');
     } catch (err: unknown) {
       const axiosErr = err as {
         response?: {
@@ -57,7 +55,7 @@ export default function OrganizationSettingsPage() {
         };
       };
       if (axiosErr.response?.status === 403) {
-        setError('You do not have permission to update this organization.');
+        toastError('You do not have permission to update this organization.');
       } else if (axiosErr.response?.data?.errors) {
         const next: Record<string, string> = {};
         for (const item of axiosErr.response.data.errors) {
@@ -65,7 +63,7 @@ export default function OrganizationSettingsPage() {
         }
         setFieldErrors(next);
       } else {
-        setError(axiosErr.response?.data?.error || 'Failed to update organization');
+        toastError(axiosErr.response?.data?.error || 'Failed to update organization');
       }
     } finally {
       setSubmitting(false);
@@ -86,18 +84,6 @@ export default function OrganizationSettingsPage() {
         <h1 className="text-3xl font-bold text-[var(--foreground)]">Settings</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">Manage organization details.</p>
       </div>
-
-      {error && (
-        <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-          <p className="text-sm text-[var(--error)]">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-          <p className="text-sm text-green-400">{success}</p>
-        </div>
-      )}
 
       {canUpdate ? (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">

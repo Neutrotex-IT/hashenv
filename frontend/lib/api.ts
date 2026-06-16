@@ -404,6 +404,17 @@ export const projectsAPI = {
     const response = await api.delete(`/projects/${projectId}`);
     return response.data;
   },
+  getActivity: async (
+    projectId: string,
+    options?: { environment?: string; resourceType?: string }
+  ) => {
+    const params = new URLSearchParams();
+    if (options?.environment) params.set('environment', options.environment);
+    if (options?.resourceType) params.set('resourceType', options.resourceType);
+    const qs = params.toString();
+    const response = await api.get(`/projects/${projectId}/activity${qs ? `?${qs}` : ''}`);
+    return response.data;
+  },
   searchUsers: async (orgId: string, query: string, limit: number = 10) => {
     const params = new URLSearchParams({ orgId, limit: limit.toString() });
     if (query && query.trim().length > 0) {
@@ -482,6 +493,19 @@ export const envAPI = {
   rollback: async (projectId: string, environment: string, version: number) => {
     const response = await api.post(`/projects/${projectId}/env/rollback`, { environment, version });
     return response.data;
+  },
+  diff: async (projectId: string, environment: string, from: number, to: number) => {
+    const params = new URLSearchParams({
+      environment,
+      from: String(from),
+      to: String(to),
+    });
+    const response = await api.get(`/projects/${projectId}/env/diff?${params}`);
+    return response.data as {
+      added: Array<{ key: string; newValue?: string }>;
+      removed: Array<{ key: string; oldValue?: string }>;
+      changed: Array<{ key: string; oldValue: string; newValue: string }>;
+    };
   },
   downloadLogs: async (projectId: string, environment?: string) => {
     const params = environment ? new URLSearchParams({ environment }) : '';

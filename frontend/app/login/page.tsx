@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 import { authAPI } from '@/lib/api';
 import { PasswordInput } from '@/components/ui/PasswordInput';
+import { useToast } from '@/contexts/ToastContext';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -21,10 +22,10 @@ function LoginForm() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [showResendVerification, setShowResendVerification] = useState(false);
   const { login, register, isAuthenticated, loading: authLoading } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
   const router = useRouter();
 
   // Redirect if already authenticated
@@ -37,7 +38,6 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     setShowResendVerification(false);
     setLoading(true);
 
@@ -47,7 +47,7 @@ function LoginForm() {
         router.push(inviteToken ? `/accept-invite?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
       } else {
         await register(name, username, email, password, inviteToken || undefined);
-        setSuccess(
+        toastSuccess(
           inviteToken
             ? 'Registration successful! Please verify your email, then return to the invite link to join the organization.'
             : 'Registration successful! Please check your email to verify your account before logging in.'
@@ -60,6 +60,7 @@ function LoginForm() {
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'An error occurred';
+      toastError(errorMessage);
       setError(errorMessage);
       
       // Show resend verification option if email not verified
@@ -73,19 +74,19 @@ function LoginForm() {
 
   const handleResendVerification = async () => {
     if (!email) {
-      setError('Please enter your email address');
+      toastError('Please enter your email address');
       return;
     }
-    
+
     setError('');
     setLoading(true);
-    
+
     try {
       await authAPI.resendVerification(email);
-      setSuccess('Verification email sent! Please check your inbox.');
+      toastSuccess('Verification email sent! Please check your inbox.');
       setShowResendVerification(false);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to resend verification email');
+      toastError(err.response?.data?.error || 'Failed to resend verification email');
     } finally {
       setLoading(false);
     }
@@ -207,27 +208,18 @@ function LoginForm() {
               <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-[var(--accent)]/30 rounded-bl-lg"></div>
               <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-[var(--accent)]/30 rounded-br-lg"></div>
 
-              {error && (
+              {error && showResendVerification && (
                 <div className="rounded-md border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                  <p className="text-sm text-[var(--error)] font-[var(--font-inter)]">{error}</p>
-                  {showResendVerification && (
-                    <button
-                      type="button"
-                      onClick={handleResendVerification}
-                      className="mt-2 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] underline font-[var(--font-inter)]"
-                    >
-                      Resend verification email
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] underline font-[var(--font-inter)]"
+                  >
+                    Resend verification email
+                  </button>
                 </div>
               )}
 
-              {success && (
-                <div className="rounded-md border border-green-500/50 bg-green-500/10 p-4">
-                  <p className="text-sm text-green-600 dark:text-green-400 font-[var(--font-inter)]">{success}</p>
-                </div>
-              )}
-              
               {!isLogin && (
                 <>
                   <div>
@@ -337,7 +329,6 @@ function LoginForm() {
                   onClick={() => {
                     setIsLogin(!isLogin);
                     setError('');
-                    setSuccess('');
                     setShowResendVerification(false);
                     setPassword('');
                   }}

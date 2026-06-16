@@ -6,40 +6,38 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
 import { PasswordInput } from '@/components/ui/PasswordInput';
+import { useToast } from '@/contexts/ToastContext';
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const token = searchParams.get('token');
 
   useEffect(() => {
     if (!token) {
-      setError('Reset token is missing. Please request a new password reset link.');
+      toastError('Reset token is missing. Please request a new password reset link.');
     }
-  }, [token]);
+  }, [token, toastError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     if (!token) {
-      setError('Reset token is missing');
+      toastError('Reset token is missing');
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      toastError('Password must be at least 8 characters');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      toastError('Passwords do not match');
       return;
     }
 
@@ -47,12 +45,12 @@ function ResetPasswordForm() {
 
     try {
       await authAPI.resetPassword(token, password);
-      setSuccess('Password reset successful! Redirecting to login...');
+      toastSuccess('Password reset successful! Redirecting to login...');
       setTimeout(() => {
         router.push('/login');
       }, 2000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Password reset failed. The link may be invalid or expired.');
+      toastError(err.response?.data?.error || 'Password reset failed. The link may be invalid or expired.');
     } finally {
       setLoading(false);
     }
@@ -112,18 +110,6 @@ function ResetPasswordForm() {
               <div className="absolute top-0 right-0 w-12 h-12 border-t-2 border-r-2 border-[var(--accent)]/30 rounded-tr-lg"></div>
               <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-[var(--accent)]/30 rounded-bl-lg"></div>
               <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-[var(--accent)]/30 rounded-br-lg"></div>
-
-              {error && (
-                <div className="rounded-md border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                  <p className="text-sm text-[var(--error)] font-[var(--font-inter)]">{error}</p>
-                </div>
-              )}
-
-              {success && (
-                <div className="rounded-md border border-green-500/50 bg-green-500/10 p-4">
-                  <p className="text-sm text-green-600 dark:text-green-400 font-[var(--font-inter)]">{success}</p>
-                </div>
-              )}
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">

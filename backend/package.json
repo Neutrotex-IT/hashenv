@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "npm ci && tsc",
     "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -36,7 +37,8 @@
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
-    "tsx": "^4.7.0"
+    "tsx": "^4.7.0",
+    "vitest": "^3.2.4"
   },
   "license": "ISC",
   "author": "Bimochan Neutrotex"

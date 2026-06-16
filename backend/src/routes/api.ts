@@ -3,20 +3,22 @@
  * These routes are meant for programmatic access (CI/CD, scripts, etc.)
  */
 import express, { Response } from 'express';
-import { 
-  authenticateApiToken, 
-  requireApiScope, 
+import {
+  authenticateApiToken,
+  requireApiScope,
   requireApiTokenProject,
-  ApiTokenRequest 
+  ApiTokenRequest,
 } from '../lib/apiTokenAuth';
-import { EnvFile } from '../models/EnvFile';
-import { Secret } from '../models/Secret';
+import EnvFile from '../models/EnvFile';
+import Secret from '../models/Secret';
 import Project from '../models/Project';
 import { encryptProjectData, decryptProjectData } from '../crypto';
-import { auditEnv, auditSecret } from '../lib/audit';
+import { audit } from '../lib/audit';
 import { assertEnvAllowed } from '../lib/environments';
 
 const router = express.Router();
+
+const MAX_ENV_CONTENT_BYTES = 50 * 1024;
 
 /**
  * Get environment file content
@@ -32,7 +34,7 @@ router.get(
     try {
       const { projectId } = req.params;
       const { environment } = req.query;
-      
+
       if (!environment || typeof environment !== 'string') {
         res.status(400).json({ error: 'Environment query parameter is required' });
         return;
@@ -51,33 +53,34 @@ router.get(
         res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
         return;
       }
-      
-      // Find the latest env file for this environment
-      const envFile = await EnvFile.findOne({ projectId, environment: envSlug })
-        .sort({ version: -1 });
-      
+
+      const envFile = await EnvFile.findOne({ projectId, environment: envSlug }).sort({ version: -1 });
+
       if (!envFile) {
         res.status(404).json({ error: 'Environment file not found' });
         return;
       }
-      
-      // Decrypt content
-      const decryptedContent = await decryptProjectData(
+
+      const plaintextData = await decryptProjectData(
         projectId,
-        envFile.encryptedContent,
-        envFile.nonce,
+        envFile.encryptedData,
+        envFile.iv,
         envFile.authTag
       );
-      
-      // Audit the access
-      await auditEnv(projectId, 'download', req.apiToken!.tokenId, {
-        environment,
-        version: envFile.version,
-        accessType: 'api_token',
-      }, req);
-      
+
+      await audit({
+        projectId,
+        resourceType: 'env',
+        resourceId: envFile._id.toString(),
+        action: 'download',
+        actorType: 'api_token',
+        actorId: req.apiToken!.tokenId,
+        metadata: { environment: envSlug, version: envFile.version },
+        req,
+      });
+
       res.setHeader('Content-Type', 'text/plain');
-      res.send(decryptedContent.toString('utf-8'));
+      res.send(plaintextData);
     } catch (error) {
       console.error('API get env error:', error instanceof Error ? error.message : 'Unknown');
       res.status(500).json({ error: 'Failed to get environment file' });
@@ -96,21 +99,20 @@ router.get(
   requireApiScope('read'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId } = req.params;
-      
-      // Get latest version of each environment
       const envFiles = await EnvFile.aggregate([
         { $match: { projectId: req.project!._id } },
         { $sort: { version: -1 } },
-        { $group: {
-          _id: '$environment',
-          environment: { $first: '$environment' },
-          version: { $first: '$version' },
-          updatedAt: { $first: '$createdAt' },
-        }},
+        {
+          $group: {
+            _id: '$environment',
+            environment: { $first: '$environment' },
+            version: { $first: '$version' },
+            updatedAt: { $first: '$createdAt' },
+          },
+        },
         { $project: { _id: 0 } },
       ]);
-      
+
       res.json(envFiles);
     } catch (error) {
       console.error('API list env error:', error instanceof Error ? error.message : 'Unknown');
@@ -133,7 +135,7 @@ router.put(
     try {
       const { projectId } = req.params;
       const { environment, content } = req.body;
-      
+
       if (!environment || typeof environment !== 'string') {
         res.status(400).json({ error: 'Environment is required' });
         return;
@@ -152,41 +154,44 @@ router.put(
         res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
         return;
       }
-      
+
       if (content === undefined || typeof content !== 'string') {
         res.status(400).json({ error: 'Content is required' });
         return;
       }
-      
-      // Encrypt content
-      const { ciphertext, nonce, authTag } = await encryptProjectData(
-        projectId,
-        Buffer.from(content, 'utf-8')
-      );
-      
-      // Get current max version
-      const latestEnv = await EnvFile.findOne({ projectId, environment: envSlug })
-        .sort({ version: -1 });
-      
+
+      if (content.length > MAX_ENV_CONTENT_BYTES) {
+        res.status(400).json({ error: 'Content size must be less than 50KB' });
+        return;
+      }
+
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+
+      const latestEnv = await EnvFile.findOne({ projectId, environment: envSlug }).sort({ version: -1 });
+
       const newVersion = (latestEnv?.version || 0) + 1;
-      
-      // Create new version
+
       const envFile = await EnvFile.create({
         projectId,
         environment: envSlug,
-        encryptedContent: ciphertext,
-        nonce,
+        encryptedData,
+        iv,
         authTag,
         version: newVersion,
+        uploadedBy: req.apiToken!.createdBy,
       });
-      
-      // Audit the upload
-      await auditEnv(projectId, 'upload', req.apiToken!.tokenId, {
-        environment,
-        version: newVersion,
-        accessType: 'api_token',
-      }, req);
-      
+
+      await audit({
+        projectId,
+        resourceType: 'env',
+        resourceId: envFile._id.toString(),
+        action: 'upload',
+        actorType: 'api_token',
+        actorId: req.apiToken!.tokenId,
+        metadata: { environment: envSlug, version: newVersion },
+        req,
+      });
+
       res.json({
         environment: envFile.environment,
         version: envFile.version,
@@ -211,34 +216,38 @@ router.get(
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
       const { projectId, secretName } = req.params;
-      
-      const secret = await Secret.findOne({ 
-        projectId, 
-        name: secretName 
+
+      const secret = await Secret.findOne({
+        projectId,
+        name: secretName,
       });
-      
+
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
       }
-      
-      // Decrypt content
+
       const decryptedContent = await decryptProjectData(
         projectId,
-        secret.encryptedContent,
-        secret.nonce,
+        secret.encryptedData,
+        secret.iv,
         secret.authTag
       );
-      
-      // Audit the access
-      await auditSecret(projectId, 'view', req.apiToken!.tokenId, {
-        secretName,
-        accessType: 'api_token',
-      }, req);
-      
+
+      await audit({
+        projectId,
+        resourceType: 'secret',
+        resourceId: secret._id.toString(),
+        action: 'read',
+        actorType: 'api_token',
+        actorId: req.apiToken!.tokenId,
+        metadata: { secretName },
+        req,
+      });
+
       res.json({
         name: secret.name,
-        content: decryptedContent.toString('utf-8'),
+        content: decryptedContent,
       });
     } catch (error) {
       console.error('API get secret error:', error instanceof Error ? error.message : 'Unknown');
@@ -259,11 +268,11 @@ router.get(
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
       const { projectId } = req.params;
-      
+
       const secrets = await Secret.find({ projectId })
         .select('name createdAt updatedAt')
         .sort({ name: 1 });
-      
+
       res.json(secrets);
     } catch (error) {
       console.error('API list secrets error:', error instanceof Error ? error.message : 'Unknown');

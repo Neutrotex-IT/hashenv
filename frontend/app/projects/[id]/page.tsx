@@ -5,8 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectsAPI, envAPI, secretsAPI, accountsAPI, environmentsAPI, ProjectPermissionsResponse, ProjectEnvironment } from '@/lib/api';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { UploadEnvButton } from '@/components/ui/UploadEnvButton';
 import { formatPermission } from '@/lib/permissions';
@@ -109,6 +107,8 @@ export default function ProjectDetailPage() {
   const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets' | 'accounts'>('environments');
   const [selectedEnv, setSelectedEnv] = useState<string>('dev');
   const [compareOpen, setCompareOpen] = useState(false);
+  const [compareInitialFrom, setCompareInitialFrom] = useState<number | undefined>();
+  const [compareInitialTo, setCompareInitialTo] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretFormOpen, setSecretFormOpen] = useState(false);
@@ -530,27 +530,21 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
-            <div className="grid gap-4 md:grid-cols-3 mb-8">
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-            <SkeletonCard />
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <>
+        <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
+        <div className="grid gap-4 md:grid-cols-3 mb-8">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <SkeletonCard />
+      </>
     );
   }
 
   if (!project) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex items-center justify-center py-16">
             <div className="text-center max-w-md">
               <div className="mb-6">
                 <svg className="mx-auto h-16 w-16 text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -568,27 +562,32 @@ export default function ProjectDetailPage() {
                   You can only access projects you created or projects where you are a collaborator.
                 </p>
               )}
-              <Button variant="primary" size="md" asLink href="/dashboard">
-                Back to Dashboard
-              </Button>
-            </div>
+            <Button variant="primary" size="md" asLink href="/dashboard">
+              Back to Dashboard
+            </Button>
           </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+        </div>
     );
   }
 
   const filteredVersions = envVersions.filter((v) => v.environment === selectedEnv);
   const latestVersion = filteredVersions.length > 0 ? filteredVersions[0] : null;
 
+  const openCompare = (fromVersion?: number, toVersion?: number) => {
+    setCompareInitialFrom(fromVersion);
+    setCompareInitialTo(toVersion);
+    setCompareOpen(true);
+  };
+
+  const closeCompare = () => {
+    setCompareOpen(false);
+    setCompareInitialFrom(undefined);
+    setCompareInitialTo(undefined);
+  };
+
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
+    <>
           <div className="mb-6">
-            <Link href="/dashboard" className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block">
-              ← Back to Dashboard
-            </Link>
             <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">{project.name}</h1>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <p className="text-[var(--text-muted)]">Manage environment files for this project</p>
@@ -723,7 +722,7 @@ export default function ProjectDetailPage() {
                     />
                   )}
                   {canRead && filteredVersions.length >= 2 && (
-                    <Button variant="outline" size="md" onClick={() => setCompareOpen(true)}>
+                    <Button variant="outline" size="md" onClick={() => openCompare()}>
                       Compare
                     </Button>
                   )}
@@ -777,9 +776,17 @@ export default function ProjectDetailPage() {
                               Download
                             </button>
                           )}
-                          {canRead && filteredVersions.length >= 2 && (
+                          {canRead && filteredVersions.length >= 2 && latestVersion && version.version !== latestVersion.version && (
                             <button
-                              onClick={() => setCompareOpen(true)}
+                              onClick={() => openCompare(version.version, latestVersion.version)}
+                              className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                            >
+                              Compare with latest
+                            </button>
+                          )}
+                          {canRead && filteredVersions.length >= 2 && (!latestVersion || version.version === latestVersion.version) && (
+                            <button
+                              onClick={() => openCompare()}
                               className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                             >
                               Compare
@@ -1409,7 +1416,9 @@ export default function ProjectDetailPage() {
             projectId={projectId}
             environment={selectedEnv}
             versions={filteredVersions}
-            onClose={() => setCompareOpen(false)}
+            initialFromVersion={compareInitialFrom}
+            initialToVersion={compareInitialTo}
+            onClose={closeCompare}
           />
         )}
 
@@ -1422,7 +1431,6 @@ export default function ProjectDetailPage() {
             onClose={() => setSensitiveModal(null)}
           />
         )}
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </>
   );
 }

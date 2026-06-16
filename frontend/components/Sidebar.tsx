@@ -26,6 +26,62 @@ export function Sidebar({ onLogout }: SidebarProps) {
   const { currentOrg } = useOrganization();
 
   const orgPermissions = (currentOrg?.permissions ?? []) as OrgPermission[];
+  const { currentOrg } = useOrganization();
+
+  const projectIdMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const activeProjectId = projectIdMatch?.[1];
+
+  const projectNavItems: NavItem[] = activeProjectId
+    ? [
+        {
+          name: 'Overview',
+          href: `/projects/${activeProjectId}`,
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'Members',
+          href: `/projects/${activeProjectId}/members`,
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'Tokens',
+          href: `/projects/${activeProjectId}/tokens`,
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'Activity',
+          href: `/projects/${activeProjectId}/activity`,
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ),
+        },
+        {
+          name: 'Settings',
+          href: `/projects/${activeProjectId}/settings`,
+          icon: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          ),
+        },
+      ]
+    : [];
+
   const orgNavItems: NavItem[] =
     currentOrg?.type === 'team'
       ? [
@@ -165,6 +221,33 @@ export function Sidebar({ onLogout }: SidebarProps) {
             return (
               <Link
                 key={`org-${item.href}-${index}`}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/30'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--foreground)]'
+                }`}
+                title={isCollapsed ? item.name : undefined}
+              >
+                <span className="flex-shrink-0">{item.icon}</span>
+                {!isCollapsed && <span className="text-sm font-medium">{item.name}</span>}
+              </Link>
+            );
+          })}
+
+          {projectNavItems.length > 0 && !isCollapsed && (
+            <p className="px-3 pt-4 pb-1 text-xs font-medium uppercase text-[var(--text-muted)]">
+              Project
+            </p>
+          )}
+          {projectNavItems.map((item, index) => {
+            const isActive =
+              item.href === `/projects/${activeProjectId}`
+                ? pathname === item.href
+                : pathname === item.href || pathname.startsWith(item.href + '/');
+            return (
+              <Link
+                key={`project-${item.href}-${index}`}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                   isActive

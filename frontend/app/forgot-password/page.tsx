@@ -5,26 +5,24 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
     setLoading(true);
 
     try {
       await authAPI.forgotPassword(email);
-      setSuccess('If an account exists with this email, a password reset link has been sent. Please check your inbox.');
+      toastSuccess('If an account exists with this email, a password reset link has been sent. Please check your inbox.');
       setEmail('');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send password reset email');
+      toastError(err.response?.data?.error || 'Failed to send password reset email');
     } finally {
       setLoading(false);
     }
@@ -84,18 +82,6 @@ export default function ForgotPasswordPage() {
               <div className="absolute top-0 right-0 w-12 h-12 border-t-2 border-r-2 border-[var(--accent)]/30 rounded-tr-lg"></div>
               <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-[var(--accent)]/30 rounded-bl-lg"></div>
               <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-[var(--accent)]/30 rounded-br-lg"></div>
-
-              {error && (
-                <div className="rounded-md border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                  <p className="text-sm text-[var(--error)] font-[var(--font-inter)]">{error}</p>
-                </div>
-              )}
-
-              {success && (
-                <div className="rounded-md border border-green-500/50 bg-green-500/10 p-4">
-                  <p className="text-sm text-green-600 dark:text-green-400 font-[var(--font-inter)]">{success}</p>
-                </div>
-              )}
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">

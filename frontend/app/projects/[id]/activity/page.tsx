@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { envAPI, environmentsAPI } from '@/lib/api';
+import { projectsAPI, envAPI, environmentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useToast } from '@/contexts/ToastContext';
 
-interface AuditLogEntry {
+interface ActivityEntry {
   _id: string;
+  resourceType: string;
   action: string;
   actorEmail?: string;
   actorId: string;
@@ -21,17 +19,39 @@ interface AuditLogEntry {
     environment?: string;
     version?: number;
     rolledBackFrom?: number;
+    secretName?: string;
+    name?: string;
   };
+}
+
+function formatActivityLabel(entry: ActivityEntry): string {
+  const { resourceType, action, metadata } = entry;
+  switch (resourceType) {
+    case 'env':
+      return `Env ${action}${metadata?.version != null ? ` v${metadata.version}` : ''}`;
+    case 'secret':
+      return `Secret ${action}${metadata?.secretName ? `: ${metadata.secretName}` : ''}`;
+    case 'account':
+      return `Account ${action}${metadata?.name ? `: ${metadata.name}` : ''}`;
+    case 'project':
+      return `Project ${action.replace('_', ' ')}`;
+    case 'api_token':
+      return `API token ${action}`;
+    case 'member':
+      return `Member ${action.replace('_', ' ')}`;
+    default:
+      return `${resourceType} ${action}`;
+  }
 }
 
 export default function ProjectActivityPage() {
   const params = useParams();
   const projectId = params.id as string;
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [logs, setLogs] = useState<ActivityEntry[]>([]);
   const [envSlugs, setEnvSlugs] = useState<string[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<string>('all');
+  const [selectedResource, setSelectedResource] = useState<string>('all');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const { error: toastError } = useToast();
 
   useEffect(() => {
@@ -44,18 +64,18 @@ export default function ProjectActivityPage() {
 
   useEffect(() => {
     loadLogs();
-  }, [projectId, selectedEnv]);
+  }, [projectId, selectedEnv, selectedResource]);
 
   const loadLogs = async () => {
     try {
       setLoading(true);
       const environment = selectedEnv === 'all' ? undefined : selectedEnv;
-      const data = await envAPI.getLogs(projectId, environment);
+      const resourceType = selectedResource === 'all' ? undefined : selectedResource;
+      const data = await projectsAPI.getActivity(projectId, { environment, resourceType });
       setLogs(data);
-      setError('');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || 'Failed to load activity');
+      toastError(axiosErr.response?.data?.error || 'Failed to load activity');
       setLogs([]);
     } finally {
       setLoading(false);
@@ -72,41 +92,52 @@ export default function ProjectActivityPage() {
     }
   };
 
-  const actionColor = (action: string) => {
-    switch (action) {
-      case 'upload':
-        return 'text-[var(--success)]';
-      case 'download':
-        return 'text-[var(--accent)]';
-      case 'edit':
-        return 'text-[var(--warning)]';
-      case 'rollback':
-        return 'text-purple-400';
-      case 'delete':
-        return 'text-[var(--error)]';
-      default:
-        return 'text-[var(--text-muted)]';
-    }
+  const actionColor = (resourceType: string, action: string) => {
+    if (action === 'delete' || action === 'remove_member') return 'text-[var(--error)]';
+    if (action === 'upload' || action === 'create' || action === 'add_member') return 'text-[var(--success)]';
+    if (action === 'rollback' || action === 'edit' || action === 'update') return 'text-[var(--warning)]';
+    if (resourceType === 'api_token') return 'text-purple-400';
+    return 'text-[var(--accent)]';
   };
 
+  const resourceFilters = [
+    { id: 'all', label: 'All types' },
+    { id: 'env', label: 'Environment' },
+    { id: 'secret', label: 'Secrets' },
+    { id: 'account', label: 'Accounts' },
+    { id: 'project', label: 'Project' },
+    { id: 'api_token', label: 'API tokens' },
+    { id: 'member', label: 'Members' },
+  ];
+
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <Link
-            href={`/projects/${projectId}`}
-            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block"
-          >
-            ← Back to project
-          </Link>
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-3xl font-bold text-[var(--foreground)]">Activity</h1>
-              <p className="text-sm text-[var(--text-muted)] mt-1">Environment file uploads, downloads, edits, and rollbacks.</p>
+              <p className="text-sm text-[var(--text-muted)] mt-1">
+                Timeline across environment files, secrets, accounts, tokens, and members.
+              </p>
             </div>
             <Button variant="outline" size="md" onClick={handleDownload}>
-              Download logs
+              Download env logs
             </Button>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            {resourceFilters.map((filter) => (
+              <button
+                key={filter.id}
+                onClick={() => setSelectedResource(filter.id)}
+                className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                  selectedResource === filter.id
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                    : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
           <div className="mb-6 border-b border-[var(--border)]">
@@ -119,7 +150,7 @@ export default function ProjectActivityPage() {
                     : 'border-transparent text-[var(--text-muted)]'
                 }`}
               >
-                All
+                All envs
               </button>
               {envSlugs.map((slug) => (
                 <button
@@ -139,10 +170,6 @@ export default function ProjectActivityPage() {
 
           {loading ? (
             <SkeletonCard />
-          ) : error ? (
-            <div className="rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-              <p className="text-sm text-[var(--error)]">{error}</p>
-            </div>
           ) : logs.length === 0 ? (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
               <p className="text-[var(--text-secondary)]">No activity recorded yet.</p>
@@ -153,8 +180,8 @@ export default function ProjectActivityPage() {
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Action</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Environment</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Event</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Type</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Actor</th>
                   </tr>
                 </thead>
@@ -164,19 +191,21 @@ export default function ProjectActivityPage() {
                       <td className="px-4 py-3 text-sm text-[var(--text-secondary)] whitespace-nowrap">
                         {new Date(log.createdAt).toLocaleString()}
                       </td>
-                      <td className={`px-4 py-3 text-sm font-medium capitalize ${actionColor(log.action)}`}>
-                        {log.action}
-                        {log.metadata?.version != null && (
-                          <span className="text-[var(--text-muted)] font-normal"> v{log.metadata.version}</span>
-                        )}
+                      <td className={`px-4 py-3 text-sm font-medium ${actionColor(log.resourceType, log.action)}`}>
+                        {formatActivityLabel(log)}
                         {log.metadata?.rolledBackFrom != null && (
                           <span className="text-[var(--text-muted)] font-normal text-xs block">
                             from v{log.metadata.rolledBackFrom}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono text-[var(--foreground)]">
-                        {log.metadata?.environment || '—'}
+                      <td className="px-4 py-3 text-sm capitalize text-[var(--text-secondary)]">
+                        {log.resourceType.replace('_', ' ')}
+                        {log.metadata?.environment && (
+                          <span className="block font-mono text-xs text-[var(--text-muted)]">
+                            {log.metadata.environment}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
                         {log.actorEmail || log.actorId}
@@ -187,8 +216,6 @@ export default function ProjectActivityPage() {
               </table>
             </div>
           )}
-        </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </>
   );
 }

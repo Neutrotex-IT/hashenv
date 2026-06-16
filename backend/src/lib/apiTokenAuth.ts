@@ -13,6 +13,7 @@ export interface ApiTokenRequest extends Request {
     tokenId: string;
     projectId: string;
     scopes: ApiTokenScope[];
+    createdBy: string;
   };
   project?: {
     _id: mongoose.Types.ObjectId;
@@ -146,6 +147,7 @@ export async function authenticateApiToken(
       tokenId: apiToken._id.toString(),
       projectId: apiToken.projectId.toString(),
       scopes: apiToken.scopes,
+      createdBy: apiToken.createdBy.toString(),
     };
     req.project = {
       _id: project._id,

@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { projectsAPI } from '@/lib/api';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,8 +29,6 @@ export default function ProjectSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const isOwner = project?.createdBy._id === user?.id;
 
@@ -46,10 +41,9 @@ export default function ProjectSettingsPage() {
       const data = await projectsAPI.get(projectId);
       setProject(data);
       setName(data.name);
-      setError('');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string }; status?: number } };
-      setError(axiosErr.response?.data?.error || 'Failed to load project');
+      toastError(axiosErr.response?.data?.error || 'Failed to load project');
     } finally {
       setLoading(false);
     }
@@ -59,16 +53,13 @@ export default function ProjectSettingsPage() {
     e.preventDefault();
     if (!name.trim() || name.trim() === project?.name) return;
     setSaving(true);
-    setSuccess('');
-    setError('');
     try {
       const updated = await projectsAPI.update(projectId, { name: name.trim() });
       setProject((prev) => (prev ? { ...prev, name: updated.name } : prev));
-      setSuccess('Project renamed successfully');
-      toastSuccess('Project renamed');
+      toastSuccess('Project renamed successfully');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || 'Failed to rename project');
+      toastError(axiosErr.response?.data?.error || 'Failed to rename project');
     } finally {
       setSaving(false);
     }
@@ -99,39 +90,16 @@ export default function ProjectSettingsPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8 max-w-2xl">
-            <SkeletonCard />
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <div className="max-w-2xl">
+        <SkeletonCard />
+      </div>
     );
   }
 
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8 max-w-2xl">
-          <Link
-            href={`/projects/${projectId}`}
-            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block"
-          >
-            ← Back to project
-          </Link>
-          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Project settings</h1>
+    <div className="max-w-2xl">
+      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Project settings</h1>
           <p className="text-sm text-[var(--text-muted)] mb-6">Rename or delete this project.</p>
-
-          {error && (
-            <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-              <p className="text-sm text-[var(--error)]">{error}</p>
-            </div>
-          )}
-          {success && (
-            <div className="mb-6 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
-              <p className="text-sm text-green-400">{success}</p>
-            </div>
-          )}
 
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 mb-6">
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
@@ -184,8 +152,6 @@ export default function ProjectSettingsPage() {
               </Button>
             </div>
           )}
-        </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+    </div>
   );
 }
