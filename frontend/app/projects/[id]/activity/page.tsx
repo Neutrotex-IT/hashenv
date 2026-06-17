@@ -6,6 +6,7 @@ import { projectsAPI, envAPI, environmentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { useToast } from '@/contexts/ToastContext';
 
 interface ActivityEntry {
@@ -21,6 +22,7 @@ interface ActivityEntry {
     rolledBackFrom?: number;
     secretName?: string;
     name?: string;
+    email?: string;
   };
 }
 
@@ -48,6 +50,7 @@ export default function ProjectActivityPage() {
   const params = useParams();
   const projectId = params.id as string;
   const [logs, setLogs] = useState<ActivityEntry[]>([]);
+  const [projectName, setProjectName] = useState('');
   const [envSlugs, setEnvSlugs] = useState<string[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<string>('all');
   const [selectedResource, setSelectedResource] = useState<string>('all');
@@ -55,6 +58,7 @@ export default function ProjectActivityPage() {
   const { error: toastError } = useToast();
 
   useEffect(() => {
+    projectsAPI.get(projectId).then((p) => setProjectName(p.name)).catch(() => {});
     environmentsAPI.list(projectId).then((envs) => {
       setEnvSlugs(envs.map((e) => e.slug));
     }).catch(() => {
@@ -112,17 +116,17 @@ export default function ProjectActivityPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">Activity</h1>
-              <p className="text-sm text-[var(--text-muted)] mt-1">
-                Timeline across environment files, secrets, accounts, tokens, and members.
-              </p>
-            </div>
-            <Button variant="outline" size="md" onClick={handleDownload}>
-              Download env logs
-            </Button>
-          </div>
+      <ProjectPageHeader
+        projectId={projectId}
+        projectName={projectName || 'Project'}
+        title="Activity"
+        description="Timeline across environment files, secrets, accounts, tokens, and members."
+        actions={
+          <Button variant="outline" size="md" onClick={handleDownload}>
+            Download env logs
+          </Button>
+        }
+      />
 
           <div className="mb-4 flex flex-wrap gap-2">
             {resourceFilters.map((filter) => (

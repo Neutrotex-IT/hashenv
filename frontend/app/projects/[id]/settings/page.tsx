@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { projectsAPI } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -98,8 +99,14 @@ export default function ProjectSettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Project settings</h1>
-          <p className="text-sm text-[var(--text-muted)] mb-6">Rename or delete this project.</p>
+      {project && (
+        <ProjectPageHeader
+          projectId={projectId}
+          projectName={project.name}
+          title="Project settings"
+          description="Rename or delete this project."
+        />
+      )}
 
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 mb-6">
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>

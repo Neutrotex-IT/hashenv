@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { environmentsAPI, projectsAPI, ProjectEnvironment } from '@/lib/api';
 import { ManageEnvironmentsPanel } from '@/components/ui/ManageEnvironmentsPanel';
+import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -44,10 +45,14 @@ export default function ProjectEnvironmentsPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Manage environments</h1>
-      <p className="text-sm text-[var(--text-muted)] mb-6">
-        Add custom environment names beyond dev, staging, and prod.
-      </p>
+      {project && (
+        <ProjectPageHeader
+          projectId={projectId}
+          projectName={project.name}
+          title="Environments"
+          description="Add custom environment names beyond dev, staging, and prod."
+        />
+      )}
 
       {loading ? (
         <SkeletonCard />

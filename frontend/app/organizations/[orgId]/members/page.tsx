@@ -6,6 +6,7 @@ import { organizationsAPI, OrgMember, OrgInvite, OrgPermissionsResponse } from '
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { OrgPageHeader } from '@/components/OrgPageHeader';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
 import { EditOrgMemberModal } from '@/components/ui/EditOrgMemberModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
@@ -170,12 +171,14 @@ export default function OrganizationMembersPage() {
   return (
     <>
       <div className="max-w-4xl">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--foreground)]">Members</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects.
-          </p>
-        </div>
+        {org && (
+          <OrgPageHeader
+            orgId={orgId}
+            orgName={org.name}
+            title="Members"
+            description="Invite people by email with granular organization permissions. They must accept the invite before they can be added to projects."
+          />
+        )}
 
         {permissionInfo && (
           <EffectivePermissionsPanel

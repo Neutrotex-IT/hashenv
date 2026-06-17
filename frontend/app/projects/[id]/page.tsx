@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectsAPI, envAPI, secretsAPI, accountsAPI, environmentsAPI, ProjectPermissionsResponse, ProjectEnvironment } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -587,22 +588,14 @@ export default function ProjectDetailPage() {
 
   return (
     <>
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">{project.name}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <p className="text-[var(--text-muted)]">Manage environment files for this project</p>
-              {canRead && (
-                <Link href={`/projects/${projectId}/activity`} className="text-[var(--accent)] hover:underline">
-                  Activity
-                </Link>
-              )}
-              {canWrite && (
-                <Link href={`/projects/${projectId}/settings`} className="text-[var(--accent)] hover:underline">
-                  Settings
-                </Link>
-              )}
-            </div>
-          </div>
+          <PageHeader
+            title={project.name}
+            description="Environment files, secrets, and associated accounts for this project."
+            breadcrumbs={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: project.name },
+            ]}
+          />
 
           {error && (
             <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
@@ -619,41 +612,35 @@ export default function ProjectDetailPage() {
             />
           )}
 
-          {/* Main Tabs: Environments vs Secrets */}
+          {/* Content tabs */}
           <div className="mb-6">
-            <div className="border-b border-[var(--border)]">
-              <nav className="-mb-px flex space-x-8">
+            <div
+              role="tablist"
+              aria-label="Project data"
+              className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+            >
+              {(
+                [
+                  { id: 'environments' as const, label: 'Env files' },
+                  { id: 'secrets' as const, label: 'Secrets' },
+                  { id: 'accounts' as const, label: 'Accounts' },
+                ] as const
+              ).map((tab) => (
                 <button
-                  onClick={() => setSelectedTab('environments')}
-                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                    selectedTab === 'environments'
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedTab === tab.id}
+                  onClick={() => setSelectedTab(tab.id)}
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    selectedTab === tab.id
+                      ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'
                   }`}
                 >
-                  Environments
+                  {tab.label}
                 </button>
-                <button
-                  onClick={() => setSelectedTab('secrets')}
-                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                    selectedTab === 'secrets'
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  Other Secrets
-                </button>
-                <button
-                  onClick={() => setSelectedTab('accounts')}
-                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                    selectedTab === 'accounts'
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  Associated Accounts
-                </button>
-              </nav>
+              ))}
             </div>
           </div>
 
@@ -1350,66 +1337,6 @@ export default function ProjectDetailPage() {
               )}
             </>
           )}
-
-          {/* Settings Section (Project Owner only) */}
-          {isProjectOwner && (
-            <div className="mt-12 grid gap-6 md:grid-cols-2">
-              {/* Members Card */}
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-[var(--foreground)]">Project Members</h2>
-                  <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/members`}>
-                    Manage Members
-                  </Button>
-                </div>
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                  {project.members.length === 0 ? (
-                    <p className="text-[var(--text-muted)] text-center py-4">No members added yet.</p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {project.members.slice(0, 3).map((member, idx) => (
-                        <li key={idx} className="flex items-center justify-between p-3 rounded-md bg-[var(--surface-elevated)]">
-                          <p className="text-sm font-medium text-[var(--foreground)]">
-                            {typeof member.userId === 'object' ? member.userId.name : 'Unknown'}
-                          </p>
-                          <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
-                            {formatPermission(member.permission)}
-                          </span>
-                        </li>
-                      ))}
-                      {project.members.length > 3 && (
-                        <p className="text-sm text-[var(--text-muted)] text-center">
-                          +{project.members.length - 3} more members
-                        </p>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              {/* API Tokens Card */}
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-[var(--foreground)]">API Tokens</h2>
-                  <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/tokens`}>
-                    Manage Tokens
-                  </Button>
-                </div>
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                  <p className="text-[var(--text-muted)] text-sm mb-4">
-                    Create API tokens for programmatic access to this project's environment files and secrets.
-                  </p>
-                  <Button variant="primary" size="sm" asLink href={`/projects/${projectId}/tokens`}>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                    Manage API Tokens
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
         {compareOpen && filteredVersions.length >= 2 && (
           <EnvCompareModal

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { organizationsAPI, AuditLogEntry } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { OrgPageHeader } from '@/components/OrgPageHeader';
 import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
 
 const MAX_LOGS = 1000;
@@ -87,12 +88,14 @@ export default function OrganizationAuditPage() {
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-[var(--foreground)]">Audit Log</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Organization-wide activity including member changes, project events, and security actions.
-        </p>
-      </div>
+      {org && (
+        <OrgPageHeader
+          orgId={orgId}
+          orgName={org.name}
+          title="Audit log"
+          description="Organization-wide activity including member changes, project events, and security actions."
+        />
+      )}
 
       {error && (
         <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">

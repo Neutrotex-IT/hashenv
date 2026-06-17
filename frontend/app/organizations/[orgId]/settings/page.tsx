@@ -6,6 +6,7 @@ import { organizationsAPI } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { OrgPageHeader } from '@/components/OrgPageHeader';
 import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -80,10 +81,14 @@ export default function OrganizationSettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-[var(--foreground)]">Settings</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">Manage organization details.</p>
-      </div>
+      {org && (
+        <OrgPageHeader
+          orgId={orgId}
+          orgName={org.name}
+          title="Organization settings"
+          description="Manage organization details."
+        />
+      )}
 
       {canUpdate ? (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">

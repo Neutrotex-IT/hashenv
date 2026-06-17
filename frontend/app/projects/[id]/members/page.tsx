@@ -10,6 +10,7 @@ import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
 import { EditProjectMemberModal } from '@/components/ui/EditProjectMemberModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { formatPermission, formatProjectPermission, ProjectPermission } from '@/lib/permissions';
+import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -235,20 +236,20 @@ export default function ManageMembersPage() {
   return (
     <>
       <div className="mx-auto max-w-4xl">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-[var(--foreground)]">
-            Manage Members - {project.name}
-          </h1>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Add organization members directly or invite by email with granular project permissions.
-              </p>
-              <Link
-                href={`/organizations/${orgId}/members`}
-                className="mt-2 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
-              >
-                Manage organization invites →
-              </Link>
-            </div>
+        <ProjectPageHeader
+          projectId={projectId}
+          projectName={project.name}
+          title="Members"
+          description="Add organization members directly or invite by email with granular project permissions."
+        />
+        {orgId && (
+          <Link
+            href={`/organizations/${orgId}/members`}
+            className="mb-6 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
+          >
+            Manage organization invites
+          </Link>
+        )}
 
             {error && (
               <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
@@ -481,7 +482,6 @@ export default function ManageMembersPage() {
                 </div>
               )}
             </div>
-          </div>
       </div>
 
       {editingMember && (

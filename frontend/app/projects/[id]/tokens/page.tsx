@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -268,12 +269,14 @@ export default function ProjectApiTokensPage() {
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">API Tokens</h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          Manage API tokens for programmatic access to {project.name}
-        </p>
-      </div>
+      {project && (
+        <ProjectPageHeader
+          projectId={projectId}
+          projectName={project.name}
+          title="API tokens"
+          description={`Manage tokens for programmatic access to ${project.name}.`}
+        />
+      )}
 
           {/* New Token Display */}
           {newToken && (
