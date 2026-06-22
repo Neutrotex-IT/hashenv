@@ -14,6 +14,11 @@
 #   ROOT_ENCRYPTION_KEY     — min 32 chars (base64); backup securely
 #   NEXT_PUBLIC_API_URL     — public API URL with /api suffix (build-time); mark available at build
 #   FRONTEND_URL            — public app URL, e.g. https://app.yourdomain.com
+#   BREVO_API_KEY           — Brevo API key (registration / verification emails)
+#   BREVO_SENDER_EMAIL      — verified sender in Brevo, e.g. noreply@yourdomain.com
+#
+# Optional:
+#   BREVO_SENDER_NAME       — sender display name, e.g. HashEnv
 #
 # Atlas setup:
 #   1. Create a cluster and database user in MongoDB Atlas
@@ -42,6 +47,9 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ROOT_ENCRYPTION_KEY=${ROOT_ENCRYPTION_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
+      - BREVO_API_KEY=${BREVO_API_KEY}
+      - BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL}
+      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME}
     healthcheck:
       test:
         [
