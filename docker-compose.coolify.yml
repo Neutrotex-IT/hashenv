@@ -12,20 +12,17 @@
 #   MONGODB_URI             — Atlas connection string (mongodb+srv://...)
 #   JWT_SECRET              — min 32 chars
 #   ROOT_ENCRYPTION_KEY     — min 32 chars (base64); backup securely
-#   NEXT_PUBLIC_API_URL     — public API URL with /api suffix, e.g. https://api.yourdomain.com/api
+#   NEXT_PUBLIC_API_URL     — public API URL with /api suffix (build-time); mark available at build
 #   FRONTEND_URL            — public app URL, e.g. https://app.yourdomain.com
 #
 # Atlas setup:
 #   1. Create a cluster and database user in MongoDB Atlas
-#   2. Network Access → allow your Coolify server IP (or 0.0.0.0/0 for testing only)
+#   2. Network Access → allow your Coolify server IP
 #   3. Connect → Drivers → copy the mongodb+srv:// connection string
-#   4. Paste as MONGODB_URI in Coolify (TLS is auto-enabled for mongodb+srv://)
+#   4. Paste as MONGODB_URI in Coolify (TLS auto-enabled for mongodb+srv://)
 #
-# Optional:
-#   MONGODB_TLS             — override TLS detection (true|false); usually not needed with Atlas
-#   CORS_ORIGINS            — comma-separated origins (overrides FRONTEND_URL)
-#   BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME — transactional email
-#   BACKEND_URL             — public backend URL for health-ping cron (optional on Coolify)
+# Coolify note: use list syntax (- KEY=value) for build.args and environment on the same
+# service. Mixing map-style args with list-style environment breaks Coolify's parser.
 
 name: hashenv
 
@@ -42,16 +39,9 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - MONGODB_URI=${MONGODB_URI}
-      - MONGODB_TLS=${MONGODB_TLS:-}
       - JWT_SECRET=${JWT_SECRET}
       - ROOT_ENCRYPTION_KEY=${ROOT_ENCRYPTION_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
-      - CORS_ORIGINS=${CORS_ORIGINS:-}
-      - BREVO_API_KEY=${BREVO_API_KEY:-}
-      - BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL:-}
-      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME:-}
-      - BREVO_API_URL=${BREVO_API_URL:-https://api.brevo.com/v3/smtp/email}
-      - BACKEND_URL=${BACKEND_URL:-}
     healthcheck:
       test:
         [
@@ -70,8 +60,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Build-time: baked into Next.js bundle and CSP headers
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     restart: unless-stopped
     depends_on:
       backend:
