@@ -190,9 +190,17 @@ if (!MONGODB_URI) {
 }
 
 // Security: MongoDB connection options
+function shouldUseMongoTls(uri: string): boolean {
+  if (process.env.MONGODB_TLS === 'true') return true;
+  if (process.env.MONGODB_TLS === 'false') return false;
+  // Atlas / SRV and explicit tls=true URIs require TLS
+  if (uri.includes('mongodb+srv://')) return true;
+  if (/[?&]tls=true/i.test(uri)) return true;
+  return false;
+}
+
 const mongoOptions: mongoose.ConnectOptions = {
-  // Security: Use TLS/SSL in production
-  ...(process.env.NODE_ENV === 'production' && {
+  ...(shouldUseMongoTls(MONGODB_URI) && {
     tls: true,
     tlsAllowInvalidCertificates: false,
   }),

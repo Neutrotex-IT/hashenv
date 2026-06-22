@@ -1,0 +1,97 @@
+# HashEnv — Coolify Docker Compose stack (MongoDB Atlas)
+#
+# Deploy in Coolify: New Resource → Docker Compose → point at this file.
+# Every variable below must be declared here to be injected from the Coolify UI.
+# Do not commit .env files — enter secrets manually in Coolify → Environment Variables.
+#
+# Domains (Coolify UI → assign FQDN per service):
+#   frontend → e.g. app.yourdomain.com   (SERVICE_FQDN_FRONTEND_3000)
+#   backend  → e.g. api.yourdomain.com   (SERVICE_FQDN_BACKEND_3001)
+#
+# Required Coolify env vars:
+#   MONGODB_URI             — Atlas connection string (mongodb+srv://...)
+#   JWT_SECRET              — min 32 chars
+#   ROOT_ENCRYPTION_KEY     — min 32 chars (base64); backup securely
+#   NEXT_PUBLIC_API_URL     — public API URL with /api suffix, e.g. https://api.yourdomain.com/api
+#   FRONTEND_URL            — public app URL, e.g. https://app.yourdomain.com
+#
+# Atlas setup:
+#   1. Create a cluster and database user in MongoDB Atlas
+#   2. Network Access → allow your Coolify server IP (or 0.0.0.0/0 for testing only)
+#   3. Connect → Drivers → copy the mongodb+srv:// connection string
+#   4. Paste as MONGODB_URI in Coolify (TLS is auto-enabled for mongodb+srv://)
+#
+# Optional:
+#   MONGODB_TLS             — override TLS detection (true|false); usually not needed with Atlas
+#   CORS_ORIGINS            — comma-separated origins (overrides FRONTEND_URL)
+#   BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME — transactional email
+#   BACKEND_URL             — public backend URL for health-ping cron (optional on Coolify)
+
+name: hashenv
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - '3001'
+    environment:
+      - SERVICE_FQDN_BACKEND_3001
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_TLS=${MONGODB_TLS:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - ROOT_ENCRYPTION_KEY=${ROOT_ENCRYPTION_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL:-}
+      - BREVO_SENDER_NAME=${BREVO_SENDER_NAME:-}
+      - BREVO_API_URL=${BREVO_API_URL:-https://api.brevo.com/v3/smtp/email}
+      - BACKEND_URL=${BACKEND_URL:-}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time: baked into Next.js bundle and CSP headers
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - '3000'
+    environment:
+      - SERVICE_FQDN_FRONTEND_3000
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s

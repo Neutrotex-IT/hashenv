@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+.env
+.env.*
+!.env.example
+*.md
+.git
+.gitignore
+coverage
+.vscode
+*.log
+npm-debug.log*
+.eslintcache
