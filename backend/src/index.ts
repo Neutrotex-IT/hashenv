@@ -249,11 +249,11 @@ mongoose
       console.log('\n');
     });
 
-    // Start health ping cron job to keep Render backend awake
-    // Ping every 14 minutes to prevent 15-minute sleep timeout
-    // Only run in production (on Render), skip in development
-    if (process.env.NODE_ENV === 'production') {
-      const backendUrl = process.env.BACKEND_URL || 'https://hashenv-backend.onrender.com';
+    // Health ping cron — only for platforms that sleep idle backends (e.g. Render).
+    // Set BACKEND_URL to your public API origin (no trailing slash), e.g. https://api.example.com
+    // Not needed on Coolify; skipped when BACKEND_URL is unset.
+    if (process.env.NODE_ENV === 'production' && process.env.BACKEND_URL) {
+      const backendUrl = process.env.BACKEND_URL.replace(/\/$/, '');
       const healthUrl = `${backendUrl}/api/health`;
 
       // Ping immediately on startup
@@ -288,6 +288,8 @@ mongoose
       });
 
       console.log('[Health Ping] Cron job started - pinging health endpoint every 14 minutes');
+    } else if (process.env.NODE_ENV === 'production') {
+      console.log('[Health Ping] Skipped — BACKEND_URL not set (not required on Coolify)');
     } else {
       console.log('[Health Ping] Skipped in development mode');
     }
