@@ -11,9 +11,9 @@ RUN npm ci
 
 # Compile TypeScript
 FROM deps AS builder
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-RUN npx tsc
+RUN npx tsc -p tsconfig.build.json
 
 # Production image
 FROM base AS runner

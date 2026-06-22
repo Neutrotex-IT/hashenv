@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ProjectApiToken, hashApiToken, ApiTokenScope } from '../models/ProjectApiToken';
-import { Project } from '../models/Project';
+import Project from '../models/Project';
 import mongoose from 'mongoose';
 import { isApiTokenCreatorAuthorized } from './apiTokenLifecycle';
 
