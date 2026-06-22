@@ -7,7 +7,7 @@ import { canGrantProjectPermissions } from './abac';
 import { ProjectPermission, sanitizeProjectPermissions } from './permissions';
 import { generateVerificationToken, sendProjectInviteEmail } from './email';
 
-const INVITE_EXPIRES_DAYS = 7;
+const INVITE_EXPIRES_DAYS = 3;
 
 export async function createAndSendProjectInvite(
   projectId: string,
@@ -123,7 +123,6 @@ export async function getProjectInvitePreview(token: string) {
     type: 'project' as const,
     email: invite.email,
     permission: invite.permission,
-    permissions: invite.permissions,
     status: invite.status,
     expired,
     project: project?._id ? { _id: project._id.toString(), name: project.name } : null,

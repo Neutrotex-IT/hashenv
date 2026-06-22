@@ -7,6 +7,7 @@ export interface SensitiveField {
   label: string;
   value: string;
   sensitive?: boolean;
+  multiline?: boolean;
 }
 
 interface SensitiveValueModalProps {
@@ -17,11 +18,16 @@ interface SensitiveValueModalProps {
   onClose: () => void;
 }
 
-function SensitiveFieldRow({ label, value, sensitive = true }: SensitiveField) {
+function SensitiveFieldRow({ label, value, sensitive = true, multiline = false }: SensitiveField) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const isSensitive = sensitive && value.length > 0;
-  const displayValue = isSensitive && !revealed ? '•'.repeat(Math.min(value.length, 24)) : value;
+  const displayValue =
+    isSensitive && !revealed
+      ? multiline
+        ? null
+        : '•'.repeat(Math.min(value.length, 24))
+      : value;
 
   const handleCopy = async () => {
     try {
@@ -58,9 +64,25 @@ function SensitiveFieldRow({ label, value, sensitive = true }: SensitiveField) {
           </button>
         </div>
       </div>
-      <p className={`text-sm break-all ${isSensitive && !revealed ? 'font-mono tracking-widest text-[var(--text-muted)]' : 'text-[var(--foreground)] font-mono'}`}>
-        {displayValue || <span className="text-[var(--text-muted)] italic">(empty)</span>}
-      </p>
+      {multiline ? (
+        <pre
+          className={`text-sm font-mono whitespace-pre-wrap break-all ${
+            isSensitive && !revealed ? 'text-[var(--text-muted)] italic' : 'text-[var(--foreground)]'
+          }`}
+        >
+          {displayValue ?? '(hidden — click Reveal to view)'}
+        </pre>
+      ) : (
+        <p
+          className={`text-sm break-all ${
+            isSensitive && !revealed
+              ? 'font-mono tracking-widest text-[var(--text-muted)]'
+              : 'text-[var(--foreground)] font-mono'
+          }`}
+        >
+          {displayValue || <span className="text-[var(--text-muted)] italic">(empty)</span>}
+        </p>
+      )}
     </div>
   );
 }
@@ -80,10 +102,16 @@ export function SensitiveValueModal({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
+  const isWide = fields.some((field) => field.multiline);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">
+      <div
+        className={`relative w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl ${
+          isWide ? 'max-w-3xl' : 'max-w-lg'
+        }`}
+      >
         <div className="mb-4 flex items-start justify-between">
           <h3 className="text-lg font-semibold text-[var(--foreground)]">{title}</h3>
           <button

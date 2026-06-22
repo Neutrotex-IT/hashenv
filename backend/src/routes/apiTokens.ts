@@ -1,6 +1,6 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectAccess, requireProjectCapability } from '../lib/authorization';
+import { requireProjectCapability } from '../lib/authorization';
 import { ProjectApiToken, generateApiToken, ApiTokenScope } from '../models/ProjectApiToken';
 import { audit } from '../lib/audit';
 
@@ -13,7 +13,7 @@ const router = express.Router();
 router.get(
   '/:projectId/tokens',
   authenticate,
-  requireProjectAccess('read'),
+  requireProjectCapability('project:manage_tokens'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { projectId } = req.params;

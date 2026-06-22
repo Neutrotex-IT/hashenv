@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
+import { useParams } from 'next/navigation';
+import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse, ProjectPermissionsResponse } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
+import { canManageProjectTokens, canReadProject, canWriteProject } from '@/lib/permissions';
 
 interface Project {
   _id: string;
@@ -29,12 +29,11 @@ interface Project {
 
 export default function ProjectApiTokensPage() {
   const params = useParams();
-  const router = useRouter();
-  const { user } = useAuth();
   const projectId = params.id as string;
   
   const [project, setProject] = useState<Project | null>(null);
   const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -60,13 +59,15 @@ export default function ProjectApiTokensPage() {
 
   const loadData = async () => {
     try {
-      const [projectData, tokensData, envs] = await Promise.all([
+      const [projectData, tokensData, envs, permissionsData] = await Promise.all([
         projectsAPI.get(projectId),
         apiTokensAPI.list(projectId),
         environmentsAPI.list(projectId),
+        projectsAPI.getPermissions(projectId),
       ]);
       setProject(projectData);
       setTokens(tokensData);
+      setPermissionInfo(permissionsData);
       if (envs.length > 0) {
         setEnvOptions(envs.map((e) => e.slug));
         setExampleEnv(envs[0].slug);
@@ -87,6 +88,7 @@ export default function ProjectApiTokensPage() {
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageTokens) return;
     if (!tokenName.trim()) {
       toastError('Token name is required');
       return;
@@ -147,11 +149,11 @@ export default function ProjectApiTokensPage() {
     }
   };
 
-  const isProjectOwner = project && project.createdBy._id === user?.id;
-  const userPermission = project?.members.find(
-    (m) => m.userId._id === user?.id
-  )?.permission || null;
-  const canWrite = isProjectOwner || userPermission === 'write';
+  const canManageTokens = permissionInfo
+    ? canManageProjectTokens(permissionInfo.effective)
+    : false;
+  const canRead = permissionInfo ? canReadProject(permissionInfo.effective) : false;
+  const canWrite = permissionInfo ? canWriteProject(permissionInfo.effective) : false;
 
   const apiBase =
     typeof window !== 'undefined' ? window.location.origin : 'https://your-hashenv-instance.com';
@@ -228,6 +230,10 @@ export default function ProjectApiTokensPage() {
   "${apiBase}/api/v1/projects/${projectId}/secrets/MY_SECRET"`,
     },
   ];
+
+  const visibleApiExamples = apiExamples.filter((example) =>
+    example.scope === 'read' ? canRead : canWrite
+  );
 
   const handleCopyExample = async (id: string, text: string) => {
     await navigator.clipboard.writeText(text);
@@ -315,7 +321,7 @@ export default function ProjectApiTokensPage() {
           )}
 
           {/* Create Token Form */}
-          {formOpen && (
+          {canManageTokens && formOpen && (
             <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">
@@ -434,7 +440,7 @@ export default function ProjectApiTokensPage() {
             <p className="text-sm text-[var(--text-muted)]">
               {tokens.length} {tokens.length === 1 ? 'token' : 'tokens'}
             </p>
-            {canWrite && !formOpen && (
+            {canManageTokens && !formOpen && (
               <Button
                 variant="primary"
                 size="md"
@@ -469,9 +475,11 @@ export default function ProjectApiTokensPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                       Expires
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                      Actions
-                    </th>
+                    {canManageTokens && (
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
@@ -509,8 +517,8 @@ export default function ProjectApiTokensPage() {
                           ? new Date(token.expiresAt).toLocaleDateString()
                           : 'Never'}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        {canWrite && (
+                      {canManageTokens && (
+                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-3">
                             <button
                               onClick={() => setEditingToken(token)}
@@ -525,8 +533,8 @@ export default function ProjectApiTokensPage() {
                               Revoke
                             </button>
                           </div>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -541,7 +549,7 @@ export default function ProjectApiTokensPage() {
               <p className="text-sm text-[var(--text-muted)] mb-4">
                 API tokens allow programmatic access to this project's environment files and secrets.
               </p>
-              {canWrite && (
+              {canManageTokens && (
                 <Button
                   variant="primary"
                   size="lg"
@@ -580,7 +588,7 @@ export default function ProjectApiTokensPage() {
               </select>
             </div>
             <div className="space-y-2">
-              {apiExamples.map((example) => {
+              {visibleApiExamples.map((example) => {
                 const isOpen = expandedExample === example.id;
                 return (
                   <div
@@ -632,7 +640,7 @@ export default function ProjectApiTokensPage() {
               })}
             </div>
           </div>
-        {editingToken && (
+        {canManageTokens && editingToken && (
           <EditApiTokenModal
             token={editingToken}
             onSave={(data) => handleUpdateToken(editingToken._id, data)}

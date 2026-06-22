@@ -1,10 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { projectsAPI } from '@/lib/api';
 import { OrgSwitcher } from './OrgSwitcher';
+import { OrgPanicButton } from './OrgPanicButton';
 import { Button } from './ui/Button';
 import {
   getWorkspaceNav,
@@ -167,14 +170,54 @@ export function Sidebar({
   const orgPermissions = (currentOrg?.permissions ?? []) as OrgPermission[];
   const projectIdMatch = pathname.match(/^\/projects\/([^/]+)/);
   const activeProjectId = projectIdMatch?.[1];
+  const [projectEffectivePermissions, setProjectEffectivePermissions] = useState<
+    string[] | undefined
+  >(undefined);
 
-  const workspaceNav = getWorkspaceNav();
+  useEffect(() => {
+    if (!activeProjectId) {
+      setProjectEffectivePermissions(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    projectsAPI
+      .getPermissions(activeProjectId)
+      .then((data) => {
+        if (!cancelled) {
+          setProjectEffectivePermissions(data.effective);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjectEffectivePermissions([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId]);
+
+  const workspaceNav = getWorkspaceNav(
+    currentOrg
+      ? {
+          role: currentOrg.role,
+          permissions: orgPermissions,
+        }
+      : undefined
+  );
   const accountNav = getAccountNav();
   const orgNav =
     currentOrg?.type === 'team'
-      ? getOrgNav(currentOrg._id, currentOrg.role, orgPermissions)
+      ? getOrgNav(currentOrg._id, currentOrg.role, orgPermissions, currentOrg.type)
       : [];
-  const projectNav = activeProjectId ? getProjectNav(activeProjectId) : [];
+  const projectNav = activeProjectId
+    ? getProjectNav(activeProjectId, {
+        collaborationEnabled: currentOrg?.type === 'team',
+        effectivePermissions: projectEffectivePermissions,
+      })
+    : [];
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
@@ -258,6 +301,7 @@ export function Sidebar({
             <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
           </div>
         )}
+        <OrgPanicButton variant="sidebar" collapsed={collapsed} />
         <Button
           variant="danger"
           size="sm"

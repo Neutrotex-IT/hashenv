@@ -10,6 +10,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { CreateOrganizationModal } from '@/components/CreateOrganizationModal';
+import { canCreateProject, OrgPermission } from '@/lib/permissions';
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -27,6 +28,13 @@ export default function NewProjectPage() {
     }
   }, [currentOrg?._id]);
 
+  const selectedOrg =
+    organizations.find((org) => org._id === (selectedOrgId || currentOrg?._id)) ?? currentOrg;
+  const selectedOrgPermissions = (selectedOrg?.permissions ?? []) as OrgPermission[];
+  const canCreateInSelectedOrg = selectedOrg
+    ? canCreateProject(selectedOrg.role, selectedOrgPermissions)
+    : false;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -34,6 +42,11 @@ export default function NewProjectPage() {
     const orgId = selectedOrgId || currentOrg?._id;
     if (!orgId) {
       setError('Please select an organization');
+      return;
+    }
+
+    if (!canCreateInSelectedOrg) {
+      setError('You do not have permission to create projects in this organization');
       return;
     }
     
@@ -68,6 +81,14 @@ export default function NewProjectPage() {
             {error && (
               <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
+              </div>
+            )}
+
+            {!canCreateInSelectedOrg && selectedOrg && (
+              <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+                <p className="text-sm text-[var(--text-secondary)]">
+                  You do not have permission to create projects in {selectedOrg.name}. Contact an organization admin if you need access.
+                </p>
               </div>
             )}
 
@@ -126,7 +147,7 @@ export default function NewProjectPage() {
                   variant="primary"
                   size="md"
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !canCreateInSelectedOrg}
                 >
                   {loading ? 'Creating...' : 'Create Project'}
                 </Button>

@@ -1,4 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { assertBlobDownloadResponse, getApiErrorMessage } from './apiErrors';
+import { downloadTextFile } from './download';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -6,6 +8,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/a
 let accessToken: string | null = null;
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
+let forbiddenHandler: (() => void) | null = null;
+let forbiddenRefreshScheduled = false;
+
+export function setForbiddenHandler(handler: (() => void) | null): void {
+  forbiddenHandler = handler;
+}
+
+function notifyForbidden(): void {
+  if (!forbiddenHandler || forbiddenRefreshScheduled) {
+    return;
+  }
+  forbiddenRefreshScheduled = true;
+  queueMicrotask(() => {
+    forbiddenRefreshScheduled = false;
+    forbiddenHandler?.();
+  });
+}
 
 // Token management functions
 export function setAccessToken(token: string | null): void {
@@ -101,11 +120,28 @@ api.interceptors.response.use(
     
     // 403 errors (forbidden) are handled by components - don't redirect
     // These indicate access control restrictions, not authentication issues
+    if (error.response?.status === 403) {
+      notifyForbidden();
+    }
     return Promise.reject(error);
   }
 );
 
 export default api;
+
+async function fetchAndDownloadBlob(
+  url: string,
+  filename: string,
+  fallbackError: string
+): Promise<void> {
+  try {
+    const response = await api.get(url, { responseType: 'blob' });
+    await assertBlobDownloadResponse(response, fallbackError);
+    downloadTextFile(await response.data.text(), filename);
+  } catch (error) {
+    throw new Error(await getApiErrorMessage(error, fallbackError));
+  }
+}
 
 // Types
 export interface Organization {
@@ -117,6 +153,22 @@ export interface Organization {
   role: 'owner' | 'admin' | 'member';
   permissions?: string[];
   createdAt: string;
+}
+
+export interface PanicButtonSettings {
+  flushEnvs: boolean;
+  flushSecrets: boolean;
+  revokeApiTokens: boolean;
+  revokeCollaborators: boolean;
+  downloadEnvs: boolean;
+  askConfirmation: boolean;
+}
+
+export interface OrganizationSettingsResponse {
+  panicButton: PanicButtonSettings;
+  canConfigure: boolean;
+  canExecute: boolean;
+  eligibleProjectCount: number;
 }
 
 export interface OrgMember {
@@ -200,7 +252,6 @@ export interface InvitePreview {
   email: string;
   role?: 'member' | 'admin';
   permission?: 'read' | 'write';
-  permissions?: string[];
   status: 'pending' | 'accepted' | 'revoked';
   expired: boolean;
   organization: {
@@ -324,6 +375,21 @@ export const organizationsAPI = {
   },
   getAudit: async (orgId: string): Promise<AuditLogEntry[]> => {
     const response = await api.get(`/organizations/${orgId}/audit`);
+    return response.data;
+  },
+  getSettings: async (orgId: string): Promise<OrganizationSettingsResponse> => {
+    const response = await api.get(`/organizations/${orgId}/settings`);
+    return response.data;
+  },
+  updateSettings: async (
+    orgId: string,
+    data: { panicButton: Partial<PanicButtonSettings> }
+  ): Promise<{ panicButton: PanicButtonSettings }> => {
+    const response = await api.put(`/organizations/${orgId}/settings`, data);
+    return response.data;
+  },
+  panic: async (orgId: string, password: string) => {
+    const response = await api.post(`/organizations/${orgId}/panic`, { password });
     return response.data;
   },
 };
@@ -451,24 +517,26 @@ export const envAPI = {
     if (version) {
       params.append('version', version.toString());
     }
-    
-    const response = await api.get(`/projects/${projectId}/env?${params.toString()}`, {
-      responseType: 'blob',
-    });
-    
-    // Create download link
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', '.env');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+
+    await fetchAndDownloadBlob(
+      `/projects/${projectId}/env?${params.toString()}`,
+      '.env',
+      'Failed to download environment file'
+    );
   },
-  edit: async (projectId: string, envFileId: string, content: string) => {
-    const response = await api.put(`/projects/${projectId}/env/${envFileId}`, {
+  edit: async (
+    projectId: string,
+    envFileId: string,
+    content: string,
+    options?: { saveAsNewVersion?: boolean }
+  ) => {
+    const saveAsNewVersion = options?.saveAsNewVersion === true;
+    const url = `/projects/${projectId}/env/${envFileId}${
+      saveAsNewVersion ? '?saveAsNewVersion=true' : ''
+    }`;
+    const response = await api.put(url, {
       content,
+      saveAsNewVersion,
     });
     return response.data;
   },
@@ -477,8 +545,12 @@ export const envAPI = {
     return response.data;
   },
   listVersions: async (projectId: string, environment?: string) => {
-    const params = environment ? new URLSearchParams({ environment }) : '';
-    const response = await api.get(`/projects/${projectId}/env/versions${params ? `?${params}` : ''}`);
+    const params = new URLSearchParams();
+    if (environment) {
+      params.set('environment', environment);
+    }
+    const query = params.toString();
+    const response = await api.get(`/projects/${projectId}/env/versions${query ? `?${query}` : ''}`);
     return response.data;
   },
   getFileContent: async (projectId: string, envFileId: string) => {
@@ -505,23 +577,16 @@ export const envAPI = {
       added: Array<{ key: string; newValue?: string }>;
       removed: Array<{ key: string; oldValue?: string }>;
       changed: Array<{ key: string; oldValue: string; newValue: string }>;
+      unchanged: Array<{ key: string; oldValue: string; newValue: string }>;
     };
   },
   downloadLogs: async (projectId: string, environment?: string) => {
     const params = environment ? new URLSearchParams({ environment }) : '';
-    const response = await api.get(`/projects/${projectId}/env/logs/download${params ? `?${params}` : ''}`, {
-      responseType: 'blob',
-    });
-    
-    // Create download link
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `hashenv-logs-${Date.now()}.txt`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    await fetchAndDownloadBlob(
+      `/projects/${projectId}/env/logs/download${params ? `?${params}` : ''}`,
+      `hashenv-logs-${Date.now()}.txt`,
+      'Failed to download activity logs'
+    );
   },
 };
 
@@ -673,13 +738,67 @@ export const apiTokensAPI = {
   },
 };
 
+export interface DataTransferSummary {
+  envFilesImported: number;
+  secretsCreated: number;
+  secretsUpdated: number;
+  secretsSkipped: number;
+  accountsCreated: number;
+  accountsUpdated: number;
+  accountsSkipped: number;
+  environmentsAdded: number;
+  projectsCreated: number;
+  projectsUpdated: number;
+  projectsSkipped: number;
+}
+
+export interface DataTransferImportResult {
+  success: boolean;
+  summary: DataTransferSummary;
+  warnings: string[];
+}
+
+// Data export / import API
+export const dataTransferAPI = {
+  exportProject: async (projectId: string) => {
+    const response = await api.get(`/projects/${projectId}/export`);
+    return response.data;
+  },
+  importProject: async (projectId: string, file: File, options?: { overwrite?: boolean }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (options?.overwrite) {
+      formData.append('overwrite', 'true');
+    }
+    const response = await api.post(`/projects/${projectId}/import`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as DataTransferImportResult;
+  },
+  exportOrganization: async (orgId: string) => {
+    const response = await api.get(`/organizations/${orgId}/export`);
+    return response.data;
+  },
+  importOrganization: async (orgId: string, file: File, options?: { overwrite?: boolean }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (options?.overwrite) {
+      formData.append('overwrite', 'true');
+    }
+    const response = await api.post(`/organizations/${orgId}/import`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as DataTransferImportResult;
+  },
+};
+
 // Settings API
 export const settingsAPI = {
   get: async () => {
     const response = await api.get('/settings');
     return response.data;
   },
-  update: async (data: { flushDuration?: number | null; panicButton?: { flushEnvs?: boolean; flushSecrets?: boolean; revokeApiTokens?: boolean; revokeCollaborators?: boolean; downloadEnvs?: boolean; askConfirmation?: boolean } }) => {
+  update: async (data: { flushDuration?: number | null }) => {
     const response = await api.put('/settings', data);
     return response.data;
   },
@@ -689,10 +808,6 @@ export const settingsAPI = {
   },
   updateProfile: async (data: { name?: string; username?: string }) => {
     const response = await api.put('/settings/profile', data);
-    return response.data;
-  },
-  panic: async (password: string) => {
-    const response = await api.post('/settings/panic', { password });
     return response.data;
   },
 };

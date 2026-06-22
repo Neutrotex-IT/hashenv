@@ -39,29 +39,35 @@ function PermissionPicker<T extends string>({
     }
   };
 
+  if (grantable.length === 0) {
+    return (
+      <p className="text-sm text-[var(--text-muted)] rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+        No permissions available to assign.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-2 rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
-      {(Object.keys(catalog) as T[]).map((permission) => {
-        const canGrant = grantable.includes(permission);
+      {(Object.keys(catalog) as T[])
+        .filter((permission) => grantable.includes(permission))
+        .map((permission) => {
         const checked = selected.includes(permission);
 
         return (
           <label
             key={permission}
-            className={`flex items-start gap-3 text-sm ${canGrant ? 'text-[var(--foreground)]' : 'text-[var(--text-muted)]'}`}
+            className="flex items-start gap-3 text-sm text-[var(--foreground)]"
           >
             <input
               type="checkbox"
               checked={checked}
-              disabled={disabled || !canGrant}
+              disabled={disabled}
               onChange={() => toggle(permission)}
               className="mt-0.5"
             />
             <span>
               <span className="font-medium">{labelFor(permission)}</span>
-              {!canGrant && (
-                <span className="block text-xs text-[var(--text-muted)]">You cannot grant this permission</span>
-              )}
             </span>
           </label>
         );

@@ -6,7 +6,7 @@ import { canGrantOrgPermissions, canInviteToOrganization } from './abac';
 import { OrgPermission, sanitizeOrgPermissions } from './permissions';
 import { generateVerificationToken, sendOrgInviteEmail } from './email';
 
-const INVITE_EXPIRES_DAYS = 7;
+const INVITE_EXPIRES_DAYS = 3;
 
 export async function createAndSendOrgInvite(
   orgId: string,
@@ -101,19 +101,19 @@ export async function getInvitePreview(token: string) {
   const org = invite.organizationId as any;
   const expired = invite.expiresAt < new Date();
   const userExists = !!(await User.findOne({ email: invite.email }));
+  const isPersonalOrg = org?.type === 'personal';
 
   return {
     type: 'organization' as const,
     email: invite.email,
     role: invite.role,
-    permissions: invite.permissions,
     status: invite.status,
     expired,
     organization: org?._id
       ? { _id: org._id.toString(), name: org.name, slug: org.slug, type: org.type }
       : null,
     requiresRegistration: !userExists,
-    canAccept: invite.status === 'pending' && !expired,
+    canAccept: invite.status === 'pending' && !expired && !isPersonalOrg,
   };
 }
 
@@ -134,6 +134,14 @@ export async function acceptOrgInvite(token: string, userId: string) {
     throw new Error('Please verify your email before accepting the invite');
   }
 
+  const org = await Organization.findById(invite.organizationId);
+  if (!org) {
+    throw new Error('Organization not found');
+  }
+  if (org.type === 'personal') {
+    throw new Error('Cannot join a personal workspace');
+  }
+
   const existingMember = await OrgMember.findOne({
     organizationId: invite.organizationId,
     userId,
@@ -145,11 +153,10 @@ export async function acceptOrgInvite(token: string, userId: string) {
     invite.acceptedBy = user._id;
     await invite.save();
 
-    const org = await Organization.findById(invite.organizationId);
     return {
       alreadyMember: true,
       organizationId: invite.organizationId.toString(),
-      organizationName: org?.name,
+      organizationName: org.name,
     };
   }
 
@@ -165,11 +172,10 @@ export async function acceptOrgInvite(token: string, userId: string) {
   invite.acceptedBy = user._id;
   await invite.save();
 
-  const org = await Organization.findById(invite.organizationId);
   return {
     alreadyMember: false,
     organizationId: invite.organizationId.toString(),
-    organizationName: org?.name,
+    organizationName: org.name,
   };
 }
 

@@ -150,6 +150,65 @@ export function requireOrgAdmin() {
   return requireOrgMember('admin');
 }
 
+export const PERSONAL_ORG_COLLABORATION_ERROR =
+  'Collaboration is not available for personal workspaces. Create a team organization to invite members.';
+
+/**
+ * Middleware requiring a team organization (not personal workspace).
+ * Organization context must already be loaded on the request.
+ */
+export function requireTeamOrganization() {
+  return (req: AuthRequestWithOrg, res: Response, next: NextFunction): void => {
+    if (req.organization?.type === 'personal') {
+      res.status(400).json({ error: PERSONAL_ORG_COLLABORATION_ERROR });
+      return;
+    }
+    next();
+  };
+}
+
+/**
+ * Middleware requiring the project's organization to be a team org.
+ */
+export function requireTeamProject() {
+  return async (
+    req: AuthRequestWithOrg,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const projectId = req.params.projectId || req.params.id;
+      if (!projectId) {
+        res.status(400).json({ error: 'Project ID required' });
+        return;
+      }
+
+      const loaded = await loadProjectContext(req, projectId);
+      if (!loaded.ok) {
+        res.status(loaded.status).json({ error: loaded.error });
+        return;
+      }
+
+      const org = await Organization.findById(loaded.project.organizationId);
+      if (!org) {
+        res.status(404).json({ error: 'Organization not found' });
+        return;
+      }
+
+      req.organization = org;
+      if (org.type === 'personal') {
+        res.status(400).json({ error: PERSONAL_ORG_COLLABORATION_ERROR });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Team project check error:', error instanceof Error ? error.message : 'Authorization error');
+      res.status(500).json({ error: 'Authorization error' });
+    }
+  };
+}
+
 /**
  * Check if a user is the owner/creator of a project
  */

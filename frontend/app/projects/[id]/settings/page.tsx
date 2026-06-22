@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsAPI } from '@/lib/api';
+import { canWriteProject, canExportProject } from '@/lib/permissions';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
+import { DataTransferPanel } from '@/components/ui/DataTransferPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -30,6 +32,9 @@ export default function ProjectSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [canExport, setCanExport] = useState(false);
+  const [canImport, setCanImport] = useState(false);
+  const [canWrite, setCanWrite] = useState(false);
 
   const isOwner = project?.createdBy._id === user?.id;
 
@@ -39,9 +44,15 @@ export default function ProjectSettingsPage() {
 
   const loadProject = async () => {
     try {
-      const data = await projectsAPI.get(projectId);
+      const [data, permissions] = await Promise.all([
+        projectsAPI.get(projectId),
+        projectsAPI.getPermissions(projectId),
+      ]);
       setProject(data);
       setName(data.name);
+      setCanExport(canExportProject(permissions.effective));
+      setCanImport(permissions.effective.includes('project:write'));
+      setCanWrite(canWriteProject(permissions.effective));
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string }; status?: number } };
       toastError(axiosErr.response?.data?.error || 'Failed to load project');
@@ -104,10 +115,21 @@ export default function ProjectSettingsPage() {
           projectId={projectId}
           projectName={project.name}
           title="Project settings"
-          description="Rename or delete this project."
+          description="Rename, export/import, or delete this project."
         />
       )}
 
+          {(canExport || canImport) && (
+          <DataTransferPanel
+            scope="project"
+            projectId={projectId}
+            canExport={canExport}
+            canImport={canImport}
+            resourceName={project?.name || 'project'}
+          />
+          )}
+
+          {canWrite && (
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 mb-6">
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
             <form onSubmit={handleRename} className="space-y-4">
@@ -134,6 +156,7 @@ export default function ProjectSettingsPage() {
               </div>
             </form>
           </div>
+          )}
 
           {isOwner && (
             <div className="rounded-lg border border-[var(--error)]/40 bg-[var(--error)]/5 p-6">

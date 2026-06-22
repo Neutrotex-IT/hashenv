@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { organizationsAPI, Organization } from '@/lib/api';
+import { organizationsAPI, Organization, setForbiddenHandler } from '@/lib/api';
 import { useAuth } from './AuthContext';
 
 interface OrganizationContextType {
@@ -65,6 +65,13 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     refreshOrganizations();
+  }, [refreshOrganizations]);
+
+  useEffect(() => {
+    setForbiddenHandler(() => {
+      void refreshOrganizations();
+    });
+    return () => setForbiddenHandler(null);
   }, [refreshOrganizations]);
 
   const setCurrentOrg = useCallback((org: Organization) => {

@@ -81,6 +81,5 @@ const ProjectInviteSchema: Schema = new Schema(
 
 ProjectInviteSchema.index({ projectId: 1, email: 1, status: 1 });
 ProjectInviteSchema.index({ email: 1, status: 1 });
-ProjectInviteSchema.index({ token: 1 });
 
 export default mongoose.model<IProjectInvite>('ProjectInvite', ProjectInviteSchema);

@@ -57,7 +57,7 @@ router.get(
       const envFile = await EnvFile.findOne({ projectId, environment: envSlug }).sort({ version: -1 });
 
       if (!envFile) {
-        res.status(404).json({ error: 'Environment file not found' });
+        res.status(404).json({ error: `No environment file has been uploaded for "${envSlug}"` });
         return;
       }
 

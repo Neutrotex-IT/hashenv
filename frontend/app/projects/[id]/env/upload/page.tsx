@@ -74,7 +74,7 @@ export default function UploadEnvPage() {
       } else if (uploadMethod === 'text' && content) {
         await envAPI.uploadText(projectId, content, environment);
       }
-      router.push(`/projects/${projectId}`);
+      router.push(`/projects/${projectId}?environment=${encodeURIComponent(environment)}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to upload file');
     } finally {

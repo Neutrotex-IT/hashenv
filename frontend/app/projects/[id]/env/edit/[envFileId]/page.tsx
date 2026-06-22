@@ -13,10 +13,13 @@ export default function EditEnvPage() {
   const projectId = params.id as string;
   const envFileId = params.envFileId as string;
   const environment = searchParams.get('environment') || 'dev';
+  const versionParam = searchParams.get('version');
   
   const [content, setContent] = useState('');
+  const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveMode, setSaveMode] = useState<'update' | 'newVersion'>('update');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -28,6 +31,7 @@ export default function EditEnvPage() {
       setLoading(true);
       const data = await envAPI.getFileContent(projectId, envFileId);
       setContent(data.content);
+      setOriginalContent(data.content);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load file content');
@@ -36,9 +40,7 @@ export default function EditEnvPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSave = async (saveAsNewVersion: boolean) => {
     if (!content.trim()) {
       setError('Content cannot be empty');
       return;
@@ -50,17 +52,25 @@ export default function EditEnvPage() {
     }
 
     setSaving(true);
+    setSaveMode(saveAsNewVersion ? 'newVersion' : 'update');
     setError('');
 
     try {
-      await envAPI.edit(projectId, envFileId, content);
-      router.push(`/projects/${projectId}`);
+      await envAPI.edit(projectId, envFileId, content, { saveAsNewVersion });
+      router.push(`/projects/${projectId}?environment=${encodeURIComponent(environment)}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to update file');
     } finally {
       setSaving(false);
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleSave(false);
+  };
+
+  const hasChanges = content !== originalContent;
 
   if (loading) {
     return (
@@ -79,6 +89,7 @@ export default function EditEnvPage() {
         <h1 className="text-3xl font-bold text-[var(--foreground)]">Edit Environment File</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
                 Editing {formatEnvLabel(environment)} ({environment})
+                {versionParam ? ` — version ${versionParam}` : ''}
               </p>
             </div>
 
@@ -117,6 +128,10 @@ export default function EditEnvPage() {
                 <p className="text-sm text-[var(--warning)]">
                   <strong>Security Notice:</strong> Changes will be saved with encryption. This action will be logged.
                 </p>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  <strong>Save changes</strong> updates this version in place.{' '}
+                  <strong>Save as new version</strong> keeps the current version unchanged and creates the next version with your edits.
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
@@ -129,12 +144,21 @@ export default function EditEnvPage() {
                   Cancel
                 </Button>
                 <Button
+                  variant="secondary"
+                  size="md"
+                  type="button"
+                  disabled={saving || !content.trim() || !hasChanges}
+                  onClick={() => handleSave(true)}
+                >
+                  {saving && saveMode === 'newVersion' ? 'Saving...' : 'Save as New Version'}
+                </Button>
+                <Button
                   variant="primary"
                   size="md"
                   type="submit"
-                  disabled={saving || !content.trim()}
+                  disabled={saving || !content.trim() || !hasChanges}
                 >
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving && saveMode === 'update' ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
             </form>

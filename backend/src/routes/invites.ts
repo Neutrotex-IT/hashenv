@@ -3,6 +3,7 @@ import { body, query, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../lib/auth';
 import { acceptOrgInvite, getInvitePreview } from '../lib/orgInvite';
 import { acceptProjectInvite, getProjectInvitePreview } from '../lib/projectInvite';
+import { invitePreviewRateLimiter } from '../middleware/security';
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ const router = express.Router();
  */
 router.get(
   '/preview',
+  invitePreviewRateLimiter,
   [query('token').notEmpty().withMessage('Invite token is required')],
   async (req: Request, res: Response): Promise<void> => {
     try {

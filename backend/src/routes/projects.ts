@@ -2,14 +2,17 @@ import express, { Response } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import mongoose from 'mongoose';
 import Project, { IProject } from '../models/Project';
+import Organization from '../models/Organization';
 import ProjectInvite from '../models/ProjectInvite';
 import User from '../models/User';
 import OrgMember from '../models/OrgMember';
 import { authenticate, AuthRequest } from '../lib/auth';
 import {
   requireProjectAccess,
+  requireProjectCapability,
   requireProjectInvitePermission,
   requireProjectMembershipManagement,
+  requireTeamProject,
   Permission,
   AuthRequestWithOrg,
   getUserOrgRole,
@@ -18,16 +21,48 @@ import {
 import { validateProjectId, validateUserId, validateProjectName, validatePermission, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
 import { createProjectEncryptionKey, deleteProjectEncryptionKey } from '../crypto';
-import { canGrantProjectPermissions, getProjectMemberAttributes, canPerformOrgAction, getOrgMemberAttributes } from '../lib/abac';
+import { revokeApiTokensForUser } from '../lib/apiTokenLifecycle';
+import {
+  canGrantProjectPermissions,
+  getProjectMemberAttributes,
+  canPerformOrgAction,
+  getOrgMemberAttributes,
+  hasProjectCapability,
+} from '../lib/abac';
 import {
   ALL_PROJECT_PERMISSIONS,
   PROJECT_PERMISSIONS,
+  ProjectPermission,
   getProjectCapabilitiesFromAccess,
   sanitizeProjectPermissions,
 } from '../lib/permissions';
+
+const TEAM_PROJECT_COLLABORATION_PERMISSIONS = new Set<ProjectPermission>([
+  'project:invite',
+  'project:manage_members',
+]);
+
+function withoutProjectCollaborationPermissions<T extends string>(
+  orgType: string,
+  permissions: T[]
+): T[] {
+  if (orgType !== 'personal') {
+    return permissions;
+  }
+  return permissions.filter(
+    (permission) => !TEAM_PROJECT_COLLABORATION_PERMISSIONS.has(permission as ProjectPermission)
+  );
+}
 import { createAndSendProjectInvite } from '../lib/projectInvite';
-import { auditProject, auditMember } from '../lib/audit';
+import { auditProject, auditMember, audit } from '../lib/audit';
 import { assertEnvAllowed } from '../lib/environments';
+import multer from 'multer';
+import {
+  buildProjectExport,
+  countExportableItems,
+  parseImportPayload,
+  importProjectPayload,
+} from '../lib/dataTransfer';
 import EnvFile from '../models/EnvFile';
 import Secret from '../models/Secret';
 import AssociatedAccount from '../models/AssociatedAccount';
@@ -35,6 +70,11 @@ import { ProjectApiToken } from '../models/ProjectApiToken';
 import AuditLog from '../models/AuditLog';
 
 const router = express.Router();
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+});
 
 /**
  * Get all projects for user's organizations
@@ -51,7 +91,19 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
     
     // Get all organizations the user is a member of
     const memberships = await OrgMember.find({ userId: req.user.userId });
-    const userOrgIds = memberships.map(m => m.organizationId);
+    const userOrgIds = memberships.map(m => m.organizationId.toString());
+    
+    // When filtering by org, require current org membership
+    if (orgId) {
+      if (!isValidObjectId(orgId as string)) {
+        res.status(400).json({ error: 'Invalid organization ID format' });
+        return;
+      }
+      if (!userOrgIds.includes(orgId as string)) {
+        res.status(403).json({ error: 'Access denied: Not a member of this organization' });
+        return;
+      }
+    }
     
     // Build query - filter by specific org or all user's orgs
     const orgQuery = orgId && isValidObjectId(orgId as string)
@@ -269,26 +321,34 @@ router.get(
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const project = req.project!;
+      const org = await Organization.findById(project.organizationId);
+      const orgType = org?.type ?? 'team';
       const attributes = await getProjectMemberAttributes(
         req.user!.userId,
         project,
         req.orgRole ?? null
       );
 
-      const effective = attributes.isOwner || attributes.isOrgElevated
-        ? ['project:read', 'project:write', ...ALL_PROJECT_PERMISSIONS]
-        : [...getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions)];
+      const effective = withoutProjectCollaborationPermissions(
+        orgType,
+        attributes.isOwner || attributes.isOrgElevated
+          ? ['project:read', 'project:write', ...ALL_PROJECT_PERMISSIONS]
+          : [...getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions)]
+      );
 
       res.json({
         catalog: {
           project: PROJECT_PERMISSIONS,
         },
         effective,
-        grantable: attributes.isOwner || attributes.isOrgElevated
-          ? ALL_PROJECT_PERMISSIONS
-          : ALL_PROJECT_PERMISSIONS.filter((permission) =>
-              getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions).has(permission)
-            ),
+        grantable: withoutProjectCollaborationPermissions(
+          orgType,
+          attributes.isOwner || attributes.isOrgElevated
+            ? ALL_PROJECT_PERMISSIONS
+            : ALL_PROJECT_PERMISSIONS.filter((permission) =>
+                getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions).has(permission)
+              )
+        ),
       });
     } catch (error) {
       console.error('Get project permissions error:', error instanceof Error ? error.message : 'Failed to fetch permissions');
@@ -305,6 +365,7 @@ router.post(
   '/:id/members',
   authenticate,
   validateProjectId(),
+  requireTeamProject(),
   requireProjectInvitePermission(),
   [
     body('userId')
@@ -416,6 +477,7 @@ router.patch(
   authenticate,
   validateProjectId(),
   validateUserId(),
+  requireTeamProject(),
   requireProjectMembershipManagement(),
   [
     body('permission')
@@ -527,6 +589,7 @@ router.delete(
   authenticate,
   validateProjectId(),
   validateUserId(),
+  requireTeamProject(),
   requireProjectMembershipManagement(),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -552,6 +615,8 @@ router.delete(
       );
 
       await project.save();
+
+      await revokeApiTokensForUser(userId, [project._id]);
 
       if (removedMember) {
         await auditMember(
@@ -623,6 +688,16 @@ router.get(
       const searchQuery = (req.query.q as string || '').trim();
       const orgId = req.query.orgId as string;
       const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+      const org = await Organization.findById(orgId);
+      if (!org) {
+        res.status(404).json({ error: 'Organization not found' });
+        return;
+      }
+      if (org.type === 'personal') {
+        res.status(400).json({ error: 'Collaboration is not available for personal workspaces.' });
+        return;
+      }
       
       // Verify user is a member of the organization
       const orgRole = await getUserOrgRole(req.user.userId, orgId);
@@ -668,6 +743,7 @@ router.post(
   '/:id/invites',
   authenticate,
   validateProjectId(),
+  requireTeamProject(),
   requireProjectInvitePermission(),
   [
     body('email')
@@ -683,55 +759,10 @@ router.post(
       .withMessage('Permissions must be an array'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
-        return;
-      }
-
-      if (!req.user) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
-
-      const project = (req as AuthRequestWithOrg).project as IProject;
-      const inviterContext = await getProjectMemberAttributes(
-        req.user.userId,
-        project,
-        (req as AuthRequestWithOrg).orgRole ?? null
-      );
-
-      const invite = await createAndSendProjectInvite(
-        project._id.toString(),
-        req.body.email,
-        req.body.permission,
-        sanitizeProjectPermissions(req.body.permissions),
-        req.user.userId,
-        { ...inviterContext, orgRole: (req as AuthRequestWithOrg).orgRole ?? null }
-      );
-
-      res.status(201).json({
-        id: invite._id,
-        email: invite.email,
-        permission: invite.permission,
-        permissions: invite.permissions,
-        status: invite.status,
-        expiresAt: invite.expiresAt,
-        createdAt: invite.createdAt,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to send invite';
-      const status =
-        message.includes('already a member') ||
-        message.includes('organization') ||
-        message.includes('cannot grant') ||
-        message.includes('permission')
-          ? 400
-          : 500;
-      console.error('Send project invite error:', message);
-      res.status(status).json({ error: message });
-    }
+    res.status(400).json({
+      error:
+        'Project email invites are not available yet. Invite people to the organization first, then add them to the project from the members page.',
+    });
   }
 );
 
@@ -743,6 +774,7 @@ router.get(
   '/:id/invites',
   authenticate,
   validateProjectId(),
+  requireTeamProject(),
   requireProjectInvitePermission(),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -781,6 +813,7 @@ router.delete(
   '/:id/invites/:inviteId',
   authenticate,
   validateProjectId(),
+  requireTeamProject(),
   requireProjectMembershipManagement(),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -821,74 +854,13 @@ router.post(
   '/:id/invites/:inviteId/resend',
   authenticate,
   validateProjectId(),
+  requireTeamProject(),
   requireProjectInvitePermission(),
   async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      if (!req.user) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
-
-      const { inviteId } = req.params;
-
-      if (!isValidObjectId(inviteId)) {
-        res.status(400).json({ error: 'Invalid invite ID format' });
-        return;
-      }
-
-      const invite = await ProjectInvite.findById(inviteId);
-      if (!invite || invite.projectId.toString() !== req.params.id) {
-        res.status(404).json({ error: 'Invite not found' });
-        return;
-      }
-
-      if (invite.status !== 'pending') {
-        res.status(400).json({ error: 'Only pending invites can be resent' });
-        return;
-      }
-
-      if (invite.expiresAt < new Date()) {
-        res.status(400).json({ error: 'This invite has expired' });
-        return;
-      }
-
-      const project = (req as AuthRequestWithOrg).project as IProject;
-      const inviterContext = await getProjectMemberAttributes(
-        req.user.userId,
-        project,
-        (req as AuthRequestWithOrg).orgRole ?? null
-      );
-
-      const resent = await createAndSendProjectInvite(
-        project._id.toString(),
-        invite.email,
-        invite.permission,
-        sanitizeProjectPermissions(invite.permissions),
-        req.user.userId,
-        { ...inviterContext, orgRole: (req as AuthRequestWithOrg).orgRole ?? null }
-      );
-
-      res.json({
-        id: resent._id,
-        email: resent.email,
-        permission: resent.permission,
-        permissions: resent.permissions,
-        status: resent.status,
-        expiresAt: resent.expiresAt,
-        createdAt: resent.createdAt,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to resend invite';
-      const status =
-        message.includes('already a member') ||
-        message.includes('organization') ||
-        message.includes('cannot grant') ||
-        message.includes('permission')
-          ? 400
-          : 500;
-      console.error('Resend project invite error:', message);
-      res.status(status).json({ error: message });
-    }
+    res.status(400).json({
+      error:
+        'Project email invites are not available yet. Invite people to the organization first, then add them to the project from the members page.',
+    });
   }
 );
 
@@ -982,6 +954,124 @@ router.delete(
     } catch (error) {
       console.error('Delete project error:', error instanceof Error ? error.message : 'Failed to delete project');
       res.status(500).json({ error: 'Failed to delete project' });
+    }
+  }
+);
+
+/**
+ * Export project data (env files, secrets, accounts) as JSON
+ * GET /api/projects/:id/export
+ */
+router.get(
+  '/:id/export',
+  authenticate,
+  validateProjectId(),
+  requireProjectCapability('project:export'),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      const project = req.project!;
+      const user = await User.findById(req.user!.userId).select('name email');
+      const payload = await buildProjectExport(project, user ? { email: user.email, name: user.name } : undefined);
+
+      if (countExportableItems(payload) === 0) {
+        res.status(404).json({
+          error: 'Nothing to export: this project has no environment files, secrets, or associated accounts',
+        });
+        return;
+      }
+
+      await audit({
+        organizationId: project.organizationId.toString(),
+        projectId: project._id.toString(),
+        resourceType: 'project',
+        resourceId: project._id.toString(),
+        action: 'export',
+        actorId: req.user!.userId,
+        metadata: {
+          envFileCount: payload.project?.envFiles.length ?? 0,
+          secretCount: payload.project?.secrets.length ?? 0,
+          accountCount: payload.project?.associatedAccounts.length ?? 0,
+        },
+        req,
+      });
+
+      res.json(payload);
+    } catch (error) {
+      console.error('Project export error:', error instanceof Error ? error.message : 'Failed');
+      res.status(500).json({ error: 'Failed to export project data' });
+    }
+  }
+);
+
+/**
+ * Import project data from JSON export file
+ * POST /api/projects/:id/import
+ * Body: multipart file field "file", optional overwrite=true
+ */
+router.post(
+  '/:id/import',
+  authenticate,
+  validateProjectId(),
+  uploadRateLimiter,
+  requireProjectAccess('write'),
+  importUpload.single('file'),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: 'Import file is required' });
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(req.file.buffer.toString('utf8'));
+      } catch {
+        res.status(400).json({ error: 'Invalid JSON file' });
+        return;
+      }
+
+      const payload = parseImportPayload(parsed);
+      const exportedProject =
+        payload.project ?? (payload.projects?.length === 1 ? payload.projects[0] : undefined);
+
+      if (!exportedProject) {
+        res.status(400).json({
+          error: 'Import file must contain a single project. Use organization import for multi-project files.',
+        });
+        return;
+      }
+
+      const overwrite =
+        req.body?.overwrite === true ||
+        req.body?.overwrite === 'true' ||
+        String(req.query.overwrite) === 'true';
+
+      const project = req.project!;
+      const result = await importProjectPayload(project, req.user!.userId, exportedProject, {
+        overwrite,
+        req,
+      });
+
+      await audit({
+        organizationId: project.organizationId.toString(),
+        projectId: project._id.toString(),
+        resourceType: 'project',
+        resourceId: project._id.toString(),
+        action: 'import',
+        actorId: req.user!.userId,
+        metadata: { ...result.summary, overwrite },
+        req,
+      });
+
+      res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import project data';
+      if (message.startsWith('Invalid') || message.startsWith('Unsupported')) {
+        res.status(400).json({ error: message });
+        return;
+      }
+      console.error('Project import error:', message);
+      res.status(500).json({ error: 'Failed to import project data' });
     }
   }
 );

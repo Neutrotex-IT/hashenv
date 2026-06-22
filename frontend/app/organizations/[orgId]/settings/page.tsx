@@ -7,8 +7,10 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { OrgPageHeader } from '@/components/OrgPageHeader';
-import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
+import { hasOrgPermission, OrgPermission, canConfigureOrgPanic } from '@/lib/permissions';
 import { useToast } from '@/contexts/ToastContext';
+import { DataTransferPanel } from '@/components/ui/DataTransferPanel';
+import { OrgPanicSettingsPanel } from '@/components/ui/OrgPanicSettingsPanel';
 
 export default function OrganizationSettingsPage() {
   const params = useParams();
@@ -20,6 +22,15 @@ export default function OrganizationSettingsPage() {
   const customPermissions = (org?.permissions ?? []) as OrgPermission[];
   const canUpdate = org
     ? hasOrgPermission(org.role, customPermissions, 'org:update')
+    : false;
+  const canConfigurePanic = org
+    ? canConfigureOrgPanic(org.role, customPermissions)
+    : false;
+  const canExport = org?.role === 'owner' || org?.role === 'admin';
+  const canImport = org
+    ? org.role === 'owner' ||
+      org.role === 'admin' ||
+      hasOrgPermission(org.role, customPermissions, 'org:create_project')
     : false;
 
   const [name, setName] = useState('');
@@ -90,6 +101,24 @@ export default function OrganizationSettingsPage() {
         />
       )}
 
+      {org && (canExport || canImport) && (
+        <DataTransferPanel
+          scope="organization"
+          orgId={orgId}
+          canExport={canExport}
+          canImport={canImport}
+          resourceName={org.name}
+        />
+      )}
+
+      {org && (
+        <OrgPanicSettingsPanel
+          orgId={orgId}
+          orgName={org.name}
+          canConfigure={canConfigurePanic}
+        />
+      )}
+
       {canUpdate ? (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
           <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
@@ -127,13 +156,7 @@ export default function OrganizationSettingsPage() {
             </div>
           </form>
         </div>
-      ) : (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-          <p className="text-sm text-[var(--text-secondary)]">
-            You do not have permission to update organization settings.
-          </p>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

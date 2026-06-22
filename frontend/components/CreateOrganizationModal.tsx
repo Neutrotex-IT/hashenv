@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { organizationsAPI } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from './ui/Button';
@@ -27,6 +28,32 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
   const [slugEdited, setSlugEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen, onClose, submitting]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -79,12 +106,12 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
     }
   };
 
-  if (!isOpen) {
+  if (!isOpen || !mounted) {
     return null;
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/50"
@@ -133,7 +160,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Acme Engineering"
+              placeholder="orange inc"
               className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
               required
               maxLength={100}
@@ -153,7 +180,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
                 setSlugEdited(true);
                 setSlug(e.target.value.toLowerCase());
               }}
-              placeholder="e.g., acme-engineering"
+              placeholder="orange-inc"
               className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] font-mono text-sm shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
               required
               maxLength={100}
@@ -179,6 +206,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ProjectPermission } from '@/lib/permissions';
+import { arraysEqual } from '@/lib/formUtils';
 import { Button } from '@/components/ui/Button';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
 
@@ -28,6 +29,9 @@ export function EditProjectMemberModal({
   const [capabilities, setCapabilities] = useState<ProjectPermission[]>(initialCapabilities);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const hasChanges =
+    permission !== initialPermission || !arraysEqual(capabilities, initialCapabilities);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -107,7 +111,7 @@ export function EditProjectMemberModal({
             <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md" disabled={submitting}>
+            <Button type="submit" variant="primary" size="md" disabled={submitting || !hasChanges}>
               {submitting ? 'Saving...' : 'Save changes'}
             </Button>
           </div>

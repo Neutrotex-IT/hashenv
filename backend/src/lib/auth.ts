@@ -11,7 +11,7 @@ function getJWTSecret(): string {
   return secret;
 }
 
-const ACCESS_TOKEN_EXPIRES = '15m';
+const ACCESS_TOKEN_EXPIRES = '1h';
 export const REFRESH_TOKEN_EXPIRES_DAYS = 7;
 
 export async function hashPassword(password: string): Promise<string> {

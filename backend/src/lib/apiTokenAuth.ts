@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ProjectApiToken, hashApiToken, ApiTokenScope } from '../models/ProjectApiToken';
 import { Project } from '../models/Project';
 import mongoose from 'mongoose';
+import { isApiTokenCreatorAuthorized } from './apiTokenLifecycle';
 
 // Rate limiting for API token usage
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -127,6 +128,15 @@ export async function authenticateApiToken(
     
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const creatorAuthorized = await isApiTokenCreatorAuthorized(
+      apiToken.createdBy.toString(),
+      project
+    );
+    if (!creatorAuthorized) {
+      res.status(401).json({ error: 'API token has been revoked' });
       return;
     }
     

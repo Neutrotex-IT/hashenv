@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectsAPI, envAPI, secretsAPI, accountsAPI, environmentsAPI, ProjectPermissionsResponse, ProjectEnvironment } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { UploadEnvButton } from '@/components/ui/UploadEnvButton';
-import { formatPermission } from '@/lib/permissions';
+import { canReadProject, canWriteProject } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
@@ -16,6 +16,19 @@ import { EnvCompareModal } from '@/components/ui/EnvCompareModal';
 import { formatEnvLabel } from '@/lib/environments';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
+import { shallowRecordEqual } from '@/lib/formUtils';
+
+interface AccountFormSnapshot {
+  label: string;
+  provider: string;
+  providerOther: string;
+  email: string;
+  loginUrl: string;
+  usesSSO: boolean;
+  ssoProvider: string;
+  password: string;
+  notes: string;
+}
 
 interface Project {
   _id: string;
@@ -97,6 +110,7 @@ function formatProvider(provider: string, providerOther?: string) {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
@@ -129,6 +143,8 @@ export default function ProjectDetailPage() {
   const [accountPassword, setAccountPassword] = useState('');
   const [accountNotes, setAccountNotes] = useState('');
   const [submittingAccount, setSubmittingAccount] = useState(false);
+  const [secretSnapshot, setSecretSnapshot] = useState<{ name: string; content: string } | null>(null);
+  const [accountSnapshot, setAccountSnapshot] = useState<AccountFormSnapshot | null>(null);
   const [sensitiveModal, setSensitiveModal] = useState<{
     title: string;
     fields: SensitiveField[];
@@ -139,11 +155,42 @@ export default function ProjectDetailPage() {
   const { confirm } = useConfirm();
   const { success: toastSuccess, error: toastError } = useToast();
 
+  const getAccountFormSnapshot = (): AccountFormSnapshot => ({
+    label: accountLabel,
+    provider: accountProvider,
+    providerOther: accountProviderOther,
+    email: accountEmail,
+    loginUrl: accountLoginUrl,
+    usesSSO: accountUsesSSO,
+    ssoProvider: accountSsoProvider,
+    password: accountPassword,
+    notes: accountNotes,
+  });
+
+  const secretFormDirty = Boolean(
+    editingSecret &&
+      secretSnapshot &&
+      (secretName !== secretSnapshot.name || secretContent !== secretSnapshot.content)
+  );
+
+  const accountFormDirty = Boolean(
+    editingAccount &&
+      accountSnapshot &&
+      !shallowRecordEqual(getAccountFormSnapshot(), accountSnapshot)
+  );
+
   useEffect(() => {
     if (projectId) {
       loadProject();
     }
   }, [projectId]);
+
+  useEffect(() => {
+    const envParam = searchParams.get('environment');
+    if (envParam && projectEnvironments.some((e) => e.slug === envParam)) {
+      setSelectedEnv(envParam);
+    }
+  }, [searchParams, projectEnvironments]);
 
   useEffect(() => {
     if (project && projectId) {
@@ -167,7 +214,10 @@ export default function ProjectDetailPage() {
       setProject(data);
       setPermissionInfo(permissionsData);
       setProjectEnvironments(envList);
-      if (envList.length > 0 && !envList.some((e) => e.slug === selectedEnv)) {
+      const envParam = searchParams.get('environment');
+      if (envParam && envList.some((e) => e.slug === envParam)) {
+        setSelectedEnv(envParam);
+      } else if (envList.length > 0 && !envList.some((e) => e.slug === selectedEnv)) {
         setSelectedEnv(envList[0].slug);
       }
       setError('');
@@ -249,7 +299,25 @@ export default function ProjectDetailPage() {
       await envAPI.download(projectId, environment, version);
       loadEnvVersions();
     } catch (err: any) {
-      toastError(err.response?.data?.error || 'Failed to download file');
+      toastError(err instanceof Error ? err.message : 'Failed to download environment file');
+    }
+  };
+
+  const handleViewEnv = async (version: EnvVersion) => {
+    const title = `${formatEnvLabel(selectedEnv)} — v${version.version}`;
+    setSensitiveModal({ title, fields: [], loading: true });
+    try {
+      const data = await envAPI.getFileContent(projectId, version._id);
+      setSensitiveModal({
+        title,
+        fields: [{ label: 'Content', value: data.content, sensitive: true, multiline: true }],
+      });
+    } catch (err: any) {
+      setSensitiveModal({
+        title,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load environment file',
+      });
     }
   };
 
@@ -309,6 +377,7 @@ export default function ProjectDetailPage() {
       setEditingSecret(secret);
       setSecretName(secretData.name);
       setSecretContent(secretData.content);
+      setSecretSnapshot({ name: secretData.name, content: secretData.content });
       setSecretFormOpen(true);
     } catch (err: any) {
       toastError(err.response?.data?.error || 'Failed to load secret');
@@ -368,7 +437,7 @@ export default function ProjectDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      toastError(err.response?.data?.error || 'Failed to download secret');
+      toastError(err instanceof Error ? err.message : 'Failed to download secret');
     }
   };
 
@@ -377,6 +446,7 @@ export default function ProjectDetailPage() {
     setEditingSecret(null);
     setSecretName('');
     setSecretContent('');
+    setSecretSnapshot(null);
   };
 
   const resetAccountForm = () => {
@@ -394,11 +464,13 @@ export default function ProjectDetailPage() {
   const closeAccountForm = () => {
     setAccountFormOpen(false);
     setEditingAccount(null);
+    setAccountSnapshot(null);
     resetAccountForm();
   };
 
   const openCreateAccountForm = () => {
     setEditingAccount(null);
+    setAccountSnapshot(null);
     resetAccountForm();
     setAccountFormOpen(true);
   };
@@ -459,16 +531,28 @@ export default function ProjectDetailPage() {
   const handleEditAccount = async (account: AssociatedAccount) => {
     try {
       const data = await accountsAPI.getCredentials(projectId, account._id);
+      const snapshot: AccountFormSnapshot = {
+        label: data.label,
+        provider: data.provider,
+        providerOther: data.providerOther || '',
+        email: data.email,
+        loginUrl: data.loginUrl || '',
+        usesSSO: data.usesSSO,
+        ssoProvider: data.ssoProvider || '',
+        password: data.password || '',
+        notes: data.notes || '',
+      };
       setEditingAccount(account);
-      setAccountLabel(data.label);
-      setAccountProvider(data.provider);
-      setAccountProviderOther(data.providerOther || '');
-      setAccountEmail(data.email);
-      setAccountLoginUrl(data.loginUrl || '');
-      setAccountUsesSSO(data.usesSSO);
-      setAccountSsoProvider(data.ssoProvider || '');
-      setAccountPassword(data.password || '');
-      setAccountNotes(data.notes || '');
+      setAccountLabel(snapshot.label);
+      setAccountProvider(snapshot.provider);
+      setAccountProviderOther(snapshot.providerOther);
+      setAccountEmail(snapshot.email);
+      setAccountLoginUrl(snapshot.loginUrl);
+      setAccountUsesSSO(snapshot.usesSSO);
+      setAccountSsoProvider(snapshot.ssoProvider);
+      setAccountPassword(snapshot.password);
+      setAccountNotes(snapshot.notes);
+      setAccountSnapshot(snapshot);
       setAccountFormOpen(true);
     } catch (err: any) {
       toastError(err.response?.data?.error || 'Failed to load account credentials');
@@ -518,16 +602,9 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Check if user is the project owner (created it) or check their membership permission
-  const isProjectOwner = project && project.createdBy._id === user?.id;
-  const userPermission = project?.members.find(
-    (m) => m.userId._id === user?.id
-  )?.permission || null;
-
-  // Only project owner (admin who created it) or users with write permission can write
-  const canWrite = isProjectOwner || userPermission === 'write';
-  // Project owner, or members with read/write can read
-  const canRead = isProjectOwner || userPermission === 'read' || userPermission === 'write';
+  const effectivePermissions = permissionInfo?.effective ?? [];
+  const canRead = canReadProject(effectivePermissions);
+  const canWrite = canWriteProject(effectivePermissions);
 
   if (loading) {
     return (
@@ -688,16 +765,25 @@ export default function ProjectDetailPage() {
                 </div>
                 <div className="flex gap-2">
                   {latestVersion && canRead && (
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={() => handleDownload(selectedEnv)}
-                    >
+                    <>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() => handleViewEnv(latestVersion)}
+                      >
+                        View Latest
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => handleDownload(selectedEnv)}
+                      >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                       Download Latest
                     </Button>
+                    </>
                   )}
                   {canWrite && (
                     <UploadEnvButton
@@ -756,12 +842,20 @@ export default function ProjectDetailPage() {
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-3">
                           {canRead && (
-                            <button
-                              onClick={() => handleDownload(selectedEnv, version.version)}
-                              className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
-                            >
-                              Download
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleViewEnv(version)}
+                                className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={() => handleDownload(selectedEnv, version.version)}
+                                className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                              >
+                                Download
+                              </button>
+                            </>
                           )}
                           {canRead && filteredVersions.length >= 2 && latestVersion && version.version !== latestVersion.version && (
                             <button
@@ -787,7 +881,7 @@ export default function ProjectDetailPage() {
                               Rollback
                             </button>
                           )}
-                          {isProjectOwner && (
+                          {canWrite && (
                             <>
                               <button
                                 onClick={() => router.push(`/projects/${projectId}/env/edit/${version._id}?environment=${selectedEnv}&version=${version.version}`)}
@@ -863,6 +957,7 @@ export default function ProjectDetailPage() {
                       setEditingSecret(null);
                       setSecretName('');
                       setSecretContent('');
+                      setSecretSnapshot(null);
                       setSecretFormOpen(true);
                     }}
                   >
@@ -939,7 +1034,12 @@ export default function ProjectDetailPage() {
                         type="submit"
                         variant="primary"
                         size="md"
-                        disabled={submittingSecret || !secretName.trim() || !secretContent.trim()}
+                        disabled={
+                          submittingSecret ||
+                          !secretName.trim() ||
+                          !secretContent.trim() ||
+                          (editingSecret ? !secretFormDirty : false)
+                        }
                       >
                         {submittingSecret ? 'Saving...' : editingSecret ? 'Update Secret' : 'Create Secret'}
                       </Button>
@@ -1237,7 +1337,12 @@ export default function ProjectDetailPage() {
                         type="submit"
                         variant="primary"
                         size="md"
-                        disabled={submittingAccount || !accountLabel.trim() || !accountEmail.trim()}
+                        disabled={
+                          submittingAccount ||
+                          !accountLabel.trim() ||
+                          !accountEmail.trim() ||
+                          (editingAccount ? !accountFormDirty : false)
+                        }
                       >
                         {submittingAccount ? 'Saving...' : editingAccount ? 'Update Account' : 'Add Account'}
                       </Button>

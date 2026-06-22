@@ -59,8 +59,18 @@ function AcceptInviteForm() {
         setSuccess(result.message || 'Invite accepted successfully');
         await refreshOrganizations();
       } catch (err: any) {
-        setError(err.response?.data?.error || 'Failed to accept invite');
-        toastError(err.response?.data?.error || 'Failed to accept invite');
+        const message = err.response?.data?.error || 'Failed to accept invite';
+        if (
+          preview?.type === 'project' &&
+          message.toLowerCase().includes('organization')
+        ) {
+          setError(
+            `You must join ${preview.organization?.name || 'the organization'} before you can access this project. Ask your admin for an organization invite, or sign in with an account that is already a member.`
+          );
+        } else {
+          setError(message);
+        }
+        toastError(message);
       } finally {
         setAccepting(false);
       }
@@ -118,13 +128,19 @@ function AcceptInviteForm() {
                 size="md"
                 onClick={() =>
                   router.push(
-                    preview?.type === 'project' && preview.project?._id
-                      ? `/projects/${preview.project._id}`
-                      : '/dashboard'
+                    preview?.type === 'organization' && preview.organization?._id
+                      ? `/organizations/${preview.organization._id}/members`
+                      : preview?.type === 'project' && preview.project?._id
+                        ? `/projects/${preview.project._id}`
+                        : '/dashboard'
                   )
                 }
               >
-                {preview?.type === 'project' ? 'Go to Project' : 'Go to Dashboard'}
+                {preview?.type === 'organization'
+                  ? 'Go to Organization'
+                  : preview?.type === 'project'
+                    ? 'Go to Project'
+                    : 'Go to Dashboard'}
               </Button>
             </div>
           ) : preview ? (
@@ -134,6 +150,12 @@ function AcceptInviteForm() {
                   ? `Join ${preview.project?.name || 'project'}`
                   : `Join ${preview.organization?.name || 'organization'}`}
               </h2>
+            {preview.type === 'project' && preview.canAccept && (
+                <p className="text-sm text-[var(--text-muted)] mb-4">
+                  You must already be a member of <strong>{preview.organization?.name}</strong> to join this
+                  project. If you are not, ask your admin for an organization invite first.
+                </p>
+              )}
               <p className="text-[var(--text-muted)] mb-4">
                 {preview.type === 'project' ? (
                   <>
@@ -147,11 +169,6 @@ function AcceptInviteForm() {
                   </>
                 )}
               </p>
-              {preview.permissions && preview.permissions.length > 0 && (
-                <p className="text-sm text-[var(--text-muted)] mb-4">
-                  Granted permissions: {preview.permissions.join(', ')}
-                </p>
-              )}
               <p className="text-sm text-[var(--text-muted)] mb-6">
                 Invitation sent to <strong>{preview.email}</strong>
               </p>

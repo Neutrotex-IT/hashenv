@@ -109,7 +109,14 @@ export function canManageOrgMember(
   if (targetRole === 'owner') {
     return false;
   }
-  return ROLE_RANK[actor.role] > ROLE_RANK[targetRole] || actor.role === 'owner';
+  if (actor.role === 'owner') {
+    return true;
+  }
+  if (ROLE_RANK[actor.role] > ROLE_RANK[targetRole]) {
+    return true;
+  }
+  // Members with explicit org:manage_members can manage peer members
+  return actor.role === 'member' && targetRole === 'member';
 }
 
 export async function getProjectMemberAttributes(

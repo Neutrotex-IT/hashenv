@@ -1,4 +1,12 @@
-import { hasOrgPermission, OrgPermission } from '@/lib/permissions';
+import {
+  canAccessOrgMembers,
+  canAccessProjectMembers,
+  canConfigureOrgPanic,
+  canManageProjectTokens,
+  canReadProject,
+  hasOrgPermission,
+  OrgPermission,
+} from '@/lib/permissions';
 
 export interface NavLink {
   name: string;
@@ -6,11 +14,20 @@ export interface NavLink {
   exact?: boolean;
 }
 
-export function getWorkspaceNav(): NavLink[] {
-  return [
-    { name: 'Dashboard', href: '/dashboard', exact: true },
-    { name: 'New project', href: '/projects/new' },
-  ];
+export function getWorkspaceNav(options?: {
+  role?: 'owner' | 'admin' | 'member';
+  permissions?: OrgPermission[];
+}): NavLink[] {
+  const items: NavLink[] = [{ name: 'Dashboard', href: '/dashboard', exact: true }];
+
+  if (
+    !options?.role ||
+    hasOrgPermission(options.role, options.permissions ?? [], 'org:create_project')
+  ) {
+    items.push({ name: 'New project', href: '/projects/new' });
+  }
+
+  return items;
 }
 
 export function getAccountNav(): NavLink[] {
@@ -20,15 +37,13 @@ export function getAccountNav(): NavLink[] {
 export function getOrgNav(
   orgId: string,
   role: 'member' | 'admin' | 'owner' | undefined,
-  permissions: OrgPermission[]
+  permissions: OrgPermission[],
+  orgType: 'personal' | 'team' = 'team'
 ): NavLink[] {
   if (!role) return [];
   const items: NavLink[] = [];
 
-  if (
-    hasOrgPermission(role, permissions, 'org:invite') ||
-    hasOrgPermission(role, permissions, 'org:manage_members')
-  ) {
+  if (orgType === 'team' && canAccessOrgMembers(role, permissions)) {
     items.push({
       name: 'Members',
       href: `/organizations/${orgId}/members`,
@@ -36,7 +51,10 @@ export function getOrgNav(
     });
   }
 
-  if (hasOrgPermission(role, permissions, 'org:update')) {
+  if (
+    hasOrgPermission(role, permissions, 'org:update') ||
+    canConfigureOrgPanic(role, permissions)
+  ) {
     items.push({
       name: 'Organization settings',
       href: `/organizations/${orgId}/settings`,
@@ -44,7 +62,7 @@ export function getOrgNav(
     });
   }
 
-  if (hasOrgPermission(role, permissions, 'org:audit')) {
+  if (orgType === 'team' && hasOrgPermission(role, permissions, 'org:audit')) {
     items.push({
       name: 'Audit log',
       href: `/organizations/${orgId}/audit`,
@@ -55,15 +73,39 @@ export function getOrgNav(
   return items;
 }
 
-export function getProjectNav(projectId: string): NavLink[] {
-  return [
-    { name: 'Env files', href: `/projects/${projectId}`, exact: true },
-    { name: 'Environments', href: `/projects/${projectId}/environments` },
-    { name: 'Members', href: `/projects/${projectId}/members` },
-    { name: 'API tokens', href: `/projects/${projectId}/tokens` },
-    { name: 'Activity', href: `/projects/${projectId}/activity` },
-    { name: 'Project settings', href: `/projects/${projectId}/settings` },
-  ];
+export function getProjectNav(
+  projectId: string,
+  options?: { collaborationEnabled?: boolean; effectivePermissions?: string[] }
+): NavLink[] {
+  const effective = options?.effectivePermissions ?? [];
+  const permissionsLoaded = options?.effectivePermissions !== undefined;
+
+  const items: NavLink[] = [];
+
+  if (!permissionsLoaded || canReadProject(effective)) {
+    items.push({ name: 'Env files', href: `/projects/${projectId}`, exact: true });
+  }
+
+  items.push({ name: 'Environments', href: `/projects/${projectId}/environments` });
+
+  if (
+    options?.collaborationEnabled !== false &&
+    (!permissionsLoaded || canAccessProjectMembers(effective))
+  ) {
+    items.push({ name: 'Members', href: `/projects/${projectId}/members` });
+  }
+
+  if (!permissionsLoaded || canManageProjectTokens(effective)) {
+    items.push({ name: 'API tokens', href: `/projects/${projectId}/tokens` });
+  }
+
+  if (!permissionsLoaded || canReadProject(effective)) {
+    items.push({ name: 'Activity', href: `/projects/${projectId}/activity` });
+  }
+
+  items.push({ name: 'Project settings', href: `/projects/${projectId}/settings` });
+
+  return items;
 }
 
 export function isNavActive(
@@ -81,6 +123,5 @@ export function getSettingsSections() {
   return [
     { id: 'profile', label: 'Profile' },
     { id: 'auto-flush', label: 'Auto-flush' },
-    { id: 'panic', label: 'Panic button' },
   ] as const;
 }

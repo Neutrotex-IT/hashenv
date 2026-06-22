@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { envAPI, environmentsAPI } from '@/lib/api';
+import { envAPI, environmentsAPI, projectsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
-import { formatPermission } from '@/lib/permissions';
+import {
+  canAccessProjectMembers,
+  canReadProject,
+  canWriteProject,
+} from '@/lib/permissions';
 import { UploadEnvButton } from './ui/UploadEnvButton';
 import { Button } from './ui/Button';
 import { useToast } from '@/contexts/ToastContext';
@@ -37,40 +40,41 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
-  const { user } = useAuth();
   const { error: toastError } = useToast();
   const [envSlugs, setEnvSlugs] = useState<string[]>(['dev', 'staging', 'prod']);
+  const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
 
   useEffect(() => {
     environmentsAPI.list(project._id).then((envs) => {
       if (envs.length > 0) setEnvSlugs(envs.map((e) => e.slug));
     }).catch(() => {});
   }, [project._id]);
-  
-  // Check if user is the project owner (created it)
-  const isProjectOwner = project.createdBy._id === user?.id;
-  const userPermission = project.members.find(
-    (m) => m.userId._id === user?.id
-  )?.permission || null;
 
-  // Only project owner or users with write permission can write
-  const canWrite = isProjectOwner || userPermission === 'write';
-  // Project owner or members with read/write can read
-  const canRead = isProjectOwner || userPermission === 'read' || userPermission === 'write';
+  useEffect(() => {
+    projectsAPI
+      .getPermissions(project._id)
+      .then((data) => setEffectivePermissions(data.effective))
+      .catch(() => setEffectivePermissions([]));
+  }, [project._id]);
+
+  const canRead = canReadProject(effectivePermissions);
+  const canWrite = canWriteProject(effectivePermissions);
+  const canManageMembers = canAccessProjectMembers(effectivePermissions);
 
   const handleQuickDownload = async (e: React.MouseEvent, environment: string) => {
     e.preventDefault();
     e.stopPropagation();
     try {
       await envAPI.download(project._id, environment);
-    } catch (err: any) {
-      toastError(err.response?.data?.error || 'Failed to download file');
+    } catch (err: unknown) {
+      toastError(err instanceof Error ? err.message : 'Failed to download environment file');
     }
   };
 
+  const showQuickActions = canRead || canWrite || canManageMembers;
+
   return (
     <div className="group relative rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 hover:border-[var(--accent)]/50 hover:shadow-lg transition-all">
-      {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <Link href={`/projects/${project._id}`} className="flex-1">
           <h3 className="text-lg font-semibold text-[var(--foreground)] group-hover:text-[var(--accent)] transition-colors">
@@ -87,7 +91,6 @@ export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
         </Link>
       </div>
 
-      {/* Stats */}
       <div className="flex items-center gap-4 text-xs text-[var(--text-muted)] mb-4 pb-4 border-b border-[var(--border)]">
         <span className="flex items-center gap-1">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -103,77 +106,70 @@ export function ProjectCard({ project, onRefresh }: ProjectCardProps) {
         </span>
       </div>
 
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-[var(--foreground)]">Quick Actions</span>
-          {canRead && (
-            <span className="text-xs text-[var(--text-muted)]">
-              Your permission: {isProjectOwner ? 'Owner' : userPermission ? formatPermission(userPermission) : 'None'}
-            </span>
-          )}
-        </div>
-
-        {/* Environment Quick Download Buttons */}
-        {canRead && (
-          <div className={`grid gap-2 ${envSlugs.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-            {envSlugs.slice(0, 6).map((env) => (
-              <Button
-                key={env}
-                variant="outline"
-                size="sm"
-                onClick={(e) => handleQuickDownload(e, env)}
-                className="text-xs"
-                title={`Download latest ${env} environment file`}
-              >
-                <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                {env}
-              </Button>
-            ))}
+      {showQuickActions && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-[var(--foreground)]">Quick Actions</span>
           </div>
-        )}
 
-        {/* Primary Actions */}
-        <div className="flex gap-2 pt-2 border-t border-[var(--border)]">
-          <Button
-            variant="primary"
-            size="sm"
-            asLink
-            href={`/projects/${project._id}`}
-            className="flex-1"
-          >
-            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            View Details
-          </Button>
-          
-          {canWrite && (
-            <UploadEnvButton
-              projectId={project._id}
-              variant="secondary"
+          {canRead && (
+            <div className={`grid gap-2 ${envSlugs.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {envSlugs.slice(0, 6).map((env) => (
+                <Button
+                  key={env}
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleQuickDownload(e, env)}
+                  className="text-xs"
+                  title={`Download latest ${formatEnvLabel(env)} environment file`}
+                >
+                  <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  {env}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2 border-t border-[var(--border)]">
+            <Button
+              variant="primary"
               size="sm"
-              label="Upload"
+              asLink
+              href={`/projects/${project._id}`}
               className="flex-1"
-            />
+            >
+              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              View Details
+            </Button>
+
+            {canWrite && (
+              <UploadEnvButton
+                projectId={project._id}
+                variant="secondary"
+                size="sm"
+                label="Upload"
+                className="flex-1"
+              />
+            )}
+          </div>
+
+          {canManageMembers && (
+            <Link href={`/projects/${project._id}/members`} className="block">
+              <Button variant="ghost" size="sm" className="w-full">
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                Manage Members
+              </Button>
+            </Link>
           )}
         </div>
-
-        {/* Project Owner Actions */}
-        {isProjectOwner && (
-          <Link href={`/projects/${project._id}/members`} className="block">
-            <Button variant="ghost" size="sm" className="w-full">
-              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              Manage Members
-            </Button>
-          </Link>
-        )}
-      </div>
+      )}
     </div>
   );
 }

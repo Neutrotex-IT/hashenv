@@ -9,8 +9,8 @@ import helmet from 'helmet';
  * Rate limiter for authentication endpoints (prevent brute force)
  */
 export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per window
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30, // 30 failed auth attempts per hour
   message: {
     error: 'Too many authentication attempts, please try again later.',
   },
@@ -23,8 +23,8 @@ export const authRateLimiter = rateLimit({
  * Rate limiter for API endpoints
  */
 export const apiRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 1000, // 1000 requests per hour
   message: {
     error: 'Too many requests, please try again later.',
   },
@@ -40,6 +40,19 @@ export const uploadRateLimiter = rateLimit({
   max: 50, // 50 uploads per hour
   message: {
     error: 'Too many file uploads, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Rate limiter for unauthenticated invite preview lookups
+ */
+export const invitePreviewRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30,
+  message: {
+    error: 'Too many invite preview requests, please try again later.',
   },
   standardHeaders: true,
   legacyHeaders: false,

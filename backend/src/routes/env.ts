@@ -276,9 +276,10 @@ router.get(
       }
       
       if (!envFile) {
-        res.status(404).json({
-          error: 'Environment file not found',
-        });
+        const error = version
+          ? `No version ${version} found for the "${environment}" environment`
+          : `No environment file has been uploaded for "${environment}"`;
+        res.status(404).json({ error });
         return;
       }
       
@@ -354,7 +355,8 @@ router.get(
         .select('-encryptedData -iv -authTag') // Never return encrypted data
         .populate('uploadedBy', 'name email')
         .sort({ environment: 1, version: -1 });
-      
+
+      res.set('Cache-Control', 'no-store');
       res.json(envFiles);
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -368,6 +370,8 @@ router.get(
  * Edit an environment file
  * PUT /api/projects/:projectId/env/:envFileId
  * Requires: write permission
+ * Body: { content: string, saveAsNewVersion?: boolean }
+ * When saveAsNewVersion is true, creates a new version instead of updating in place.
  */
 router.put(
   '/:projectId/env/:envFileId',
@@ -375,7 +379,9 @@ router.put(
   validateProjectId(),
   validateEnvFileId(),
   requireProjectAccess('write'),
-  [validateFileContent()],
+  [
+    validateFileContent(),
+  ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
@@ -392,6 +398,10 @@ router.put(
       const projectId = req.params.projectId;
       const envFileId = req.params.envFileId;
       const content = req.body.content;
+      const saveAsNewVersion =
+        req.body.saveAsNewVersion === true ||
+        req.body.saveAsNewVersion === 'true' ||
+        req.query.saveAsNewVersion === 'true';
       
       // Find the env file
       const envFile = await EnvFile.findOne({
@@ -405,11 +415,47 @@ router.put(
       }
       
       const oldVersion = envFile.version;
+      const environment = envFile.environment;
       
       // Encrypt the new content using project-specific key
       const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+
+      if (saveAsNewVersion) {
+        const latestEnvFile = await EnvFile.findOne({ projectId, environment })
+          .sort({ version: -1 })
+          .limit(1);
+
+        const nextVersion = latestEnvFile ? latestEnvFile.version + 1 : 1;
+
+        const newEnvFile = await EnvFile.create({
+          projectId: envFile.projectId,
+          environment,
+          encryptedData,
+          iv,
+          authTag,
+          version: nextVersion,
+          uploadedBy: req.user.userId,
+        });
+
+        await auditEnv(projectId, req.user.userId, 'upload', newEnvFile._id.toString(), {
+          environment,
+          version: nextVersion,
+          basedOnVersion: oldVersion,
+          createdFrom: 'edit',
+        }, req);
+
+        const populatedEnvFile = await EnvFile.findById(newEnvFile._id)
+          .populate('uploadedBy', 'name email')
+          .select('-encryptedData -iv -authTag');
+
+        res.status(201).json({
+          ...populatedEnvFile?.toObject(),
+          message: `Saved as new version ${nextVersion}`,
+        });
+        return;
+      }
       
-      // Update the env file
+      // Update the env file in place
       envFile.encryptedData = encryptedData;
       envFile.iv = iv;
       envFile.authTag = authTag;
@@ -749,9 +795,14 @@ router.get(
       logText += `${'='.repeat(80)}\n\n`;
       
       if (logs.length === 0) {
-        logText += 'No logs found.\n';
-      } else {
-        logs.forEach((log) => {
+        const error = environmentParam
+          ? `No activity logs found for the "${normalizeEnvSlug(environmentParam)}" environment`
+          : 'No activity logs found for this project';
+        res.status(404).json({ error });
+        return;
+      }
+
+      logs.forEach((log) => {
           const date = new Date(log.createdAt).toLocaleString();
           logText += `[${date}] ${log.action.toUpperCase()}\n`;
           if (log.metadata?.environment) {
@@ -765,8 +816,7 @@ router.get(
             logText += `  IP: ${log.ipAddress}\n`;
           }
           logText += '\n';
-        });
-      }
+      });
       
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', `attachment; filename="hashenv-logs-${Date.now()}.txt"`);

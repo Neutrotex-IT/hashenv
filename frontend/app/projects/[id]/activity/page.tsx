@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { projectsAPI, envAPI, environmentsAPI } from '@/lib/api';
+import { canReadProject } from '@/lib/permissions';
 import { formatEnvLabel } from '@/lib/environments';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
@@ -55,10 +56,15 @@ export default function ProjectActivityPage() {
   const [selectedEnv, setSelectedEnv] = useState<string>('all');
   const [selectedResource, setSelectedResource] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [canRead, setCanRead] = useState(false);
   const { error: toastError } = useToast();
 
   useEffect(() => {
     projectsAPI.get(projectId).then((p) => setProjectName(p.name)).catch(() => {});
+    projectsAPI
+      .getPermissions(projectId)
+      .then((permissions) => setCanRead(canReadProject(permissions.effective)))
+      .catch(() => setCanRead(false));
     environmentsAPI.list(projectId).then((envs) => {
       setEnvSlugs(envs.map((e) => e.slug));
     }).catch(() => {
@@ -91,8 +97,7 @@ export default function ProjectActivityPage() {
       const environment = selectedEnv === 'all' ? undefined : selectedEnv;
       await envAPI.downloadLogs(projectId, environment);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } } };
-      toastError(axiosErr.response?.data?.error || 'Failed to download logs');
+      toastError(err instanceof Error ? err.message : 'Failed to download activity logs');
     }
   };
 
@@ -122,9 +127,11 @@ export default function ProjectActivityPage() {
         title="Activity"
         description="Timeline across environment files, secrets, accounts, tokens, and members."
         actions={
-          <Button variant="outline" size="md" onClick={handleDownload}>
-            Download env logs
-          </Button>
+          canRead ? (
+            <Button variant="outline" size="md" onClick={handleDownload}>
+              Download env logs
+            </Button>
+          ) : undefined
         }
       />
 

@@ -3,8 +3,8 @@ import { body, validationResult } from 'express-validator';
 import Organization from '../models/Organization';
 import OrgMember from '../models/OrgMember';
 import OrgInvite from '../models/OrgInvite';
-import { authenticate, AuthRequest } from '../lib/auth';
-import { requireOrgMember, requireOrgPermission, AuthRequestWithOrg } from '../lib/authorization';
+import { authenticate, AuthRequest, comparePassword } from '../lib/auth';
+import { requireOrgMember, requireOrgPermission, requireTeamOrganization, AuthRequestWithOrg } from '../lib/authorization';
 import { isValidObjectId } from '../middleware/validation';
 import { createOrgEncryptionKey } from '../crypto';
 import { createAndSendOrgInvite } from '../lib/orgInvite';
@@ -15,9 +15,53 @@ import {
   ROLE_ORG_PERMISSIONS,
   getEffectiveOrgPermissions,
   sanitizeOrgPermissions,
+  OrgPermission,
 } from '../lib/permissions';
+import multer from 'multer';
+import Project from '../models/Project';
+import User from '../models/User';
+import { uploadRateLimiter } from '../middleware/security';
+import { getProjectMemberAttributes, canPerformOrgAction, getOrgMemberAttributes, hasProjectCapability } from '../lib/abac';
+import { getUserOrgRole } from '../lib/authorization';
+import { auditOrg } from '../lib/audit';
+import {
+  buildOrganizationExport,
+  countExportableItems,
+  parseImportPayload,
+  importOrganizationPayload,
+} from '../lib/dataTransfer';
+import {
+  getOrganizationSettingsPayload,
+  getOrganizationPanicSettings,
+  upsertOrganizationPanicSettings,
+} from '../lib/organizationSettings';
+import { executePanicActions, sendPanicResponse } from '../lib/executePanic';
+import { getPanicEligibleProjectsForOrg, canExecutePanicInOrg } from '../lib/panicProjects';
+import { hasConfiguredPanicActions } from '../lib/panicButton';
+import { revokeApiTokensForUser } from '../lib/apiTokenLifecycle';
+
+const TEAM_ORG_COLLABORATION_PERMISSIONS = new Set<OrgPermission>([
+  'org:invite',
+  'org:manage_members',
+  'org:revoke_invites',
+]);
+
+function withoutTeamCollaborationPermissions(
+  orgType: string,
+  permissions: OrgPermission[]
+): OrgPermission[] {
+  if (orgType !== 'personal') {
+    return permissions;
+  }
+  return permissions.filter((permission) => !TEAM_ORG_COLLABORATION_PERMISSIONS.has(permission));
+}
 
 const router = express.Router();
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+});
 
 /**
  * Get all organizations the user is a member of
@@ -156,7 +200,10 @@ router.get(
         role: req.orgRole!,
         permissions: req.orgPermissions ?? [],
       };
-      const effective = [...getEffectiveOrgPermissions(attributes.role, attributes.permissions)];
+      const effective = withoutTeamCollaborationPermissions(
+        req.organization!.type,
+        [...getEffectiveOrgPermissions(attributes.role, attributes.permissions)]
+      );
 
       res.json({
         catalog: {
@@ -164,13 +211,168 @@ router.get(
           roleDefaults: ROLE_ORG_PERMISSIONS,
         },
         effective,
-        grantable: ALL_ORG_PERMISSIONS.filter((permission) =>
-          getEffectiveOrgPermissions(attributes.role, attributes.permissions).has(permission)
+        grantable: withoutTeamCollaborationPermissions(
+          req.organization!.type,
+          ALL_ORG_PERMISSIONS.filter((permission) =>
+            getEffectiveOrgPermissions(attributes.role, attributes.permissions).has(permission)
+          )
         ),
       });
     } catch (error) {
       console.error('Get permissions error:', error instanceof Error ? error.message : 'Failed to fetch permissions');
       res.status(500).json({ error: 'Failed to fetch permissions' });
+    }
+  }
+);
+
+const panicButtonValidators = [
+  body('panicButton.flushEnvs').optional().isBoolean().withMessage('flushEnvs must be a boolean'),
+  body('panicButton.flushSecrets').optional().isBoolean().withMessage('flushSecrets must be a boolean'),
+  body('panicButton.revokeApiTokens')
+    .optional()
+    .isBoolean()
+    .withMessage('revokeApiTokens must be a boolean'),
+  body('panicButton.revokeCollaborators')
+    .optional()
+    .isBoolean()
+    .withMessage('revokeCollaborators must be a boolean'),
+  body('panicButton.downloadEnvs').optional().isBoolean().withMessage('downloadEnvs must be a boolean'),
+  body('panicButton.askConfirmation')
+    .optional()
+    .isBoolean()
+    .withMessage('askConfirmation must be a boolean'),
+];
+
+/**
+ * Get organization settings (panic button configuration and eligibility)
+ * GET /api/organizations/:orgId/settings
+ */
+router.get(
+  '/:orgId/settings',
+  authenticate,
+  requireOrgMember(),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      const payload = await getOrganizationSettingsPayload(
+        req.params.orgId,
+        req.user!.userId,
+        {
+          role: req.orgRole!,
+          permissions: req.orgPermissions ?? [],
+        }
+      );
+
+      res.json(payload);
+    } catch (error) {
+      console.error(
+        'Get organization settings error:',
+        error instanceof Error ? error.message : 'Failed to fetch organization settings'
+      );
+      res.status(500).json({ error: 'Failed to fetch organization settings' });
+    }
+  }
+);
+
+/**
+ * Update organization panic button settings
+ * PUT /api/organizations/:orgId/settings
+ */
+router.put(
+  '/:orgId/settings',
+  authenticate,
+  requireOrgPermission('org:configure_panic'),
+  panicButtonValidators,
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const panicButton = await upsertOrganizationPanicSettings(
+        req.params.orgId,
+        req.body.panicButton ?? {}
+      );
+
+      res.json({ panicButton });
+    } catch (error) {
+      console.error(
+        'Update organization settings error:',
+        error instanceof Error ? error.message : 'Failed to update organization settings'
+      );
+      res.status(500).json({ error: 'Failed to update organization settings' });
+    }
+  }
+);
+
+/**
+ * Execute organization panic button actions
+ * POST /api/organizations/:orgId/panic
+ */
+router.post(
+  '/:orgId/panic',
+  authenticate,
+  requireOrgMember(),
+  [body('password').notEmpty().withMessage('Password is required to execute panic actions')],
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const user = await User.findById(req.user!.userId).select('+password');
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const passwordValid = await comparePassword(req.body.password, user.password);
+      if (!passwordValid) {
+        res.status(401).json({ error: 'Invalid password' });
+        return;
+      }
+
+      const organizationId = req.params.orgId;
+      const canExecute = await canExecutePanicInOrg(req.user!.userId, organizationId);
+      if (!canExecute) {
+        res.status(403).json({
+          error: 'You do not have permission to run panic actions on any project in this organization',
+        });
+        return;
+      }
+
+      const panicButton = await getOrganizationPanicSettings(organizationId);
+      if (!hasConfiguredPanicActions(panicButton)) {
+        res.status(400).json({ error: 'No panic actions configured for this organization' });
+        return;
+      }
+
+      const projects = await getPanicEligibleProjectsForOrg(req.user!.userId, organizationId);
+      if (projects.length === 0) {
+        res.status(403).json({
+          error: 'You do not have permission to run panic actions on any project in this organization',
+        });
+        return;
+      }
+
+      const results = await executePanicActions(
+        req.user!.userId,
+        organizationId,
+        projects,
+        panicButton,
+        req
+      );
+
+      sendPanicResponse(res, results);
+    } catch (error) {
+      console.error(
+        'Organization panic error:',
+        error instanceof Error ? error.message : 'Failed to execute panic actions'
+      );
+      res.status(500).json({ error: 'Failed to execute panic actions' });
     }
   }
 );
@@ -227,6 +429,7 @@ router.get(
   '/:orgId/members',
   authenticate,
   requireOrgMember(),
+  requireTeamOrganization(),
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const members = await OrgMember.find({ organizationId: req.params.orgId })
@@ -254,6 +457,7 @@ router.post(
   '/:orgId/members',
   authenticate,
   requireOrgPermission('org:invite'),
+  requireTeamOrganization(),
   [
     body('email')
       .trim()
@@ -326,6 +530,7 @@ router.get(
   '/:orgId/invites',
   authenticate,
   requireOrgMember(),
+  requireTeamOrganization(),
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const attributes = {
@@ -376,6 +581,7 @@ router.delete(
   '/:orgId/invites/:inviteId',
   authenticate,
   requireOrgPermission('org:revoke_invites'),
+  requireTeamOrganization(),
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const { inviteId } = req.params;
@@ -415,6 +621,7 @@ router.post(
   '/:orgId/invites/:inviteId/resend',
   authenticate,
   requireOrgPermission('org:invite'),
+  requireTeamOrganization(),
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -485,6 +692,7 @@ router.patch(
   '/:orgId/members/:memberId',
   authenticate,
   requireOrgPermission('org:manage_members'),
+  requireTeamOrganization(),
   [
     body('role')
       .optional()
@@ -592,6 +800,7 @@ router.delete(
   '/:orgId/members/:memberId',
   authenticate,
   requireOrgPermission('org:manage_members'),
+  requireTeamOrganization(),
   async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const { memberId } = req.params;
@@ -622,7 +831,21 @@ router.delete(
         return;
       }
 
+      const removedUserId = member.userId.toString();
+      const orgId = req.params.orgId;
+
       await OrgMember.findByIdAndDelete(memberId);
+
+      const orgProjects = await Project.find({ organizationId: orgId }).select('_id');
+      const projectIds = orgProjects.map((p) => p._id);
+
+      if (projectIds.length > 0) {
+        await Project.updateMany(
+          { organizationId: orgId },
+          { $pull: { members: { userId: removedUserId } } }
+        );
+        await revokeApiTokensForUser(removedUserId, projectIds);
+      }
       
       res.json({ message: 'Member removed successfully' });
     } catch (error) {
@@ -661,6 +884,138 @@ router.get(
     } catch (error) {
       console.error('Get audit logs error:', error instanceof Error ? error.message : 'Failed to fetch audit logs');
       res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+  }
+);
+
+/**
+ * Export organization data (all accessible projects) as JSON
+ * GET /api/organizations/:orgId/export
+ */
+router.get(
+  '/:orgId/export',
+  authenticate,
+  requireOrgMember(),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      const orgId = req.params.orgId;
+      const org = req.organization!;
+      const orgRole = req.orgRole ?? (await getUserOrgRole(req.user!.userId, orgId));
+
+      const allProjects = await Project.find({ organizationId: orgId });
+      const readableProjects = [];
+
+      for (const project of allProjects) {
+        const attributes = await getProjectMemberAttributes(req.user!.userId, project, orgRole);
+        if (hasProjectCapability(attributes, 'project:export')) {
+          readableProjects.push(project);
+        }
+      }
+
+      if (readableProjects.length === 0) {
+        res.status(404).json({
+          error: 'Nothing to export: you do not have export access to any projects in this organization',
+        });
+        return;
+      }
+
+      const user = await User.findById(req.user!.userId).select('name email');
+      const payload = await buildOrganizationExport(
+        orgId,
+        readableProjects,
+        user ? { email: user.email, name: user.name } : undefined
+      );
+
+      if (countExportableItems(payload) === 0) {
+        res.status(404).json({
+          error: 'Nothing to export: no environment files, secrets, or associated accounts were found',
+        });
+        return;
+      }
+
+      await auditOrg(orgId, req.user!.userId, 'update', {
+        action: 'export',
+        projectCount: readableProjects.length,
+        envFileCount: payload.projects?.reduce((sum, p) => sum + p.envFiles.length, 0) ?? 0,
+        secretCount: payload.projects?.reduce((sum, p) => sum + p.secrets.length, 0) ?? 0,
+        accountCount: payload.projects?.reduce((sum, p) => sum + p.associatedAccounts.length, 0) ?? 0,
+      }, req);
+
+      res.json(payload);
+    } catch (error) {
+      console.error('Organization export error:', error instanceof Error ? error.message : 'Failed');
+      res.status(500).json({ error: 'Failed to export organization data' });
+    }
+  }
+);
+
+/**
+ * Import organization data from JSON export file
+ * POST /api/organizations/:orgId/import
+ */
+router.post(
+  '/:orgId/import',
+  authenticate,
+  requireOrgMember(),
+  uploadRateLimiter,
+  importUpload.single('file'),
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: 'Import file is required' });
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(req.file.buffer.toString('utf8'));
+      } catch {
+        res.status(400).json({ error: 'Invalid JSON file' });
+        return;
+      }
+
+      const payload = parseImportPayload(parsed);
+      const orgId = req.params.orgId;
+      const orgRole = req.orgRole ?? (await getUserOrgRole(req.user!.userId, orgId));
+      const memberAttributes = await getOrgMemberAttributes(req.user!.userId, orgId);
+      const canCreateProject = memberAttributes
+        ? canPerformOrgAction(memberAttributes, 'org:create_project')
+        : false;
+
+      const orgProjects = await Project.find({ organizationId: orgId });
+      const writableProjectIds = new Set<string>();
+      for (const project of orgProjects) {
+        const attributes = await getProjectMemberAttributes(req.user!.userId, project, orgRole);
+        if (attributes.accessLevel === 'write') {
+          writableProjectIds.add(project._id.toString());
+        }
+      }
+
+      const overwrite =
+        req.body?.overwrite === true ||
+        req.body?.overwrite === 'true' ||
+        String(req.query.overwrite) === 'true';
+
+      const result = await importOrganizationPayload(payload, {
+        organizationId: orgId,
+        userId: req.user!.userId,
+        canCreateProject,
+        writableProjectIds,
+        overwrite,
+        req,
+      });
+
+      await auditOrg(orgId, req.user!.userId, 'update', { action: 'import', ...result.summary, overwrite }, req);
+
+      res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import organization data';
+      if (message.startsWith('Invalid') || message.startsWith('Unsupported')) {
+        res.status(400).json({ error: message });
+        return;
+      }
+      console.error('Organization import error:', message);
+      res.status(500).json({ error: 'Failed to import organization data' });
     }
   }
 );

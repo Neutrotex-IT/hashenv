@@ -8,6 +8,7 @@ export interface EnvDiffResult {
   added: EnvDiffEntry[];
   removed: EnvDiffEntry[];
   changed: Array<{ key: string; oldValue: string; newValue: string }>;
+  unchanged: Array<{ key: string; oldValue: string; newValue: string }>;
 }
 
 function parseEnvLines(content: string): Map<string, string> {
@@ -32,6 +33,7 @@ export function diffEnvContent(oldContent: string, newContent: string): EnvDiffR
   const added: EnvDiffEntry[] = [];
   const removed: EnvDiffEntry[] = [];
   const changed: Array<{ key: string; oldValue: string; newValue: string }> = [];
+  const unchanged: Array<{ key: string; oldValue: string; newValue: string }> = [];
 
   for (const key of [...keys].sort()) {
     const oldValue = oldMap.get(key);
@@ -43,8 +45,10 @@ export function diffEnvContent(oldContent: string, newContent: string): EnvDiffR
       removed.push({ key, oldValue });
     } else if (oldValue !== undefined && newValue !== undefined && oldValue !== newValue) {
       changed.push({ key, oldValue, newValue });
+    } else if (oldValue !== undefined && newValue !== undefined) {
+      unchanged.push({ key, oldValue, newValue });
     }
   }
 
-  return { added, removed, changed };
+  return { added, removed, changed, unchanged };
 }

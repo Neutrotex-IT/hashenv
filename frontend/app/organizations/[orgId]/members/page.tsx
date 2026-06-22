@@ -7,6 +7,7 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { OrgPageHeader } from '@/components/OrgPageHeader';
+import { CreateOrganizationModal } from '@/components/CreateOrganizationModal';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
 import { EditOrgMemberModal } from '@/components/ui/EditOrgMemberModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
@@ -17,7 +18,7 @@ import { useToast } from '@/contexts/ToastContext';
 export default function OrganizationMembersPage() {
   const params = useParams();
   const orgId = params.orgId as string;
-  const { organizations } = useOrganization();
+  const { organizations, refreshOrganizations } = useOrganization();
 
   const org = organizations.find((item) => item._id === orgId);
   const { confirm } = useConfirm();
@@ -35,6 +36,9 @@ export default function OrganizationMembersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
+  const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false);
+
+  const isPersonalOrg = org?.type === 'personal';
 
   const canInvite = org
     ? hasOrgPermission(org.role, customPermissions, 'org:invite')
@@ -78,8 +82,12 @@ export default function OrganizationMembersPage() {
   };
 
   useEffect(() => {
+    if (isPersonalOrg) {
+      setLoading(false);
+      return;
+    }
     loadData();
-  }, [orgId, org?.role]);
+  }, [orgId, org?.role, isPersonalOrg]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +103,7 @@ export default function OrganizationMembersPage() {
       setRole('member');
       setInvitePermissions([]);
       toastSuccess('Invitation sent successfully');
-      await loadData();
+      await Promise.all([loadData(), refreshOrganizations()]);
     } catch (err: any) {
       toastError(err.response?.data?.error || 'Failed to send invitation');
     } finally {
@@ -131,7 +139,7 @@ export default function OrganizationMembersPage() {
 
     try {
       await organizationsAPI.removeMember(orgId, memberId);
-      await loadData();
+      await Promise.all([loadData(), refreshOrganizations()]);
     } catch (err: any) {
       toastError(err.response?.data?.error || 'Failed to remove member');
     }
@@ -156,7 +164,7 @@ export default function OrganizationMembersPage() {
   ) => {
     await organizationsAPI.updateMember(orgId, memberId, data);
     toastSuccess('Member updated successfully');
-    await loadData();
+    await Promise.all([loadData(), refreshOrganizations()]);
   };
 
   if (loading) {
@@ -165,6 +173,37 @@ export default function OrganizationMembersPage() {
         <SkeletonCard className="mb-6" />
         <SkeletonCard />
       </div>
+    );
+  }
+
+  if (isPersonalOrg) {
+    return (
+      <>
+        <div className="max-w-4xl">
+          {org && (
+            <OrgPageHeader
+              orgId={orgId}
+              orgName={org.name}
+              title="Members"
+              description="Personal workspaces are for solo use only."
+            />
+          )}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Collaboration unavailable</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              Personal workspaces cannot have additional members or invitations. Create a team organization to
+              collaborate with others.
+            </p>
+            <Button variant="primary" size="md" onClick={() => setCreateOrgModalOpen(true)}>
+              Create team organization
+            </Button>
+          </div>
+        </div>
+        <CreateOrganizationModal
+          isOpen={createOrgModalOpen}
+          onClose={() => setCreateOrgModalOpen(false)}
+        />
+      </>
     );
   }
 
@@ -187,6 +226,15 @@ export default function OrganizationMembersPage() {
             effective={permissionInfo.effective}
             className="mb-6"
           />
+        )}
+
+        {org?.type === 'team' && !canInvite && (
+          <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+            <p className="text-sm text-[var(--text-muted)]">
+              Only organization owners and admins can send invitations. Ask an admin to invite new members by email.
+              Once they accept, you can add them to projects from the project members page.
+            </p>
+          </div>
         )}
 
         {canInvite && org?.type === 'team' && (
@@ -218,7 +266,7 @@ export default function OrganizationMembersPage() {
                   {role === 'member' && (
                     <div>
                       <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                        Additional permissions
+                        Permissions
                       </label>
                       <OrgPermissionPicker
                         grantable={grantablePermissions}
@@ -308,7 +356,7 @@ export default function OrganizationMembersPage() {
                           ) : member.permissions && member.permissions.length > 0 ? (
                             <span className="text-xs">{member.permissions.map((p) => formatOrgPermission(p as OrgPermission)).join(', ')}</span>
                           ) : (
-                            <span className="text-xs text-[var(--text-muted)]">Default member access</span>
+                            <span className="text-xs text-[var(--text-muted)]">No permissions granted</span>
                           )}
                         </td>
                         {canManageMembers && (

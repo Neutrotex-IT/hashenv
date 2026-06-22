@@ -6,26 +6,28 @@ import { environmentsAPI, projectsAPI, ProjectEnvironment } from '@/lib/api';
 import { ManageEnvironmentsPanel } from '@/components/ui/ManageEnvironmentsPanel';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { useAuth } from '@/contexts/AuthContext';
+import { canWriteProject } from '@/lib/permissions';
 
 export default function ProjectEnvironmentsPage() {
   const params = useParams();
-  const { user } = useAuth();
   const projectId = params.id as string;
 
-  const [project, setProject] = useState<{ name: string; createdBy: { _id: string }; members: Array<{ userId: { _id: string }; permission: string }> } | null>(null);
+  const [project, setProject] = useState<{ name: string } | null>(null);
   const [environments, setEnvironments] = useState<ProjectEnvironment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [canWrite, setCanWrite] = useState(false);
 
   const load = async () => {
     try {
-      const [projectData, envData] = await Promise.all([
+      const [projectData, envData, permissions] = await Promise.all([
         projectsAPI.get(projectId),
         environmentsAPI.list(projectId),
+        projectsAPI.getPermissions(projectId),
       ]);
       setProject(projectData);
       setEnvironments(envData);
+      setCanWrite(canWriteProject(permissions.effective));
       setError('');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -38,10 +40,6 @@ export default function ProjectEnvironmentsPage() {
   useEffect(() => {
     load();
   }, [projectId]);
-
-  const isOwner = project?.createdBy._id === user?.id;
-  const userPermission = project?.members.find((m) => m.userId._id === user?.id)?.permission;
-  const canWrite = isOwner || userPermission === 'write';
 
   return (
     <div className="max-w-3xl">
@@ -64,7 +62,7 @@ export default function ProjectEnvironmentsPage() {
         <ManageEnvironmentsPanel
           projectId={projectId}
           environments={environments}
-          canWrite={Boolean(canWrite)}
+          canWrite={canWrite}
           onChanged={load}
         />
       )}

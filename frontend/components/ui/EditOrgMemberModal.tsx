@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { OrgMember } from '@/lib/api';
 import { OrgPermission } from '@/lib/permissions';
+import { arraysEqual } from '@/lib/formUtils';
 import { Button } from '@/components/ui/Button';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
 
@@ -21,12 +22,17 @@ export function EditOrgMemberModal({
   onSave,
   onClose,
 }: EditOrgMemberModalProps) {
-  const [role, setRole] = useState<'member' | 'admin'>(member.role === 'admin' ? 'admin' : 'member');
-  const [permissions, setPermissions] = useState<OrgPermission[]>(
-    (member.permissions ?? []) as OrgPermission[]
-  );
+  const initialRole = member.role === 'admin' ? 'admin' : 'member';
+  const initialPermissions = (member.permissions ?? []) as OrgPermission[];
+
+  const [role, setRole] = useState<'member' | 'admin'>(initialRole);
+  const [permissions, setPermissions] = useState<OrgPermission[]>([...initialPermissions]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const hasChanges =
+    role !== initialRole ||
+    (role === 'member' && !arraysEqual(permissions, initialPermissions));
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -97,7 +103,7 @@ export function EditOrgMemberModal({
           {role === 'member' && (
             <div>
               <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                Additional permissions
+                Permissions
               </label>
               <OrgPermissionPicker
                 grantable={grantablePermissions}
@@ -117,7 +123,7 @@ export function EditOrgMemberModal({
             <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md" disabled={submitting}>
+            <Button type="submit" variant="primary" size="md" disabled={submitting || !hasChanges}>
               {submitting ? 'Saving...' : 'Save changes'}
             </Button>
           </div>

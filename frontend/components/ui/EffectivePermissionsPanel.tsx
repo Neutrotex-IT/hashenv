@@ -14,6 +14,7 @@ const MISSING_HINTS: Record<string, string> = {
   'project:invite': 'You cannot invite members to this project',
   'project:manage_members': 'You cannot edit or remove project members',
   'project:manage_tokens': 'You cannot create or revoke API tokens',
+  'project:export': 'You cannot export project environment data',
   'org:invite': 'You cannot invite people to this organization',
   'org:manage_members': 'You cannot edit or remove organization members',
   'org:revoke_invites': 'You cannot revoke pending organization invites',

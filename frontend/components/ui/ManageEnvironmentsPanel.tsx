@@ -148,8 +148,8 @@ export function ManageEnvironmentsPanel({
                           <button
                             type="button"
                             onClick={() => handleRename(env.slug)}
-                            disabled={saving}
-                            className="text-sm text-[var(--accent)]"
+                            disabled={saving || !editName.trim() || editName.trim() === env.slug}
+                            className="text-sm text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 disabled:text-[var(--text-muted)]"
                           >
                             Save
                           </button>

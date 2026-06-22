@@ -8,6 +8,7 @@ export const ORG_PERMISSIONS = {
   'org:update': 'Update organization settings',
   'org:audit': 'View organization audit logs',
   'org:create_project': 'Create new projects',
+  'org:configure_panic': 'Configure organization panic button settings',
 } as const;
 
 export type OrgPermission = keyof typeof ORG_PERMISSIONS;
@@ -17,6 +18,8 @@ export const PROJECT_PERMISSIONS = {
   'project:invite': 'Invite members to the project',
   'project:manage_members': 'Manage project members and permissions',
   'project:manage_tokens': 'Manage project API tokens',
+  'project:export': 'Export project environment data',
+  'project:panic': 'Run panic button actions on this project',
 } as const;
 
 export type ProjectPermission = keyof typeof PROJECT_PERMISSIONS;
@@ -24,17 +27,15 @@ export type ProjectPermission = keyof typeof PROJECT_PERMISSIONS;
 export const ALL_ORG_PERMISSIONS = Object.keys(ORG_PERMISSIONS) as OrgPermission[];
 export const ALL_PROJECT_PERMISSIONS = Object.keys(PROJECT_PERMISSIONS) as ProjectPermission[];
 
-const MEMBER_DEFAULT_PERMISSIONS: OrgPermission[] = ['org:create_project'];
-
 const ADMIN_PERMISSIONS: OrgPermission[] = [...ALL_ORG_PERMISSIONS];
 
 const OWNER_PERMISSIONS: OrgPermission[] = [...ALL_ORG_PERMISSIONS];
 
-/** Permissions implicitly granted by org role (before custom grants). */
+/** Permissions implicitly granted by org role. Members use explicit grants only. */
 export const ROLE_ORG_PERMISSIONS: Record<OrgRole, OrgPermission[]> = {
   owner: OWNER_PERMISSIONS,
   admin: ADMIN_PERMISSIONS,
-  member: MEMBER_DEFAULT_PERMISSIONS,
+  member: [],
 };
 
 /** Project owners and org admins always receive these project capabilities. */
@@ -68,11 +69,10 @@ export function getEffectiveOrgPermissions(
   role: OrgRole,
   customPermissions: OrgPermission[] = []
 ): Set<OrgPermission> {
-  const fromRole = ROLE_ORG_PERMISSIONS[role];
   if (role === 'owner' || role === 'admin') {
-    return new Set(fromRole);
+    return new Set(ROLE_ORG_PERMISSIONS[role]);
   }
-  return new Set([...fromRole, ...customPermissions]);
+  return new Set(customPermissions);
 }
 
 export function getProjectCapabilitiesFromAccess(

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { projectsAPI, OrgMember, ProjectInvite, ProjectPermissionsResponse } from '@/lib/api';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { OrgMemberSelect } from '@/components/ui/OrgMemberSelect';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
@@ -14,6 +15,7 @@ import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
+import { CreateOrganizationModal } from '@/components/CreateOrganizationModal';
 
 interface Project {
   _id: string;
@@ -33,18 +35,15 @@ interface Project {
 export default function ManageMembersPage() {
   const params = useParams();
   const projectId = params.id as string;
+  const { organizations } = useOrganization();
   const [project, setProject] = useState<Project | null>(null);
   const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
   const [invites, setInvites] = useState<ProjectInvite[]>([]);
   const [selectedMember, setSelectedMember] = useState<OrgMember | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<'read' | 'write'>('read');
   const [selectedCapabilities, setSelectedCapabilities] = useState<ProjectPermission[]>([]);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [invitePermission, setInvitePermission] = useState<'read' | 'write'>('read');
-  const [inviteCapabilities, setInviteCapabilities] = useState<ProjectPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [editingMember, setEditingMember] = useState<{
     userId: string;
@@ -54,6 +53,7 @@ export default function ManageMembersPage() {
     permissions: ProjectPermission[];
   } | null>(null);
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
+  const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false);
 
   const { confirm } = useConfirm();
   const { success: toastSuccess } = useToast();
@@ -114,29 +114,6 @@ export default function ManageMembersPage() {
       setError(err.response?.data?.error || 'Failed to add member');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleInviteByEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviteSubmitting(true);
-    setError('');
-
-    try {
-      await projectsAPI.inviteMember(projectId, {
-        email: inviteEmail,
-        permission: invitePermission,
-        permissions: inviteCapabilities,
-      });
-      setInviteEmail('');
-      setInvitePermission('read');
-      setInviteCapabilities([]);
-      await loadData();
-      toastSuccess('Invitation sent');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send invitation');
-    } finally {
-      setInviteSubmitting(false);
     }
   };
 
@@ -228,6 +205,37 @@ export default function ManageMembersPage() {
 
   const orgId =
     typeof project.organizationId === 'string' ? project.organizationId : project.organizationId._id;
+  const org = organizations.find((item) => item._id === orgId);
+  const isPersonalOrg = org?.type === 'personal';
+
+  if (isPersonalOrg) {
+    return (
+      <>
+        <div className="mx-auto max-w-4xl">
+          <ProjectPageHeader
+            projectId={projectId}
+            projectName={project.name}
+            title="Members"
+            description="Personal workspace projects are for solo use only."
+          />
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Collaboration unavailable</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              Projects in a personal workspace cannot have collaborators. Create a team organization, move or recreate
+              your project there, then invite members at the organization level.
+            </p>
+            <Button variant="primary" size="md" onClick={() => setCreateOrgModalOpen(true)}>
+              Create team organization
+            </Button>
+          </div>
+        </div>
+        <CreateOrganizationModal
+          isOpen={createOrgModalOpen}
+          onClose={() => setCreateOrgModalOpen(false)}
+        />
+      </>
+    );
+  }
 
   const memberUserIds = project.members.map((m) =>
     typeof m.userId === 'object' ? m.userId._id : m.userId
@@ -240,15 +248,20 @@ export default function ManageMembersPage() {
           projectId={projectId}
           projectName={project.name}
           title="Members"
-          description="Add organization members directly or invite by email with granular project permissions."
+          description="Add organization members to this project. Invite people to the organization first, then add them here."
         />
         {orgId && (
-          <Link
-            href={`/organizations/${orgId}/members`}
-            className="mb-6 inline-block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)]"
-          >
-            Manage organization invites
-          </Link>
+          <div className="mb-6 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
+            <p className="text-sm text-[var(--foreground)] mb-2">
+              New collaborators must join the organization before they can access projects.
+            </p>
+            <Link
+              href={`/organizations/${orgId}/members`}
+              className="inline-flex text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
+            >
+              Invite to organization →
+            </Link>
+          </div>
         )}
 
             {error && (
@@ -264,54 +277,6 @@ export default function ManageMembersPage() {
                 effective={permissionInfo.effective}
                 className="mb-6"
               />
-            )}
-
-            {canInvite && (
-              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Invite by Email</h2>
-                <form onSubmit={handleInviteByEmail} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Email address</label>
-                    <input
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      required
-                      placeholder="colleague@company.com"
-                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                    />
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      The invitee must already be a member of the organization.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Access level</label>
-                    <select
-                      value={invitePermission}
-                      onChange={(e) => setInvitePermission(e.target.value as 'read' | 'write')}
-                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                    >
-                      <option value="read">Read Only</option>
-                      <option value="write">Read/Write</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                      Additional capabilities
-                    </label>
-                    <ProjectPermissionPicker
-                      grantable={grantablePermissions}
-                      selected={inviteCapabilities}
-                      onChange={setInviteCapabilities}
-                    />
-                  </div>
-                  <div className="flex justify-end pt-4 border-t border-[var(--border)]">
-                    <Button variant="primary" size="md" type="submit" disabled={inviteSubmitting}>
-                      {inviteSubmitting ? 'Sending...' : 'Send Invitation'}
-                    </Button>
-                  </div>
-                </form>
-              </div>
             )}
 
             {canInvite && invites.length > 0 && (

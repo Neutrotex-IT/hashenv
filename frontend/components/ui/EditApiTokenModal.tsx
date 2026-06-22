@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ApiToken } from '@/lib/api';
+import { arraysEqual } from '@/lib/formUtils';
 import { Button } from '@/components/ui/Button';
 
 interface EditApiTokenModalProps {
@@ -15,6 +16,9 @@ export function EditApiTokenModal({ token, onSave, onClose }: EditApiTokenModalP
   const [scopes, setScopes] = useState<('read' | 'write')[]>([...token.scopes]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const hasChanges =
+    name.trim() !== token.name.trim() || !arraysEqual(scopes, token.scopes);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -145,7 +149,7 @@ export function EditApiTokenModal({ token, onSave, onClose }: EditApiTokenModalP
             <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md" disabled={submitting}>
+            <Button type="submit" variant="primary" size="md" disabled={submitting || !hasChanges}>
               {submitting ? 'Saving...' : 'Save changes'}
             </Button>
           </div>

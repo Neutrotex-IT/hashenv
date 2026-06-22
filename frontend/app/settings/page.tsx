@@ -23,14 +23,12 @@ export default function SettingsPage() {
   const [email, setEmail] = useState('');
 
   const [flushDuration, setFlushDuration] = useState<number | null>(null);
-  const [panicButton, setPanicButton] = useState({
-    flushEnvs: false,
-    flushSecrets: false,
-    revokeApiTokens: false,
-    revokeCollaborators: false,
-    downloadEnvs: false,
-    askConfirmation: true,
-  });
+  const [savedProfile, setSavedProfile] = useState({ name: '', username: '' });
+  const [savedFlushDuration, setSavedFlushDuration] = useState<number | null>(null);
+
+  const profileDirty =
+    name !== savedProfile.name || username !== savedProfile.username;
+  const flushDirty = flushDuration !== savedFlushDuration;
 
   useEffect(() => {
     loadData();
@@ -47,10 +45,11 @@ export default function SettingsPage() {
       setName(profile.name);
       setUsername(profile.username);
       setEmail(profile.email);
-      setFlushDuration(settings.flushDuration || null);
-      if (settings.panicButton) {
-        setPanicButton(settings.panicButton);
-      }
+      setSavedProfile({ name: profile.name, username: profile.username });
+
+      const nextFlushDuration = settings.flushDuration || null;
+      setFlushDuration(nextFlushDuration);
+      setSavedFlushDuration(nextFlushDuration);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       toastError(axiosErr.response?.data?.error || 'Failed to load settings');
@@ -67,6 +66,7 @@ export default function SettingsPage() {
       const updatedProfile = await settingsAPI.updateProfile({ name, username });
       setName(updatedProfile.name);
       setUsername(updatedProfile.username);
+      setSavedProfile({ name: updatedProfile.name, username: updatedProfile.username });
       toastSuccess('Profile updated successfully');
 
       if (user) {
@@ -102,13 +102,15 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
+      const nextFlushDuration =
+        flushDuration === null || flushDuration === undefined || flushDuration === 0
+          ? null
+          : flushDuration;
+
       await settingsAPI.update({
-        flushDuration:
-          flushDuration === null || flushDuration === undefined || flushDuration === 0
-            ? null
-            : flushDuration,
-        panicButton,
+        flushDuration: nextFlushDuration,
       });
+      setSavedFlushDuration(nextFlushDuration);
       toastSuccess('Settings saved successfully');
     } catch (err: unknown) {
       const axiosErr = err as {
@@ -144,7 +146,7 @@ export default function SettingsPage() {
         <div className="mx-auto max-w-6xl p-6 lg:p-8">
           <PageHeader
             title="Account settings"
-            description="Profile, automation, and emergency actions for your account."
+            description="Profile and automation settings for your account."
             breadcrumbs={[
               { label: 'Dashboard', href: '/dashboard' },
               { label: 'Settings' },
@@ -215,7 +217,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="border-t border-[var(--border)] pt-4">
-                      <Button type="submit" variant="primary" size="md" disabled={saving}>
+                      <Button type="submit" variant="primary" size="md" disabled={saving || !profileDirty}>
                         {saving ? 'Saving...' : 'Save profile'}
                       </Button>
                     </div>
@@ -229,8 +231,8 @@ export default function SettingsPage() {
                     Auto-flush environment files
                   </h2>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    Automatically delete all environment files across your projects at a set
-                    interval.
+                    Automatically delete environment files on projects where you can run panic
+                    actions, across all organizations you belong to.
                   </p>
                   <form onSubmit={handleSaveSettings} className="mt-6 space-y-4">
                     <div>
@@ -261,77 +263,8 @@ export default function SettingsPage() {
                       </p>
                     </div>
                     <div className="border-t border-[var(--border)] pt-4">
-                      <Button type="submit" variant="primary" size="md" disabled={saving}>
+                      <Button type="submit" variant="primary" size="md" disabled={saving || !flushDirty}>
                         {saving ? 'Saving...' : 'Save auto-flush'}
-                      </Button>
-                    </div>
-                  </form>
-                </section>
-              )}
-
-              {activeSection === 'panic' && (
-                <section className="rounded-lg border border-[var(--error)]/30 bg-[var(--surface)] p-6">
-                  <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                    Panic button
-                  </h2>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    Configure what runs when you trigger the panic button from the dashboard.
-                    Your password is always required server-side.
-                  </p>
-                  <form onSubmit={handleSaveSettings} className="mt-6 space-y-4">
-                    <div className="space-y-3">
-                      {[
-                        { key: 'flushEnvs' as const, label: 'Flush environment files immediately' },
-                        {
-                          key: 'flushSecrets' as const,
-                          label: 'Flush secrets and associated accounts',
-                        },
-                        { key: 'revokeApiTokens' as const, label: 'Revoke all API tokens' },
-                        {
-                          key: 'revokeCollaborators' as const,
-                          label: 'Revoke all collaborator access',
-                        },
-                        { key: 'downloadEnvs' as const, label: 'Download all env files first' },
-                      ].map((option) => (
-                        <label
-                          key={option.key}
-                          className="flex cursor-pointer items-center gap-3"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={panicButton[option.key]}
-                            onChange={(e) =>
-                              setPanicButton({ ...panicButton, [option.key]: e.target.checked })
-                            }
-                            className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                          />
-                          <span className="text-sm text-[var(--foreground)]">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-[var(--border)] pt-4">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={panicButton.askConfirmation}
-                          onChange={(e) =>
-                            setPanicButton({
-                              ...panicButton,
-                              askConfirmation: e.target.checked,
-                            })
-                          }
-                          className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                        />
-                        <span className="text-sm text-[var(--foreground)]">
-                          Ask for confirmation before running
-                        </span>
-                      </label>
-                    </div>
-
-                    <div className="border-t border-[var(--border)] pt-4">
-                      <Button type="submit" variant="primary" size="md" disabled={saving}>
-                        {saving ? 'Saving...' : 'Save panic settings'}
                       </Button>
                     </div>
                   </form>
