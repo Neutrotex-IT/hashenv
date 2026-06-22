@@ -1,6 +1,6 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectCapability } from '../lib/authorization';
+import { requireProjectCapability, AuthRequestWithOrg } from '../lib/authorization';
 import { ProjectApiToken, generateApiToken, ApiTokenScope } from '../models/ProjectApiToken';
 import { audit } from '../lib/audit';
 
@@ -39,7 +39,7 @@ router.post(
   '/:projectId/tokens',
   authenticate,
   requireProjectCapability('project:manage_tokens'),
-  async (req: AuthRequest, res: Response): Promise<void> => {
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const { projectId } = req.params;
       const { name, scopes, expiresIn } = req.body;
@@ -80,7 +80,7 @@ router.post(
         tokenPrefix: prefix,
         scopes: tokenScopes,
         expiresAt,
-        createdBy: req.user!._id,
+        createdBy: req.user!.userId,
       });
       
       // Audit log
@@ -90,7 +90,7 @@ router.post(
         resourceType: 'api_token',
         action: 'create',
         actorType: 'user',
-        actorId: req.user!._id.toString(),
+        actorId: req.user!.userId,
         metadata: { tokenName: name, scopes: tokenScopes, expiresAt },
         req,
       });
@@ -120,7 +120,7 @@ router.patch(
   '/:projectId/tokens/:tokenId',
   authenticate,
   requireProjectCapability('project:manage_tokens'),
-  async (req: AuthRequest, res: Response): Promise<void> => {
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const { projectId, tokenId } = req.params;
       const { name, scopes } = req.body;
@@ -164,7 +164,7 @@ router.patch(
         resourceType: 'api_token',
         action: 'update',
         actorType: 'user',
-        actorId: req.user!._id.toString(),
+        actorId: req.user!.userId,
         metadata: { tokenId, updates },
         req,
       });
@@ -185,7 +185,7 @@ router.delete(
   '/:projectId/tokens/:tokenId',
   authenticate,
   requireProjectCapability('project:manage_tokens'),
-  async (req: AuthRequest, res: Response): Promise<void> => {
+  async (req: AuthRequestWithOrg, res: Response): Promise<void> => {
     try {
       const { projectId, tokenId } = req.params;
       
@@ -205,7 +205,7 @@ router.delete(
         resourceType: 'api_token',
         action: 'delete',
         actorType: 'user',
-        actorId: req.user!._id.toString(),
+        actorId: req.user!.userId,
         metadata: { tokenId, tokenName: apiToken.name },
         req,
       });
