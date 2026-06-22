@@ -1,46 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { projectsAPI } from '@/lib/api';
 import { OrgSwitcher } from './OrgSwitcher';
-import { OrgPanicButton } from './OrgPanicButton';
-import { Button } from './ui/Button';
+import { CreateOrganizationModal } from './CreateOrganizationModal';
 import {
   getWorkspaceNav,
   getAccountNav,
   getOrgNav,
-  getProjectNav,
   isNavActive,
   NavLink,
 } from '@/lib/navigation';
 import { OrgPermission } from '@/lib/permissions';
+import { useProjects, useInvalidateProjects } from '@/hooks/queries/useProjects';
 
 interface SidebarProps {
-  onLogout: () => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   mobileOpen: boolean;
   onMobileClose: () => void;
 }
 
-function NavIcon({ name }: { name: string }) {
-  const className = 'h-5 w-5 shrink-0';
+const RAIL_ICONS: { id: string; href: string; label: string; icon: string; exact?: boolean }[] = [
+  { id: 'dashboard', href: '/dashboard', label: 'Dashboard', icon: 'dashboard', exact: true },
+  { id: 'settings', href: '/settings', label: 'Account settings', icon: 'settings', exact: true },
+];
 
+function RailIcon({ name }: { name: string }) {
+  const className = 'h-5 w-5';
   switch (name) {
     case 'dashboard':
       return (
         <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h4a1 1 0 011 1v8a1 1 0 01-1 1h-4a1 1 0 01-1-1v-8zM4 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
-        </svg>
-      );
-    case 'plus':
-      return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
         </svg>
       );
     case 'users':
@@ -62,281 +57,312 @@ function NavIcon({ name }: { name: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       );
-    case 'files':
+    case 'plus':
       return (
         <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      );
-    case 'layers':
-      return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      );
-    case 'key':
-      return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-        </svg>
-      );
-    case 'activity':
-      return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
         </svg>
       );
     default:
       return (
         <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 6h16M4 12h16M4 18h16" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       );
   }
 }
 
-function iconForLink(link: NavLink): string {
-  if (link.href === '/dashboard') return 'dashboard';
-  if (link.href === '/projects/new') return 'plus';
-  if (link.href === '/settings') return 'settings';
-  if (link.href.includes('/organizations/') && link.href.endsWith('/members')) return 'users';
-  if (link.href.includes('/organizations/') && link.href.endsWith('/settings')) return 'settings';
-  if (link.href.includes('/organizations/') && link.href.endsWith('/audit')) return 'audit';
-  if (link.href.match(/\/projects\/[^/]+$/) && link.exact) return 'files';
-  if (link.href.endsWith('/environments')) return 'layers';
+function iconForOrgLink(link: NavLink): string {
   if (link.href.endsWith('/members')) return 'users';
-  if (link.href.endsWith('/tokens')) return 'key';
-  if (link.href.endsWith('/activity')) return 'activity';
-  if (link.href.endsWith('/settings')) return 'settings';
-  return 'default';
+  if (link.href.endsWith('/audit')) return 'audit';
+  return 'settings';
 }
 
-function NavSection({
-  label,
-  items,
+function PaneLink({
+  item,
   pathname,
-  collapsed,
   onNavigate,
+  indent = false,
 }: {
-  label?: string;
-  items: NavLink[];
+  item: NavLink;
   pathname: string;
-  collapsed: boolean;
   onNavigate?: () => void;
+  indent?: boolean;
 }) {
-  if (items.length === 0) return null;
-
+  const active = isNavActive(pathname, item.href, item.exact);
   return (
-    <div className="space-y-1">
-      {label && !collapsed && (
-        <p className="px-3 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-[var(--text-muted)] first:pt-0">
-          {label}
-        </p>
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={`relative flex items-center gap-2.5 rounded-[var(--radius-md)] py-2 text-sm transition-colors ${
+        indent ? 'pl-5 pr-3' : 'px-3'
+      } ${
+        active
+          ? 'bg-[var(--accent-muted)] font-medium text-[var(--foreground)]'
+          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]'
+      }`}
+    >
+      {active && (
+        <span className="absolute bottom-1 left-0 top-1 w-0.5 rounded-full bg-[var(--accent)]" aria-hidden />
       )}
-      {items.map((item) => {
-        const active = isNavActive(pathname, item.href, item.exact);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            title={collapsed ? item.name : undefined}
-            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-              active
-                ? 'bg-[var(--accent)]/15 font-medium text-[var(--accent)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--foreground)]'
-            }`}
-          >
-            <NavIcon name={iconForLink(item)} />
-            {!collapsed && <span className="truncate">{item.name}</span>}
-          </Link>
-        );
-      })}
-    </div>
+      <span className="truncate">{item.name}</span>
+    </Link>
   );
 }
 
 export function Sidebar({
-  onLogout,
   collapsed,
   onCollapsedChange,
   mobileOpen,
   onMobileClose,
 }: SidebarProps) {
   const pathname = usePathname();
-  const { user } = useAuth();
   const { currentOrg } = useOrganization();
+  const invalidateProjects = useInvalidateProjects();
+  const { data: projectList = [] } = useProjects(currentOrg?._id);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [createOrgOpen, setCreateOrgOpen] = useState(false);
+
+  const projects = useMemo(
+    () => projectList.map((p) => ({ _id: p._id, name: p.name })),
+    [projectList]
+  );
 
   const orgPermissions = (currentOrg?.permissions ?? []) as OrgPermission[];
   const projectIdMatch = pathname.match(/^\/projects\/([^/]+)/);
   const activeProjectId = projectIdMatch?.[1];
-  const [projectEffectivePermissions, setProjectEffectivePermissions] = useState<
-    string[] | undefined
-  >(undefined);
 
   useEffect(() => {
-    if (!activeProjectId) {
-      setProjectEffectivePermissions(undefined);
-      return;
-    }
-
-    let cancelled = false;
-    projectsAPI
-      .getPermissions(activeProjectId)
-      .then((data) => {
-        if (!cancelled) {
-          setProjectEffectivePermissions(data.effective);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setProjectEffectivePermissions([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
+    const onPanic = () => {
+      invalidateProjects(currentOrg?._id);
     };
-  }, [activeProjectId]);
+    window.addEventListener('hashenv:panic-executed', onPanic);
+    return () => window.removeEventListener('hashenv:panic-executed', onPanic);
+  }, [currentOrg?._id, invalidateProjects]);
 
   const workspaceNav = getWorkspaceNav(
-    currentOrg
-      ? {
-          role: currentOrg.role,
-          permissions: orgPermissions,
-        }
-      : undefined
+    currentOrg ? { role: currentOrg.role, permissions: orgPermissions } : undefined
   );
   const accountNav = getAccountNav();
   const orgNav =
     currentOrg?.type === 'team'
       ? getOrgNav(currentOrg._id, currentOrg.role, orgPermissions, currentOrg.type)
       : [];
-  const projectNav = activeProjectId
-    ? getProjectNav(activeProjectId, {
-        collaborationEnabled: currentOrg?.type === 'team',
-        effectivePermissions: projectEffectivePermissions,
-      })
-    : [];
 
-  const sidebarContent = (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
-        {!collapsed && (
-          <Link href="/dashboard" className="text-lg font-semibold text-[var(--foreground)]">
-            HashEnv
-          </Link>
-        )}
+  const filteredProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [projects, projectSearch]);
+
+  const orgRailLinks = orgNav.map((link) => ({
+    id: link.href,
+    href: link.href,
+    label: link.name,
+    icon: iconForOrgLink(link),
+    exact: link.exact,
+  }));
+
+  const showPane = !collapsed || mobileOpen;
+
+  const sidebarInner = (
+    <div className="flex h-full">
+      {/* Icon rail */}
+      <div className="flex w-[var(--sidebar-rail)] shrink-0 flex-col items-center border-r border-[var(--border-subtle)] bg-[var(--surface)] py-3">
+        <Link
+          href="/dashboard"
+          className="mb-4 flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)]"
+          title="HashEnv"
+        >
+          <Image
+            src="/hashenv-transparent.svg"
+            alt="HashEnv"
+            width={36}
+            height={36}
+            className="h-9 w-9"
+          />
+        </Link>
+
+        <nav className="flex flex-1 flex-col items-center gap-1">
+          {RAIL_ICONS.map((item) => {
+            const active = isNavActive(pathname, item.href, item.exact);
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={onMobileClose}
+                title={item.label}
+                className={`flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] transition-colors ${
+                  active
+                    ? 'bg-[var(--accent-muted)] text-[var(--accent)]'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <RailIcon name={item.icon} />
+              </Link>
+            );
+          })}
+
+          {orgRailLinks.length > 0 && (
+            <div className="my-2 h-px w-6 bg-[var(--border-subtle)]" aria-hidden />
+          )}
+
+          {orgRailLinks.map((item) => {
+            const active = isNavActive(pathname, item.href, item.exact);
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={onMobileClose}
+                title={item.label}
+                className={`flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] transition-colors ${
+                  active
+                    ? 'bg-[var(--accent-muted)] text-[var(--accent)]'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                <RailIcon name={item.icon} />
+              </Link>
+            );
+          })}
+        </nav>
+
         <button
           type="button"
           onClick={() => onCollapsedChange(!collapsed)}
-          className="hidden rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-elevated)] hover:text-[var(--foreground)] lg:block"
+          className="mt-auto hidden h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] lg:flex"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {collapsed ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5l7 7-7 7" />
             ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 19l-7-7 7-7" />
             )}
           </svg>
         </button>
-        <button
-          type="button"
-          onClick={onMobileClose}
-          className="rounded-md p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-elevated)] lg:hidden"
-          aria-label="Close menu"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
 
-      {!collapsed && (
-        <div className="border-b border-[var(--border)] p-4">
-          <OrgSwitcher />
+      {/* Nav pane */}
+      {showPane && (
+        <div className="flex w-[var(--sidebar-pane)] shrink-0 flex-col bg-[var(--surface)]">
+          <div className="flex h-[var(--topbar-height)] shrink-0 items-center justify-between border-b border-[var(--border)] px-3">
+            <span className="text-sm font-semibold text-[var(--foreground)]">HashEnv</span>
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="rounded-[var(--radius-md)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] lg:hidden"
+              aria-label="Close menu"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="border-b border-[var(--border-subtle)] p-3">
+            <OrgSwitcher />
+          </div>
+
+          <div className="p-3">
+            <div className="relative">
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search projects…"
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] pl-9 pr-3 text-sm text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              />
+            </div>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto px-2 pb-4">
+            {workspaceNav.length > 0 && (
+              <div className="mb-2">
+                <p className="nav-section-label">Workspace</p>
+                {workspaceNav.map((item) => (
+                  <PaneLink key={item.href} item={item} pathname={pathname} onNavigate={onMobileClose} />
+                ))}
+              </div>
+            )}
+
+            <div className="mb-2">
+              <p className="nav-section-label">Projects</p>
+              {filteredProjects.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                  {projectSearch ? 'No matching projects' : 'No projects yet'}
+                </p>
+              ) : (
+                filteredProjects.map((project) => (
+                  <PaneLink
+                    key={project._id}
+                    item={{ name: project.name, href: `/projects/${project._id}`, exact: true }}
+                    pathname={pathname}
+                    onNavigate={onMobileClose}
+                    indent
+                  />
+                ))
+              )}
+            </div>
+
+            {orgNav.length > 0 && (
+              <div className="mb-2">
+                <p className="nav-section-label">{currentOrg?.name ?? 'Organization'}</p>
+                {orgNav.map((item) => (
+                  <PaneLink key={item.href} item={item} pathname={pathname} onNavigate={onMobileClose} />
+                ))}
+              </div>
+            )}
+
+            <div>
+              <p className="nav-section-label">Account</p>
+              {accountNav.map((item) => (
+                <PaneLink key={item.href} item={item} pathname={pathname} onNavigate={onMobileClose} />
+              ))}
+            </div>
+          </nav>
         </div>
       )}
 
-      <nav className="flex-1 overflow-y-auto p-3">
-        <NavSection
-          label="Workspace"
-          items={workspaceNav}
-          pathname={pathname}
-          collapsed={collapsed}
-          onNavigate={onMobileClose}
-        />
-        {orgNav.length > 0 && (
-          <NavSection
-            label={currentOrg?.name ?? 'Organization'}
-            items={orgNav}
-            pathname={pathname}
-            collapsed={collapsed}
-            onNavigate={onMobileClose}
-          />
-        )}
-        {projectNav.length > 0 && (
-          <NavSection
-            label="Project"
-            items={projectNav}
-            pathname={pathname}
-            collapsed={collapsed}
-            onNavigate={onMobileClose}
-          />
-        )}
-        <NavSection
-          label="Account"
-          items={accountNav}
-          pathname={pathname}
-          collapsed={collapsed}
-          onNavigate={onMobileClose}
-        />
-      </nav>
-
-      <div className="border-t border-[var(--border)] p-4">
-        {!collapsed && user && (
-          <div className="mb-3 rounded-md bg-[var(--surface-elevated)] p-3">
-            <p className="truncate text-sm font-medium text-[var(--foreground)]">{user.name}</p>
-            <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
-          </div>
-        )}
-        <OrgPanicButton variant="sidebar" collapsed={collapsed} />
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={onLogout}
-          className="w-full"
-          title={collapsed ? 'Logout' : undefined}
-        >
-          {!collapsed ? 'Logout' : (
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          )}
-        </Button>
-      </div>
+      <CreateOrganizationModal isOpen={createOrgOpen} onClose={() => setCreateOrgOpen(false)} />
     </div>
   );
+
+  const sidebarWidth = collapsed && !mobileOpen
+    ? 'var(--sidebar-rail)'
+    : 'calc(var(--sidebar-rail) + var(--sidebar-pane))';
 
   return (
     <>
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          className="fixed inset-0 z-[calc(var(--z-sidebar)-1)] bg-black/60 lg:hidden"
           onClick={onMobileClose}
           aria-label="Close navigation overlay"
         />
       )}
 
       <aside
-        className={`fixed left-0 top-0 z-50 h-full border-r border-[var(--border)] bg-[var(--surface)] transition-all duration-300 ${
-          collapsed ? 'w-16' : 'w-64'
-        } ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+        style={{ width: sidebarWidth }}
+        className={`fixed left-0 top-0 z-[var(--z-sidebar)] h-full border-r border-[var(--border)] transition-[width] duration-[250ms] ease-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
       >
-        {sidebarContent}
+        {sidebarInner}
       </aside>
     </>
   );
+}
+
+export function sidebarOffsetClass(collapsed: boolean): string {
+  return collapsed ? 'lg:ml-[var(--sidebar-rail)]' : 'lg:ml-[calc(var(--sidebar-rail)+var(--sidebar-pane))]';
 }

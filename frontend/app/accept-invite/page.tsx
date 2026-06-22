@@ -100,7 +100,7 @@ function AcceptInviteForm() {
       </div>
 
       <div className="relative w-full max-w-md z-10">
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8">
+        <div className="border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
             <Image src="/hashenv-transparent.svg" alt="HashEnv Logo" width={40} height={40} className="w-10 h-10" />
             <h1 className="text-2xl font-bold text-[var(--accent)]">HashEnv</h1>

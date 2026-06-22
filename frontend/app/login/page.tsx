@@ -173,12 +173,12 @@ function LoginForm() {
                 height={40}
                 className="w-10 h-10"
               />
-              <h1 className="text-2xl font-bold text-[var(--accent)] font-[var(--font-outfit)]">HashEnv</h1>
+              <h1 className="text-2xl font-semibold text-[var(--accent)]">HashEnv</h1>
             </Link>
-            <h2 className="mt-6 text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] font-[var(--font-outfit)]">
+            <h2 className="mt-6 text-2xl font-semibold tracking-tight text-[var(--foreground)]">
               {isLogin ? 'Sign in to your account' : 'Create your account'}
             </h2>
-            <p className="mt-2 text-sm text-[var(--text-muted)] font-[var(--font-inter)]">
+            <p className="mt-2 text-sm text-[var(--text-muted)] font-[var(--font-geist-sans)]">
               {inviteToken
                 ? isLogin
                   ? 'Sign in to accept your organization invitation.'
@@ -199,7 +199,7 @@ function LoginForm() {
             }}></div>
             
             <form 
-              className="relative rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8 sm:p-10 space-y-6 z-10"
+              className="relative border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8 sm:p-10 space-y-6 z-10"
               onSubmit={handleSubmit}
             >
               {/* Corner Accents */}
@@ -213,7 +213,7 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={handleResendVerification}
-                    className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] underline font-[var(--font-inter)]"
+                    className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] underline font-[var(--font-geist-sans)]"
                   >
                     Resend verification email
                   </button>
@@ -223,7 +223,7 @@ function LoginForm() {
               {!isLogin && (
                 <>
                   <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
+                    <label htmlFor="name" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-geist-sans)] mb-2">
                       Name
                     </label>
                     <input
@@ -231,14 +231,14 @@ function LoginForm() {
                       name="name"
                       type="text"
                       required={!isLogin}
-                      className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
+                      className="block h-10 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 transition-colors"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Enter your name"
                     />
                   </div>
                   <div>
-                    <label htmlFor="username" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
+                    <label htmlFor="username" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-geist-sans)] mb-2">
                       Username
                     </label>
                     <input
@@ -249,12 +249,12 @@ function LoginForm() {
                       minLength={3}
                       maxLength={30}
                       pattern="[a-z0-9_]+"
-                      className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
+                      className="block h-10 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 transition-colors"
                       value={username}
                       onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                       placeholder="username (lowercase, numbers, underscores only)"
                     />
-                    <p className="mt-1 text-xs text-[var(--text-muted)] font-[var(--font-inter)]">
+                    <p className="mt-1 text-xs text-[var(--text-muted)] font-[var(--font-geist-sans)]">
                       3-30 characters, lowercase letters, numbers, and underscores only
                     </p>
                   </div>
@@ -262,7 +262,7 @@ function LoginForm() {
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-geist-sans)] mb-2">
                   Email address
                 </label>
                 <input
@@ -271,7 +271,7 @@ function LoginForm() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)] disabled:opacity-70"
+                  className="block h-10 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 transition-colors disabled:opacity-70"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
@@ -282,13 +282,13 @@ function LoginForm() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)]">
+                  <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-geist-sans)]">
                     Password
                   </label>
                   {isLogin && (
                     <Link
                       href="/forgot-password"
-                      className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                      className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-geist-sans)]"
                     >
                       Forgot password?
                     </Link>
@@ -310,7 +310,7 @@ function LoginForm() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="group relative flex w-full justify-center rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 focus:ring-offset-[var(--background)] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-[var(--accent)]/25 font-[var(--font-inter)]"
+                  className="group relative flex h-10 w-full items-center justify-center rounded-[var(--radius-md)] bg-[var(--accent)] px-6 text-sm font-medium text-white hover:bg-[var(--accent-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -332,7 +332,7 @@ function LoginForm() {
                     setShowResendVerification(false);
                     setPassword('');
                   }}
-                  className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                  className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-geist-sans)]"
                 >
                   {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
                 </button>

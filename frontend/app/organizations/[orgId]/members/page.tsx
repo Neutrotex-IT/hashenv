@@ -169,7 +169,7 @@ export default function OrganizationMembersPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl">
+      <div className="w-full">
         <SkeletonCard className="mb-6" />
         <SkeletonCard />
       </div>
@@ -179,7 +179,7 @@ export default function OrganizationMembersPage() {
   if (isPersonalOrg) {
     return (
       <>
-        <div className="max-w-4xl">
+        <div className="w-full">
           {org && (
             <OrgPageHeader
               orgId={orgId}
@@ -188,7 +188,7 @@ export default function OrganizationMembersPage() {
               description="Personal workspaces are for solo use only."
             />
           )}
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <div className="content-section">
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Collaboration unavailable</h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">
               Personal workspaces cannot have additional members or invitations. Create a team organization to
@@ -207,9 +207,11 @@ export default function OrganizationMembersPage() {
     );
   }
 
+  const showInviteColumn = (canInvite && org?.type === 'team') || (canViewInvites && invites.length > 0);
+
   return (
     <>
-      <div className="max-w-4xl">
+      <div className="w-full">
         {org && (
           <OrgPageHeader
             orgId={orgId}
@@ -229,7 +231,7 @@ export default function OrganizationMembersPage() {
         )}
 
         {org?.type === 'team' && !canInvite && (
-          <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
             <p className="text-sm text-[var(--text-muted)]">
               Only organization owners and admins can send invitations. Ask an admin to invite new members by email.
               Once they accept, you can add them to projects from the project members page.
@@ -237,100 +239,105 @@ export default function OrganizationMembersPage() {
           </div>
         )}
 
-        {canInvite && org?.type === 'team' && (
-              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Invite by Email</h2>
-                <form onSubmit={handleInvite} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Email address</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      placeholder="colleague@company.com"
-                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Organization role</label>
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
-                      className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                    >
-                      <option value="member">Member</option>
-                      {(org.role === 'owner' || org.role === 'admin') && <option value="admin">Admin</option>}
-                    </select>
-                  </div>
-                  {role === 'member' && (
+        <div className={`grid gap-8 ${showInviteColumn ? 'lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]' : ''}`}>
+          {showInviteColumn && (
+            <div className="space-y-8">
+              {canInvite && org?.type === 'team' && (
+                <div className="content-section">
+                  <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Invite by Email</h2>
+                  <form onSubmit={handleInvite} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                        Permissions
-                      </label>
-                      <OrgPermissionPicker
-                        grantable={grantablePermissions}
-                        selected={invitePermissions}
-                        onChange={setInvitePermissions}
+                      <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Email address</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="colleague@company.com"
+                        className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                       />
-                      <p className="mt-2 text-xs text-[var(--text-muted)]">
-                        You can only grant permissions you already have. Admins receive all organization permissions automatically.
-                      </p>
                     </div>
-                  )}
-                  <div className="flex justify-end">
-                    <Button variant="primary" size="md" type="submit" disabled={submitting}>
-                      {submitting ? 'Sending...' : 'Send Invitation'}
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {canViewInvites && invites.length > 0 && (
-              <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Pending Invitations</h2>
-                <div className="space-y-3">
-                  {invites.map((invite) => (
-                    <div key={invite.id} className="flex items-center justify-between rounded-md border border-[var(--border)] px-4 py-3">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Organization role</label>
+                      <select
+                        value={role}
+                        onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
+                        className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                      >
+                        <option value="member">Member</option>
+                        {(org.role === 'owner' || org.role === 'admin') && <option value="admin">Admin</option>}
+                      </select>
+                    </div>
+                    {role === 'member' && (
                       <div>
-                        <p className="font-medium text-[var(--foreground)]">{invite.email}</p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          Role: {invite.role}
-                          {invite.permissions && invite.permissions.length > 0 && (
-                            <> · Permissions: {invite.permissions.map((p) => formatOrgPermission(p as OrgPermission)).join(', ')}</>
-                          )}
-                          {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Permissions
+                        </label>
+                        <OrgPermissionPicker
+                          grantable={grantablePermissions}
+                          selected={invitePermissions}
+                          onChange={setInvitePermissions}
+                        />
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">
+                          You can only grant permissions you already have. Admins receive all organization permissions automatically.
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {canInvite && (
-                          <button
-                            onClick={() => handleResendInvite(invite.id)}
-                            disabled={resendingInviteId === invite.id}
-                            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:opacity-50"
-                          >
-                            {resendingInviteId === invite.id ? 'Sending...' : 'Resend'}
-                          </button>
-                        )}
-                        {canRevokeInvites && (
-                          <button
-                            onClick={() => handleRevokeInvite(invite.id)}
-                            className="text-sm text-[var(--error)] hover:text-[#F85149]"
-                          >
-                            Revoke
-                          </button>
-                        )}
-                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <Button variant="primary" size="md" type="submit" disabled={submitting}>
+                        {submitting ? 'Sending...' : 'Send Invitation'}
+                      </Button>
                     </div>
-                  ))}
+                  </form>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Current Members</h2>
-              <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+              {canViewInvites && invites.length > 0 && (
+                <div className="content-section">
+                  <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Pending Invitations</h2>
+                  <div className="space-y-3">
+                    {invites.map((invite) => (
+                      <div key={invite.id} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-b-0">
+                        <div>
+                          <p className="font-medium text-[var(--foreground)]">{invite.email}</p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Role: {invite.role}
+                            {invite.permissions && invite.permissions.length > 0 && (
+                              <> · Permissions: {invite.permissions.map((p) => formatOrgPermission(p as OrgPermission)).join(', ')}</>
+                            )}
+                            {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {canInvite && (
+                            <button
+                              onClick={() => handleResendInvite(invite.id)}
+                              disabled={resendingInviteId === invite.id}
+                              className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] disabled:opacity-50"
+                            >
+                              {resendingInviteId === invite.id ? 'Sending...' : 'Resend'}
+                            </button>
+                          )}
+                          {canRevokeInvites && (
+                            <button
+                              onClick={() => handleRevokeInvite(invite.id)}
+                              className="text-sm text-[var(--error)] hover:text-[#F85149]"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={`content-section min-w-0 ${showInviteColumn ? 'lg:pt-0 lg:border-t-0' : ''}`}>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Current Members</h2>
+            <div className="data-table-wrap">
                 <table className="min-w-full divide-y divide-[var(--border)]">
                   <thead className="bg-[var(--surface-elevated)]">
                     <tr>
@@ -385,6 +392,7 @@ export default function OrganizationMembersPage() {
                 </table>
               </div>
             </div>
+        </div>
       </div>
 
       {editingMember && (

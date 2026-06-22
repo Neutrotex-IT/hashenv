@@ -25,7 +25,7 @@ export function Toast({ message, type, onDismiss, duration = 4000 }: ToastProps)
 
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-3 rounded-lg border px-4 py-3 shadow-lg min-w-[280px] max-w-sm ${styles[type]}`}
+      className={`pointer-events-auto flex min-w-[280px] max-w-sm items-start gap-3 rounded-[var(--radius-md)] border px-4 py-3 ${styles[type]}`}
       role="status"
     >
       <p className="flex-1 text-sm">{message}</p>

@@ -94,12 +94,12 @@ export default function EditEnvPage() {
             </div>
 
             {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="content" className="block text-sm font-medium text-[var(--foreground)] mb-2">
                   Environment File Content

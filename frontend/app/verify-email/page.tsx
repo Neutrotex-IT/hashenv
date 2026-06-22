@@ -55,7 +55,7 @@ function VerifyEmailForm() {
       </div>
 
       <div className="relative w-full max-w-md z-10">
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8 text-center">
+        <div className="border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
             <Image 
               src="/hashenv-transparent.svg" 

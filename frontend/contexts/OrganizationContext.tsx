@@ -18,13 +18,17 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 const CURRENT_ORG_KEY = 'hashenv_current_org';
 
 export function OrganizationProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshOrganizations = useCallback(async () => {
+    if (authLoading) {
+      return;
+    }
+
     if (!isAuthenticated) {
       setOrganizations([]);
       setCurrentOrgState(null);
@@ -61,11 +65,14 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authLoading]);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     refreshOrganizations();
-  }, [refreshOrganizations]);
+  }, [authLoading, refreshOrganizations]);
 
   useEffect(() => {
     setForbiddenHandler(() => {

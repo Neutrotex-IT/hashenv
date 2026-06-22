@@ -19,7 +19,7 @@ export function SettingsNav({ activeId, onSelect }: SettingsNavProps) {
             key={section.id}
             type="button"
             onClick={() => onSelect(section.id)}
-            className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+            className={`w-full rounded-[var(--radius-sm)] px-3 py-2 text-left text-sm font-medium transition-colors ${
               isActive
                 ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                 : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--foreground)]'

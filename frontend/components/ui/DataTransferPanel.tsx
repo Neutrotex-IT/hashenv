@@ -166,27 +166,27 @@ export function DataTransferPanel({
 
   return (
     <>
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 mb-6">
-        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Export / Import</h2>
-        <p className="text-sm text-[var(--text-muted)] mb-6">
+      <div className="content-section">
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Export / Import</h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
           Download all environment files, secrets, and associated accounts as JSON, or import the same
           format to restore data in bulk.
         </p>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
+          <div className="mt-6 mb-4 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
             <p className="text-sm text-[var(--error)]">{error}</p>
           </div>
         )}
 
         {statusMessage && (
-          <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+          <div className="mt-6 mb-4 rounded-[var(--radius-sm)] border border-green-500/30 bg-green-500/10 p-3">
             <p className="text-sm text-green-400">{statusMessage}</p>
           </div>
         )}
 
         {importWarnings.length > 0 && (
-          <div className="mb-4 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-3 max-h-40 overflow-y-auto">
+          <div className="mt-6 mb-4 rounded-[var(--radius-sm)] border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-3 max-h-40 overflow-y-auto">
             <p className="text-sm font-medium text-[var(--warning)] mb-2">Import warnings</p>
             <ul className="text-sm text-[var(--text-secondary)] space-y-1 list-disc list-inside">
               {importWarnings.map((warning) => (
@@ -196,9 +196,11 @@ export function DataTransferPanel({
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div
+          className={`mt-6 grid gap-6 ${canExport && canImport ? 'sm:grid-cols-2' : ''}`}
+        >
           {canExport && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+            <div className="min-w-0">
               <h3 className="text-sm font-medium text-[var(--foreground)] mb-1">Export</h3>
               <p className="text-sm text-[var(--text-muted)] mb-4">
                 Download a JSON backup of all data you can access in this {scope}.
@@ -210,7 +212,9 @@ export function DataTransferPanel({
           )}
 
           {canImport && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+            <div
+              className={`min-w-0 ${canExport ? 'sm:border-l sm:border-[var(--border)] sm:pl-8' : ''}`}
+            >
               <h3 className="text-sm font-medium text-[var(--foreground)] mb-1">Import</h3>
               <p className="text-sm text-[var(--text-muted)] mb-4">
                 Restore data from a HashEnv JSON export. You can review options before importing.
@@ -232,7 +236,7 @@ export function DataTransferPanel({
             }}
           />
           <div
-            className="relative w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+            className="relative w-full max-w-lg card p-6 shadow-xl"
             role="dialog"
             aria-labelledby="import-dialog-title"
             aria-describedby="import-dialog-description"
@@ -272,7 +276,7 @@ export function DataTransferPanel({
                 )}
               </div>
 
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+              <div className="border-t border-[var(--border)] pt-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"

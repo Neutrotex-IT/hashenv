@@ -130,7 +130,7 @@ export default function SettingsPage() {
     return (
       <ProtectedRoute>
         <AuthenticatedLayout>
-          <div className="mx-auto max-w-6xl p-6 lg:p-8">
+        <div className="w-full">
             <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
             <SkeletonCard className="mb-6" />
             <SkeletonCard />
@@ -143,7 +143,7 @@ export default function SettingsPage() {
   return (
     <ProtectedRoute>
       <AuthenticatedLayout>
-        <div className="mx-auto max-w-6xl p-6 lg:p-8">
+        <div className="w-full">
           <PageHeader
             title="Account settings"
             description="Profile and automation settings for your account."
@@ -160,7 +160,7 @@ export default function SettingsPage() {
 
             <div className="min-w-0 space-y-8">
               {activeSection === 'profile' && (
-                <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <section>
                   <h2 className="text-lg font-semibold text-[var(--foreground)]">Profile</h2>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
                     Your public name and username across HashEnv.
@@ -226,7 +226,7 @@ export default function SettingsPage() {
               )}
 
               {activeSection === 'auto-flush' && (
-                <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <section>
                   <h2 className="text-lg font-semibold text-[var(--foreground)]">
                     Auto-flush environment files
                   </h2>

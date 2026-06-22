@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { projectsAPI, envAPI, environmentsAPI } from '@/lib/api';
+import { projectsAPI, envAPI } from '@/lib/api';
 import { canReadProject } from '@/lib/permissions';
 import { formatEnvLabel } from '@/lib/environments';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { useToast } from '@/contexts/ToastContext';
+import { useProject, useProjectPermissions } from '@/hooks/queries/useProject';
+import { useProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
 
 interface ActivityEntry {
   _id: string;
@@ -50,27 +52,19 @@ function formatActivityLabel(entry: ActivityEntry): string {
 export default function ProjectActivityPage() {
   const params = useParams();
   const projectId = params.id as string;
+  const { data: project } = useProject(projectId);
+  const { data: permissions } = useProjectPermissions(projectId);
+  const { data: environments = [] } = useProjectEnvironments(projectId);
   const [logs, setLogs] = useState<ActivityEntry[]>([]);
-  const [projectName, setProjectName] = useState('');
-  const [envSlugs, setEnvSlugs] = useState<string[]>([]);
   const [selectedEnv, setSelectedEnv] = useState<string>('all');
   const [selectedResource, setSelectedResource] = useState<string>('all');
   const [loading, setLoading] = useState(true);
-  const [canRead, setCanRead] = useState(false);
   const { error: toastError } = useToast();
 
-  useEffect(() => {
-    projectsAPI.get(projectId).then((p) => setProjectName(p.name)).catch(() => {});
-    projectsAPI
-      .getPermissions(projectId)
-      .then((permissions) => setCanRead(canReadProject(permissions.effective)))
-      .catch(() => setCanRead(false));
-    environmentsAPI.list(projectId).then((envs) => {
-      setEnvSlugs(envs.map((e) => e.slug));
-    }).catch(() => {
-      setEnvSlugs(['dev', 'staging', 'prod']);
-    });
-  }, [projectId]);
+  const projectName = project?.name ?? '';
+  const canRead = permissions ? canReadProject(permissions.effective) : false;
+  const envSlugs =
+    environments.length > 0 ? environments.map((e) => e.slug) : ['dev', 'staging', 'prod'];
 
   useEffect(() => {
     loadLogs();
@@ -182,11 +176,11 @@ export default function ProjectActivityPage() {
           {loading ? (
             <SkeletonCard />
           ) : logs.length === 0 ? (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+            <div className="empty-state">
               <p className="text-[var(--text-secondary)]">No activity recorded yet.</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+            <div className="data-table-wrap">
               <table className="min-w-full divide-y divide-[var(--border)]">
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>

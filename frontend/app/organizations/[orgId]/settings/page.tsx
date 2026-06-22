@@ -84,14 +84,14 @@ export default function OrganizationSettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl">
+      <div className="w-full">
         <SkeletonCard />
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="w-full">
       {org && (
         <OrgPageHeader
           orgId={orgId}
@@ -120,11 +120,14 @@ export default function OrganizationSettingsPage() {
       )}
 
       {canUpdate ? (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-          <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <section className="content-section">
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">General</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Update the display name for this organization.
+          </p>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
                 Organization name
               </label>
               <input
@@ -144,7 +147,7 @@ export default function OrganizationSettingsPage() {
                 Slug: <code className="font-mono">{org.slug}</code> (cannot be changed)
               </p>
             )}
-            <div className="flex justify-end pt-2">
+            <div className="border-t border-[var(--border)] pt-4">
               <Button
                 variant="primary"
                 size="md"
@@ -155,7 +158,7 @@ export default function OrganizationSettingsPage() {
               </Button>
             </div>
           </form>
-        </div>
+        </section>
       ) : null}
     </div>
   );

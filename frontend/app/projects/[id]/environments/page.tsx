@@ -1,48 +1,38 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { environmentsAPI, projectsAPI, ProjectEnvironment } from '@/lib/api';
 import { ManageEnvironmentsPanel } from '@/components/ui/ManageEnvironmentsPanel';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { canWriteProject } from '@/lib/permissions';
+import { useProject, useProjectPermissions } from '@/hooks/queries/useProject';
+import {
+  useProjectEnvironments,
+  useInvalidateProjectEnvironments,
+} from '@/hooks/queries/useProjectEnvironments';
 
 export default function ProjectEnvironmentsPage() {
   const params = useParams();
   const projectId = params.id as string;
+  const invalidateEnvironments = useInvalidateProjectEnvironments();
 
-  const [project, setProject] = useState<{ name: string } | null>(null);
-  const [environments, setEnvironments] = useState<ProjectEnvironment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [canWrite, setCanWrite] = useState(false);
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
+  const { data: permissions, isLoading: permissionsLoading } = useProjectPermissions(projectId);
+  const {
+    data: environments = [],
+    isLoading: envLoading,
+    error: queryError,
+  } = useProjectEnvironments(projectId);
 
-  const load = async () => {
-    try {
-      const [projectData, envData, permissions] = await Promise.all([
-        projectsAPI.get(projectId),
-        environmentsAPI.list(projectId),
-        projectsAPI.getPermissions(projectId),
-      ]);
-      setProject(projectData);
-      setEnvironments(envData);
-      setCanWrite(canWriteProject(permissions.effective));
-      setError('');
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || 'Failed to load environments');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, [projectId]);
+  const loading = projectLoading || permissionsLoading || envLoading;
+  const canWrite = permissions ? canWriteProject(permissions.effective) : false;
+  const error = queryError
+    ? (queryError as { response?: { data?: { error?: string } } }).response?.data?.error ||
+      'Failed to load environments'
+    : '';
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full">
       {project && (
         <ProjectPageHeader
           projectId={projectId}
@@ -55,7 +45,7 @@ export default function ProjectEnvironmentsPage() {
       {loading ? (
         <SkeletonCard />
       ) : error ? (
-        <div className="rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+        <div className="rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
           <p className="text-sm text-[var(--error)]">{error}</p>
         </div>
       ) : (
@@ -63,7 +53,7 @@ export default function ProjectEnvironmentsPage() {
           projectId={projectId}
           environments={environments}
           canWrite={canWrite}
-          onChanged={load}
+          onChanged={() => invalidateEnvironments(projectId)}
         />
       )}
     </div>

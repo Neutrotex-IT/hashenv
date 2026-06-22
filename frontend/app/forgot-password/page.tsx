@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
             }}></div>
             
             <form 
-              className="relative rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8 sm:p-10 space-y-6 z-10"
+              className="relative border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8 sm:p-10 space-y-6 z-10"
               onSubmit={handleSubmit}
             >
               {/* Corner Accents */}

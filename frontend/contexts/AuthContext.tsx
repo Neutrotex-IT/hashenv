@@ -13,6 +13,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  /** True after session bootstrap completes (authenticated or confirmed unauthenticated). */
+  sessionReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, username: string, email: string, password: string, inviteToken?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -74,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
+        sessionReady: !loading,
         login,
         register,
         logout,

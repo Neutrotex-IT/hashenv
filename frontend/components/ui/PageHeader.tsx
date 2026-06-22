@@ -19,10 +19,10 @@ export function PageHeader({
   actions,
 }: PageHeaderProps) {
   return (
-    <header className="mb-8 border-b border-[var(--border)] pb-6">
+    <header className="mb-6 border-b border-[var(--border)] pb-5">
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav aria-label="Breadcrumb" className="mb-3">
-          <ol className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--text-muted)]">
+        <nav aria-label="Breadcrumb" className="mb-2">
+          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-muted)]">
             {breadcrumbs.map((crumb, index) => {
               const isLast = index === breadcrumbs.length - 1;
               return (
@@ -35,7 +35,7 @@ export function PageHeader({
                   {crumb.href && !isLast ? (
                     <Link
                       href={crumb.href}
-                      className="hover:text-[var(--accent)] transition-colors"
+                      className="transition-colors hover:text-[var(--accent)]"
                     >
                       {crumb.label}
                     </Link>
@@ -53,7 +53,7 @@ export function PageHeader({
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)] sm:text-3xl text-balance">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)] text-balance">
             {title}
           </h1>
           {description && (

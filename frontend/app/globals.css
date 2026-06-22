@@ -1,143 +1,83 @@
 @import "tailwindcss";
 
 :root {
-  /* Dark theme colors based on design */
-  --background: #0D1117;
-  --foreground: #E6EDF3;
-  --surface: #161B22;
-  --surface-elevated: #21262D;
-  --surface-hover: #1C2128;
-  --border: #30363D;
-  --accent: #58A6FF;
-  --accent-hover: #79C0FF;
-  --text-muted: #8B949E;
-  --text-secondary: #C9D1D9;
-  --success: #238636;
-  --warning: #9E6A03;
-  --error: #DA3633;
+  --background: #121212;
+  --foreground: #ffffff;
+  --surface: #1a1a1a;
+  --surface-elevated: #1e1e1e;
+  --surface-hover: #252525;
+  --border: #2e2e32;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --accent: #4c6fff;
+  --accent-hover: #6380ff;
+  --accent-muted: rgba(76, 111, 255, 0.12);
+  --text-muted: #8a8a8e;
+  --text-secondary: #c8c8cc;
+  --success: #34c759;
+  --warning: #ff9f0a;
+  --error: #ff453a;
+  --notification: #ff3b30;
+
+  --tag-dev-bg: rgba(76, 111, 255, 0.15);
+  --tag-dev-text: #6b8aff;
+  --tag-staging-bg: rgba(255, 159, 10, 0.15);
+  --tag-staging-text: #ffb340;
+  --tag-prod-bg: rgba(52, 199, 89, 0.15);
+  --tag-prod-text: #4cd964;
+  --tag-neutral-bg: rgba(138, 138, 142, 0.15);
+  --tag-neutral-text: #a0a0a5;
+
+  --sidebar-rail: 3.5rem;
+  --sidebar-pane: 15rem;
+  --topbar-height: 3.5rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+
+  --z-dropdown: 40;
+  --z-sticky: 30;
+  --z-sidebar: 50;
+  --z-modal-backdrop: 60;
+  --z-modal: 70;
+  --z-toast: 80;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-outfit);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom scrollbar for dark theme */
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
-/* Cryptographic artifacts animation */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.delay-300 {
-  animation-delay: 300ms;
-}
-
-.delay-500 {
-  animation-delay: 500ms;
-}
-
-.delay-700 {
-  animation-delay: 700ms;
-}
-
-.delay-1000 {
-  animation-delay: 1000ms;
-}
-
-/* Glitch effect animations */
-@keyframes glitch {
-  0% {
-    transform: translate(0);
-    opacity: 1;
-  }
-  10% {
-    transform: translate(-1px, 0);
-    opacity: 0.9;
-  }
-  20% {
-    transform: translate(1px, 1px);
-    opacity: 0.95;
-  }
-  30% {
-    transform: translate(-1px, -1px);
-    opacity: 0.9;
-  }
-  40% {
-    transform: translate(1px, 0);
-    opacity: 0.95;
-  }
-  50% {
-    transform: translate(0, 1px);
-    opacity: 1;
-  }
-  60% {
-    transform: translate(-1px, 0);
-    opacity: 0.9;
-  }
-  70% {
-    transform: translate(1px, -1px);
-    opacity: 0.95;
-  }
-  80% {
-    transform: translate(0, 0);
-    opacity: 1;
-  }
-  90% {
-    transform: translate(-1px, 1px);
-    opacity: 0.9;
-  }
-  100% {
-    transform: translate(0);
-    opacity: 1;
-  }
-}
-
-@keyframes glitch-flicker {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-/* Skeleton loader animations */
+/* Skeleton */
 @keyframes skeleton-wave {
   0% {
     background-position: -200px 0;
@@ -151,9 +91,171 @@ body {
   background: linear-gradient(
     90deg,
     var(--surface-elevated) 0px,
-    var(--surface) 40px,
+    var(--surface-hover) 40px,
     var(--surface-elevated) 80px
   );
   background-size: 200px 100%;
   animation: skeleton-wave 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Modal / dialog surfaces + dashboard project panels */
+.card,
+.panel {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.panel {
+  transition: border-color 180ms ease-out;
+}
+
+.panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+/* Stacked page sections — dividers instead of card boxes */
+.content-section {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.content-section:first-child {
+  padding-top: 0;
+}
+
+.content-section + .content-section {
+  border-top: 1px solid var(--border);
+}
+
+/* Bordered table container */
+.data-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Inline tab / segment control */
+.segmented-control {
+  display: inline-flex;
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+}
+
+/* Empty states — no card shell */
+.empty-state {
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+/* Collapsible disclosure blocks */
+.disclosure {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Vertical list with dividers */
+.list-divider > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* Skeleton placeholders */
+.skeleton-card {
+  background: var(--surface-elevated);
+  border-radius: var(--radius-md);
+}
+
+.skeleton-row {
+  padding: 1.25rem 0;
+}
+
+/* Dropdown menus */
+.dropdown-menu {
+  background: var(--surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.dropdown-header {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.875rem 1rem;
+}
+
+.dropdown-section {
+  padding: 0.375rem;
+}
+
+.dropdown-divider {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dropdown-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: background-color 180ms ease-out, color 180ms ease-out;
+}
+
+.dropdown-item:hover {
+  background: var(--surface-elevated);
+  color: var(--foreground);
+}
+
+.dropdown-item--active {
+  background: var(--accent-muted);
+  color: var(--foreground);
+}
+
+.dropdown-item--danger {
+  color: var(--error);
+}
+
+.dropdown-item--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+}
+
+.dropdown-item--stacked p + p {
+  margin-top: 0;
+}
+
+/* Utility: section label in sidebar */
+.nav-section-label {
+  padding: 0.75rem 0.75rem 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Tab underline animation */
+.tab-active-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--foreground);
+  border-radius: 1px;
 }

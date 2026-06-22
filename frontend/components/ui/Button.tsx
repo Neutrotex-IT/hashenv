@@ -19,24 +19,30 @@ export function Button({
   onClick,
   ...props
 }: ButtonProps) {
-  const baseStyles = 'inline-flex items-center justify-center font-medium rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--background)] disabled:opacity-50 disabled:cursor-not-allowed';
-  
+  const baseStyles =
+    'inline-flex items-center justify-center font-medium rounded-[var(--radius-md)] transition-colors duration-180 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:opacity-50 disabled:cursor-not-allowed';
+
   const variants = {
-    primary: 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] hover:shadow-lg hover:shadow-[var(--accent)]/25 focus:ring-[var(--accent)]',
-    secondary: 'bg-[var(--surface-elevated)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface)] hover:border-[var(--accent)]/50 focus:ring-[var(--accent)]',
-    outline: 'bg-transparent text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--surface)] hover:border-[var(--accent)] focus:ring-[var(--accent)]',
-    danger: 'bg-[var(--error)] text-white hover:bg-[#F85149] hover:shadow-lg hover:shadow-[var(--error)]/25 focus:ring-[var(--error)]',
-    ghost: 'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--foreground)] focus:ring-[var(--accent)]',
+    primary:
+      'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] focus:ring-[var(--accent)]',
+    secondary:
+      'bg-[var(--surface-hover)] text-[var(--foreground)] border border-[var(--border)] hover:border-[var(--text-muted)] focus:ring-[var(--accent)]',
+    outline:
+      'bg-transparent text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] focus:ring-[var(--accent)]',
+    danger:
+      'bg-[var(--error)] text-white hover:opacity-90 focus:ring-[var(--error)]',
+    ghost:
+      'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] focus:ring-[var(--accent)]',
   };
-  
+
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-6 py-3 text-base',
+    sm: 'h-8 px-3 text-xs',
+    md: 'h-9 px-4 text-sm',
+    lg: 'h-10 px-5 text-sm',
   };
-  
+
   const classes = `${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`;
-  
+
   if (asLink && href) {
     return (
       <Link href={href} className={classes}>
@@ -44,7 +50,7 @@ export function Button({
       </Link>
     );
   }
-  
+
   return (
     <button className={classes} onClick={onClick} {...props}>
       {children}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useOrgPanic } from '@/contexts/OrgPanicContext';
 
 interface OrgPanicButtonProps {
@@ -8,7 +9,11 @@ interface OrgPanicButtonProps {
 }
 
 export function OrgPanicButton({ variant = 'fab', collapsed = false }: OrgPanicButtonProps) {
-  const { visible, loading, execute, eligibleProjectCount, orgName } = useOrgPanic();
+  const { visible, loading, execute, eligibleProjectCount, orgName, requestProbe } = useOrgPanic();
+
+  useEffect(() => {
+    requestProbe();
+  }, [requestProbe]);
 
   if (!visible) {
     return null;
@@ -22,7 +27,7 @@ export function OrgPanicButton({ variant = 'fab', collapsed = false }: OrgPanicB
         disabled={loading}
         title={`Panic button (${eligibleProjectCount} eligible projects)`}
         aria-label="Execute panic actions"
-        className="ml-auto rounded-full bg-[var(--error)] p-2 text-white transition-colors hover:bg-[#F85149] disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-[var(--radius-md)] bg-[var(--error)] p-2 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path

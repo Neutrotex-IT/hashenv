@@ -137,7 +137,7 @@ export function OrgMemberSelect({
           onFocus={() => setShowDropdown(true)}
           placeholder={loading ? 'Loading members...' : placeholder}
           disabled={loading}
-          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-10 pr-10 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:opacity-60"
+          className="block h-10 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-3 pl-10 pr-10 text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 disabled:opacity-60"
         />
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
           <svg className="h-5 w-5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +160,7 @@ export function OrgMemberSelect({
       {showDropdown && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+          className="dropdown-menu absolute z-[var(--z-dropdown)] mt-1 max-h-60 w-full overflow-auto"
         >
           {loading ? (
             <div className="px-4 py-3 text-sm text-[var(--text-muted)]">Loading members...</div>
@@ -171,15 +171,13 @@ export function OrgMemberSelect({
                 : 'No matching members found.'}
             </div>
           ) : (
-            <ul className="py-1">
+            <ul className="dropdown-section py-1">
               {availableMembers.map((member, index) => (
                 <li
                   key={member.id}
                   onClick={() => handleSelectMember(member)}
-                  className={`cursor-pointer px-4 py-2 text-sm transition-colors ${
-                    index === selectedIndex
-                      ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                      : 'text-[var(--foreground)] hover:bg-[var(--surface-elevated)]'
+                  className={`dropdown-item dropdown-item--stacked cursor-pointer ${
+                    index === selectedIndex ? 'dropdown-item--active' : ''
                   }`}
                 >
                   <p className="font-medium">{member.user.name}</p>

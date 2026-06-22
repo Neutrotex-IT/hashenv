@@ -8,7 +8,7 @@ export function CodeEditor({ compact = false }: CodeEditorProps) {
   if (compact) {
     // Compact version for hero section
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden shadow-xl">
+      <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] shadow-xl">
         {/* Editor Header */}
         <div className="flex items-center justify-between bg-[var(--surface-elevated)] border-b border-[var(--border)] px-4 py-2">
           <div className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export function CodeEditor({ compact = false }: CodeEditorProps) {
 
   // Full version
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden shadow-xl">
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] shadow-xl">
       {/* Editor Header/Tabs */}
       <div className="flex items-center justify-between bg-[var(--surface-elevated)] border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center gap-2">

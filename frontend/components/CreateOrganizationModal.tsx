@@ -122,7 +122,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-org-title"
-        className="relative w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+        className="relative w-full max-w-md card p-6 shadow-xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="create-org-title" className="text-lg font-semibold text-[var(--foreground)]">
@@ -145,7 +145,7 @@ export function CreateOrganizationModal({ isOpen, onClose }: CreateOrganizationM
         </p>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
+          <div className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
             <p className="text-sm text-[var(--error)]">{error}</p>
           </div>
         )}

@@ -95,7 +95,7 @@ export function OrgPanicSettingsPanel({
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-[var(--error)]/30 bg-[var(--surface)] p-6 mb-6 animate-pulse">
+      <div className="mb-6 animate-pulse py-6">
         <div className="h-6 w-40 rounded bg-[var(--surface-elevated)]" />
         <div className="mt-4 h-24 rounded bg-[var(--surface-elevated)]" />
       </div>
@@ -109,7 +109,7 @@ export function OrgPanicSettingsPanel({
   const enabledActions = describeEnabledActions(panicButton);
 
   return (
-    <section className="rounded-lg border border-[var(--error)]/30 bg-[var(--surface)] p-6 mb-6">
+    <section className="content-section border-t border-[var(--error)]/30">
       <h2 className="text-lg font-semibold text-[var(--foreground)]">Panic button</h2>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
         Configure what runs when someone triggers the panic button for {orgName}. Actions only

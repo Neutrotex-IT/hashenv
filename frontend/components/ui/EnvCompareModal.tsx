@@ -80,7 +80,7 @@ export function EnvCompareModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
       <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-xl flex flex-col"
+        className="w-full max-w-3xl max-h-[90vh] card overflow-hidden shadow-xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">

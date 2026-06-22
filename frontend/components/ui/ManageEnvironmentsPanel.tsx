@@ -105,12 +105,12 @@ export function ManageEnvironmentsPanel({
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
+        <div className="rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
           <p className="text-sm text-[var(--error)]">{error}</p>
         </div>
       )}
 
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+      <div className="data-table-wrap">
         <table className="min-w-full divide-y divide-[var(--border)]">
           <thead className="bg-[var(--surface-elevated)]">
             <tr>
@@ -194,7 +194,7 @@ export function ManageEnvironmentsPanel({
       </div>
 
       {canWrite && (
-        <form onSubmit={handleAdd} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+        <form onSubmit={handleAdd} className="content-section">
           <h3 className="text-sm font-medium text-[var(--foreground)] mb-2">Add environment</h3>
           <p className="text-xs text-[var(--text-muted)] mb-3">
             Lowercase slug, 2–32 characters (e.g. qa, preview, uat).

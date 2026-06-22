@@ -11,55 +11,40 @@ import { DataTransferPanel } from '@/components/ui/DataTransferPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
-
-interface Project {
-  _id: string;
-  name: string;
-  createdBy: { _id: string };
-}
+import { useProject, useProjectPermissions, useInvalidateProject } from '@/hooks/queries/useProject';
+import { useInvalidateProjects } from '@/hooks/queries/useProjects';
+import { useOrganization } from '@/contexts/OrganizationContext';
 
 export default function ProjectSettingsPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { currentOrg } = useOrganization();
   const projectId = params.id as string;
   const { confirm } = useConfirm();
   const { success: toastSuccess, error: toastError } = useToast();
+  const invalidateProject = useInvalidateProject();
+  const invalidateProjects = useInvalidateProjects();
 
-  const [project, setProject] = useState<Project | null>(null);
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
+  const { data: permissions, isLoading: permissionsLoading } = useProjectPermissions(projectId);
+
   const [name, setName] = useState('');
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [canExport, setCanExport] = useState(false);
-  const [canImport, setCanImport] = useState(false);
-  const [canWrite, setCanWrite] = useState(false);
-
-  const isOwner = project?.createdBy._id === user?.id;
 
   useEffect(() => {
-    loadProject();
-  }, [projectId]);
-
-  const loadProject = async () => {
-    try {
-      const [data, permissions] = await Promise.all([
-        projectsAPI.get(projectId),
-        projectsAPI.getPermissions(projectId),
-      ]);
-      setProject(data);
-      setName(data.name);
-      setCanExport(canExportProject(permissions.effective));
-      setCanImport(permissions.effective.includes('project:write'));
-      setCanWrite(canWriteProject(permissions.effective));
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string }; status?: number } };
-      toastError(axiosErr.response?.data?.error || 'Failed to load project');
-    } finally {
-      setLoading(false);
+    if (project?.name) {
+      setName(project.name);
     }
-  };
+  }, [project?.name]);
+
+  const loading = projectLoading || permissionsLoading;
+  const canExport = permissions ? canExportProject(permissions.effective) : false;
+  const canImport = permissions?.effective.includes('project:write') ?? false;
+  const canWrite = permissions ? canWriteProject(permissions.effective) : false;
+  const isOwner = project?.createdBy._id === user?.id;
 
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +52,9 @@ export default function ProjectSettingsPage() {
     setSaving(true);
     try {
       const updated = await projectsAPI.update(projectId, { name: name.trim() });
-      setProject((prev) => (prev ? { ...prev, name: updated.name } : prev));
+      invalidateProject(projectId);
+      invalidateProjects(currentOrg?._id);
+      setName(updated.name);
       toastSuccess('Project renamed successfully');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -90,6 +77,7 @@ export default function ProjectSettingsPage() {
     setDeleting(true);
     try {
       await projectsAPI.delete(projectId);
+      invalidateProjects(currentOrg?._id);
       toastSuccess('Project deleted');
       router.push('/dashboard');
     } catch (err: unknown) {
@@ -119,58 +107,70 @@ export default function ProjectSettingsPage() {
         />
       )}
 
-          {(canExport || canImport) && (
-          <DataTransferPanel
-            scope="project"
-            projectId={projectId}
-            canExport={canExport}
-            canImport={canImport}
-            resourceName={project?.name || 'project'}
-          />
-          )}
+      {(canExport || canImport) && (
+        <DataTransferPanel
+          scope="project"
+          projectId={projectId}
+          canExport={canExport}
+          canImport={canImport}
+          resourceName={project?.name || 'project'}
+        />
+      )}
 
-          {canWrite && (
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 mb-6">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">General</h2>
-            <form onSubmit={handleRename} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Project name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  maxLength={100}
-                  className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="primary"
-                  size="md"
-                  type="submit"
-                  disabled={saving || !name.trim() || name.trim() === project?.name}
-                >
-                  {saving ? 'Saving...' : 'Save changes'}
-                </Button>
-              </div>
-            </form>
-          </div>
-          )}
+      {canWrite && (
+        <section className="content-section">
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">General</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Update the display name for this project.
+          </p>
+          <form onSubmit={handleRename} className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                Project name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
+                className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+            </div>
+            <div className="border-t border-[var(--border)] pt-4">
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={saving || !name.trim() || name.trim() === project?.name}
+              >
+                {saving ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
 
-          {isOwner && (
-            <div className="rounded-lg border border-[var(--error)]/40 bg-[var(--error)]/5 p-6">
-              <h2 className="text-lg font-semibold text-[var(--error)] mb-2">Danger zone</h2>
-              <p className="text-sm text-[var(--text-secondary)] mb-4">
-                Deleting this project removes all data permanently. Type the project name to confirm.
-              </p>
+      {isOwner && (
+        <section className="content-section border-t border-[var(--error)]/30">
+          <h2 className="text-lg font-semibold text-[var(--error)]">Danger zone</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Deleting this project removes all data permanently. Type the project name to confirm.
+          </p>
+          <div className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                Confirm project name
+              </label>
               <input
                 type="text"
                 value={deleteConfirmName}
                 onChange={(e) => setDeleteConfirmName(e.target.value)}
                 placeholder={project?.name}
-                className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm mb-4"
+                className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
               />
+            </div>
+            <div className="border-t border-[var(--error)]/20 pt-4">
               <Button
                 variant="outline"
                 size="md"
@@ -181,7 +181,9 @@ export default function ProjectSettingsPage() {
                 {deleting ? 'Deleting...' : 'Delete project'}
               </Button>
             </div>
-          )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

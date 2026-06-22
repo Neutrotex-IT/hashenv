@@ -108,7 +108,7 @@ export function SensitiveValueModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
-        className={`relative w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl ${
+        className={`relative w-full card p-6 shadow-xl ${
           isWide ? 'max-w-3xl' : 'max-w-lg'
         }`}
       >
@@ -130,7 +130,7 @@ export function SensitiveValueModal({
         )}
 
         {error && (
-          <div className="mb-4 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
+          <div className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
             <p className="text-sm text-[var(--error)]">{error}</p>
           </div>
         )}

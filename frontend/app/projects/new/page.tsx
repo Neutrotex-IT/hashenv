@@ -11,6 +11,7 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { CreateOrganizationModal } from '@/components/CreateOrganizationModal';
 import { canCreateProject, OrgPermission } from '@/lib/permissions';
+import { useInvalidateProjects } from '@/hooks/queries/useProjects';
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function NewProjectPage() {
   const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const invalidateProjects = useInvalidateProjects();
 
   useEffect(() => {
     if (currentOrg?._id) {
@@ -54,6 +56,7 @@ export default function NewProjectPage() {
 
     try {
       const project = await projectsAPI.create({ name, organizationId: orgId });
+      invalidateProjects(orgId);
       router.push(`/projects/${project._id}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create project');
@@ -79,20 +82,20 @@ export default function NewProjectPage() {
             </div>
 
             {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
             )}
 
             {!canCreateInSelectedOrg && selectedOrg && (
-              <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
                 <p className="text-sm text-[var(--text-secondary)]">
                   You do not have permission to create projects in {selectedOrg.name}. Contact an organization admin if you need access.
                 </p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="org" className="block text-sm font-medium text-[var(--foreground)] mb-2">
                   Organization

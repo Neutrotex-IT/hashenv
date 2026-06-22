@@ -6,9 +6,7 @@ import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 export default function OrganizationLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="mx-auto max-w-6xl p-6 lg:p-8">{children}</div>
-      </AuthenticatedLayout>
+      <AuthenticatedLayout>{children}</AuthenticatedLayout>
     </ProtectedRoute>
   );
 }

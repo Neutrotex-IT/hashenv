@@ -5,10 +5,9 @@ export function arraysEqual<T>(a: readonly T[], b: readonly T[]): boolean {
   return sortedA.every((value, index) => value === sortedB[index]);
 }
 
-export function shallowRecordEqual<T extends Record<string, boolean | number | string | null>>(
-  a: T,
-  b: T
-): boolean {
-  const keys = Object.keys(a) as (keyof T)[];
-  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+export function shallowRecordEqual<T extends object>(a: T, b: T): boolean {
+  const keysA = Object.keys(a) as (keyof T)[];
+  const keysB = Object.keys(b) as (keyof T)[];
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => a[key] === b[key]);
 }

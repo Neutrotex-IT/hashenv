@@ -63,7 +63,7 @@ export function EffectivePermissionsPanel({
   const missing = allPermissions.filter((p) => !effectiveSet.has(p));
 
   return (
-    <div className={`rounded-lg border border-[var(--border)] bg-[var(--surface)] ${className}`}>
+    <div className={`disclosure ${className}`}>
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}

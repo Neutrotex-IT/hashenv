@@ -41,14 +41,14 @@ function PermissionPicker<T extends string>({
 
   if (grantable.length === 0) {
     return (
-      <p className="text-sm text-[var(--text-muted)] rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+      <p className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-hover)] p-3 text-sm text-[var(--text-muted)]">
         No permissions available to assign.
       </p>
     );
   }
 
   return (
-    <div className="space-y-2 rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+    <div className="space-y-2 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-hover)] p-3">
       {(Object.keys(catalog) as T[])
         .filter((permission) => grantable.includes(permission))
         .map((permission) => {

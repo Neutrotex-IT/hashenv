@@ -1,38 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { envAPI, environmentsAPI } from '@/lib/api';
+import { envAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
 import { Button } from '@/components/ui/Button';
+import { useProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
 
 export default function UploadEnvPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = params.id as string;
+  const { data: environments = [] } = useProjectEnvironments(projectId);
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState('');
   const [uploadMethod, setUploadMethod] = useState<'file' | 'text'>('file');
-  const [environment, setEnvironment] = useState(searchParams.get('environment') || 'dev');
-  const [envOptions, setEnvOptions] = useState<string[]>(['dev', 'staging', 'prod']);
+  const envOptions = useMemo(
+    () => (environments.length > 0 ? environments.map((e) => e.slug) : ['dev', 'staging', 'prod']),
+    [environments]
+  );
+  const envParam = searchParams.get('environment');
+  const [environment, setEnvironment] = useState('dev');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    environmentsAPI.list(projectId).then((envs) => {
-      const slugs = envs.map((e) => e.slug);
-      if (slugs.length > 0) {
-        setEnvOptions(slugs);
-        const envParam = searchParams.get('environment');
-        if (envParam && slugs.includes(envParam)) {
-          setEnvironment(envParam);
-        } else if (!slugs.includes(environment)) {
-          setEnvironment(slugs[0]);
-        }
-      }
-    }).catch(() => {});
-  }, [projectId, searchParams]);
+    if (envParam && envOptions.includes(envParam)) {
+      setEnvironment(envParam);
+    } else {
+      setEnvironment((current) => (envOptions.includes(current) ? current : envOptions[0] ?? 'dev'));
+    }
+  }, [envParam, envOptions]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -90,12 +89,12 @@ export default function UploadEnvPage() {
             </div>
 
             {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="environment" className="block text-sm font-medium text-[var(--foreground)] mb-2">
                   Environment

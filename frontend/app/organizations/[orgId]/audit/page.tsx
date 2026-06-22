@@ -98,7 +98,7 @@ export default function OrganizationAuditPage() {
       )}
 
       {error && (
-        <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+        <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
           <p className="text-sm text-[var(--error)]">{error}</p>
           {forbidden && !canAudit && (
             <p className="mt-2 text-xs text-[var(--text-muted)]">
@@ -109,7 +109,7 @@ export default function OrganizationAuditPage() {
       )}
 
       {!forbidden && logs.length >= MAX_LOGS && (
-        <div className="mb-4 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-3">
+        <div className="mb-4 rounded-[var(--radius-sm)] border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-3">
           <p className="text-sm text-[var(--warning)]">
             Showing the most recent {MAX_LOGS} entries. Older events are not displayed.
           </p>
@@ -117,7 +117,7 @@ export default function OrganizationAuditPage() {
       )}
 
       {!forbidden && logs.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+        <div className="data-table-wrap">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-[var(--border)]">
               <thead className="bg-[var(--surface-elevated)]">
@@ -151,7 +151,7 @@ export default function OrganizationAuditPage() {
           </div>
         </div>
       ) : !forbidden && !error ? (
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+        <div className="empty-state">
           <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>

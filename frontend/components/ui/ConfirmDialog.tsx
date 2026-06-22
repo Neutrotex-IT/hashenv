@@ -34,7 +34,7 @@ export function ConfirmDialog({
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
       <div
-        className="relative w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl"
+        className="relative w-full max-w-md card p-6 shadow-xl"
         role="alertdialog"
         aria-labelledby="confirm-title"
         aria-describedby="confirm-message"

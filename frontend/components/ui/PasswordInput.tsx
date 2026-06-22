@@ -76,7 +76,7 @@ export function PasswordInput({
         autoComplete={autoComplete}
         required={required}
         minLength={minLength}
-        className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 pr-11 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
+        className="block h-10 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-2.5 pr-11 text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 transition-colors"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

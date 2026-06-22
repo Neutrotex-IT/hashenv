@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { projectsAPI, apiTokensAPI, environmentsAPI, ApiToken, CreateApiTokenResponse, ProjectPermissionsResponse } from '@/lib/api';
+import { apiTokensAPI, ApiToken, CreateApiTokenResponse } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
@@ -10,6 +10,8 @@ import { EditApiTokenModal } from '@/components/ui/EditApiTokenModal';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
 import { canManageProjectTokens, canReadProject, canWriteProject } from '@/lib/permissions';
+import { useProject, useProjectPermissions } from '@/hooks/queries/useProject';
+import { useProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
 
 interface Project {
   _id: string;
@@ -30,11 +32,12 @@ interface Project {
 export default function ProjectApiTokensPage() {
   const params = useParams();
   const projectId = params.id as string;
-  
-  const [project, setProject] = useState<Project | null>(null);
+
+  const { data: project, isLoading: projectLoading } = useProject(projectId);
+  const { data: permissionInfo, isLoading: permissionsLoading } = useProjectPermissions(projectId);
+  const { data: environments = [], isLoading: envLoading } = useProjectEnvironments(projectId);
   const [tokens, setTokens] = useState<ApiToken[]>([]);
-  const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState('');
   
   const [formOpen, setFormOpen] = useState(false);
@@ -49,9 +52,16 @@ export default function ProjectApiTokensPage() {
   const [expandedExample, setExpandedExample] = useState<string | null>('get-env');
   const [copiedExample, setCopiedExample] = useState<string | null>(null);
   const [exampleEnv, setExampleEnv] = useState('dev');
-  const [envOptions, setEnvOptions] = useState<string[]>(['dev', 'staging', 'prod']);
+  const envOptions =
+    environments.length > 0 ? environments.map((e) => e.slug) : ['dev', 'staging', 'prod'];
   const { confirm } = useConfirm();
   const { success: toastSuccess, error: toastError } = useToast();
+
+  useEffect(() => {
+    if (environments.length > 0) {
+      setExampleEnv(environments[0].slug);
+    }
+  }, [environments]);
 
   useEffect(() => {
     loadData();
@@ -59,32 +69,25 @@ export default function ProjectApiTokensPage() {
 
   const loadData = async () => {
     try {
-      const [projectData, tokensData, envs, permissionsData] = await Promise.all([
-        projectsAPI.get(projectId),
-        apiTokensAPI.list(projectId),
-        environmentsAPI.list(projectId),
-        projectsAPI.getPermissions(projectId),
-      ]);
-      setProject(projectData);
+      setDataLoading(true);
+      const tokensData = await apiTokensAPI.list(projectId);
       setTokens(tokensData);
-      setPermissionInfo(permissionsData);
-      if (envs.length > 0) {
-        setEnvOptions(envs.map((e) => e.slug));
-        setExampleEnv(envs[0].slug);
-      }
-    } catch (err: any) {
-      const status = err.response?.status;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+      const status = axiosErr.response?.status;
       if (status === 403) {
         setError('Access denied: You do not have permission to access this project.');
       } else if (status === 404) {
         setError('Project not found.');
       } else {
-        setError(err.response?.data?.error || 'Failed to load data');
+        setError(axiosErr.response?.data?.error || 'Failed to load data');
       }
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   };
+
+  const loading = projectLoading || permissionsLoading || envLoading || dataLoading;
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,7 +289,7 @@ export default function ProjectApiTokensPage() {
 
           {/* New Token Display */}
           {newToken && (
-            <div className="mb-6 rounded-lg border border-[var(--success)]/50 bg-[var(--success)]/10 p-6">
+            <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--success)]/50 bg-[var(--success)]/10 p-6">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">
@@ -322,7 +325,7 @@ export default function ProjectApiTokensPage() {
 
           {/* Create Token Form */}
           {canManageTokens && formOpen && (
-            <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <div className="content-section">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">
                   Create New API Token
@@ -456,7 +459,7 @@ export default function ProjectApiTokensPage() {
 
           {/* Tokens List */}
           {tokens.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+            <div className="data-table-wrap">
               <table className="min-w-full divide-y divide-[var(--border)]">
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>
@@ -541,7 +544,7 @@ export default function ProjectApiTokensPage() {
               </table>
             </div>
           ) : (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+            <div className="empty-state">
               <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
               </svg>
@@ -562,7 +565,7 @@ export default function ProjectApiTokensPage() {
           )}
 
           {/* Usage Examples */}
-          <div className="mt-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <div className="content-section">
             <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">
               API Reference
             </h3>

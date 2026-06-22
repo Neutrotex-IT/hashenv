@@ -6,6 +6,7 @@ import Organization from '../models/Organization';
 import ProjectInvite from '../models/ProjectInvite';
 import User from '../models/User';
 import OrgMember from '../models/OrgMember';
+import type { OrgRole } from '../models/OrgMember';
 import { authenticate, AuthRequest } from '../lib/auth';
 import {
   requireProjectAccess,
@@ -53,9 +54,37 @@ function withoutProjectCollaborationPermissions<T extends string>(
     (permission) => !TEAM_PROJECT_COLLABORATION_PERMISSIONS.has(permission as ProjectPermission)
   );
 }
+
+function computeEffectiveProjectPermissions(
+  project: IProject,
+  userId: string,
+  orgRole: OrgRole | null,
+  orgType: string
+): string[] {
+  const isOwner = project.createdBy.toString() === userId;
+  const isOrgElevated = orgRole === 'owner' || orgRole === 'admin';
+
+  if (isOwner || isOrgElevated) {
+    return withoutProjectCollaborationPermissions(orgType, [
+      'project:read',
+      'project:write',
+      ...ALL_PROJECT_PERMISSIONS,
+    ]);
+  }
+
+  const member = project.members.find((m) => m.userId.toString() === userId);
+  if (!member) {
+    return [];
+  }
+
+  return withoutProjectCollaborationPermissions(
+    orgType,
+    [...getProjectCapabilitiesFromAccess(member.permission, sanitizeProjectPermissions(member.permissions))]
+  );
+}
 import { createAndSendProjectInvite } from '../lib/projectInvite';
 import { auditProject, auditMember, audit } from '../lib/audit';
-import { assertEnvAllowed } from '../lib/environments';
+import { assertEnvAllowed, getProjectEnvironments } from '../lib/environments';
 import multer from 'multer';
 import {
   buildProjectExport,
@@ -109,6 +138,9 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
     const orgQuery = orgId && isValidObjectId(orgId as string)
       ? { organizationId: orgId }
       : { organizationId: { $in: userOrgIds } };
+    const orgRoleByOrgId = new Map(
+      memberships.map((m) => [m.organizationId.toString(), m.role as OrgRole])
+    );
     
     // Within accessible orgs, show projects user owns or is a member of
     const projects = await Project.find({
@@ -123,7 +155,32 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
       .populate('organizationId', 'name slug type')
       .sort({ createdAt: -1 });
     
-    res.json(projects);
+    const enriched = projects.map((project) => {
+      const plain = project.toObject();
+      const orgRef = plain.organizationId as { _id?: { toString(): string }; type?: string } | string;
+      const orgIdStr =
+        typeof orgRef === 'object' && orgRef !== null && '_id' in orgRef
+          ? orgRef._id!.toString()
+          : String(orgRef);
+      const orgType =
+        typeof orgRef === 'object' && orgRef !== null && 'type' in orgRef
+          ? (orgRef.type ?? 'team')
+          : 'team';
+      const orgRole = orgRoleByOrgId.get(orgIdStr) ?? null;
+
+      return {
+        ...plain,
+        environmentSlugs: getProjectEnvironments(project),
+        effectivePermissions: computeEffectiveProjectPermissions(
+          project,
+          req.user!.userId,
+          orgRole,
+          orgType
+        ),
+      };
+    });
+    
+    res.json(enriched);
   } catch (error) {
     console.error('Get projects error:', error instanceof Error ? error.message : 'Failed to fetch projects');
     res.status(500).json({ error: 'Failed to fetch projects' });
