@@ -6,24 +6,24 @@ interface SkeletonProps {
   animation?: 'pulse' | 'wave' | 'none';
 }
 
-export function Skeleton({ 
-  className = '', 
+export function Skeleton({
+  className = '',
   variant = 'rectangular',
   width,
   height,
-  animation = 'pulse'
+  animation = 'pulse',
 }: SkeletonProps) {
-  const baseClasses = 'bg-[var(--surface-elevated)] rounded';
+  const baseClasses = 'bg-[var(--surface-hover)] rounded-[var(--radius-sm)]';
   const variantClasses = {
-    text: 'h-4 rounded',
+    text: 'h-4 rounded-[var(--radius-sm)]',
     circular: 'rounded-full',
-    rectangular: 'rounded-md'
+    rectangular: 'rounded-[var(--radius-sm)]',
   };
-  
+
   const animationClasses = {
-    pulse: 'animate-pulse opacity-50',
+    pulse: 'animate-pulse opacity-60',
     wave: 'animate-skeleton-wave',
-    none: ''
+    none: '',
   };
 
   const style: React.CSSProperties = {};
@@ -38,7 +38,6 @@ export function Skeleton({
   );
 }
 
-// Pre-built skeleton components
 export function SkeletonText({ lines = 3, className = '' }: { lines?: number; className?: string }) {
   return (
     <div className={`space-y-2 ${className}`}>
@@ -56,21 +55,21 @@ export function SkeletonText({ lines = 3, className = '' }: { lines?: number; cl
 
 export function SkeletonCard({ className = '' }: { className?: string }) {
   return (
-    <div className={`rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 ${className}`}>
-      <Skeleton variant="rectangular" height={24} width="60%" className="mb-4" />
+    <div className={`skeleton-card p-5 ${className}`}>
+      <Skeleton variant="rectangular" height={20} width="50%" className="mb-4" />
       <SkeletonText lines={3} />
     </div>
   );
 }
 
+export function SkeletonRow({ className = '' }: { className?: string }) {
+  return <SkeletonCard className={className} />;
+}
+
 export function SkeletonButton({ className = '' }: { className?: string }) {
-  return (
-    <Skeleton variant="rectangular" height={40} width={120} className={className} />
-  );
+  return <Skeleton variant="rectangular" height={36} width={120} className={className} />;
 }
 
 export function SkeletonAvatar({ size = 40, className = '' }: { size?: number; className?: string }) {
-  return (
-    <Skeleton variant="circular" width={size} height={size} className={className} />
-  );
+  return <Skeleton variant="circular" width={size} height={size} className={className} />;
 }

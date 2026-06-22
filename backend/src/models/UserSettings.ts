@@ -3,8 +3,11 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IUserSettings extends Document {
   userId: mongoose.Types.ObjectId;
   flushDuration?: number | null; // Time interval in hours (1-1000), null means disabled
+  lastFlushAt?: Date | null; // Last auto-flush execution time
   panicButton: {
     flushEnvs: boolean;
+    flushSecrets: boolean;
+    revokeApiTokens: boolean;
     revokeCollaborators: boolean;
     downloadEnvs: boolean;
     askConfirmation: boolean;
@@ -34,8 +37,20 @@ const UserSettingsSchema: Schema = new Schema(
         message: 'Flush duration must be between 1 and 1000 hours, or null to disable',
       },
     },
+    lastFlushAt: {
+      type: Date,
+      default: null,
+    },
     panicButton: {
       flushEnvs: {
+        type: Boolean,
+        default: false,
+      },
+      flushSecrets: {
+        type: Boolean,
+        default: false,
+      },
+      revokeApiTokens: {
         type: Boolean,
         default: false,
       },

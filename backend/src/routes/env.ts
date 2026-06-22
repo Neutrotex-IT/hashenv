@@ -2,12 +2,15 @@ import express, { Response } from 'express';
 import multer from 'multer';
 import { query, body, validationResult } from 'express-validator';
 import EnvFile from '../models/EnvFile';
-import { encryptEnv, decryptEnv } from '../lib/crypto';
+import { encryptProjectData, decryptProjectData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
-import { logEnvAction } from '../lib/logging';
+import { requireProjectAccess } from '../lib/authorization';
+import { auditEnv } from '../lib/audit';
 import { validateProjectId, validateEnvFileId, validateEnvironment, validateEnvironmentQuery, validateFileContent, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
+import { AuthRequestWithOrg } from '../lib/authorization';
+import { assertEnvAllowed, normalizeEnvSlug } from '../lib/environments';
+import { diffEnvContent } from '../lib/envDiff';
 
 const router = express.Router();
 
@@ -74,7 +77,14 @@ router.post(
       }
       
       const projectId = req.params.projectId;
-      const environment = req.body.environment; // dev, staging, or prod
+      const project = (req as AuthRequestWithOrg).project!;
+      let environment: string;
+      try {
+        environment = assertEnvAllowed(project, req.body.environment);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
       const content = req.body.content; // Text content (alternative to file)
       
       // Additional ObjectId validation
@@ -104,8 +114,8 @@ router.post(
         return;
       }
       
-      // Encrypt the data (server-side only)
-      const { encryptedData, iv, authTag } = encryptEnv(plaintextData);
+      // Encrypt the data using project-specific key
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
       
       // Find the latest version for this project+environment
       const latestEnvFile = await EnvFile.findOne({
@@ -128,16 +138,11 @@ router.post(
         uploadedBy: req.user.userId,
       });
       
-      // Log the upload action
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'upload',
+      // Audit the upload action
+      await auditEnv(projectId, req.user.userId, 'upload', envFile._id.toString(), {
         environment,
-        { newVersion: nextVersion },
-        envFile._id.toString(),
-        nextVersion
-      );
+        version: nextVersion,
+      }, req);
       
       // Return metadata (never return encrypted data or plaintext)
       const populatedEnvFile = await EnvFile.findById(envFile._id)
@@ -192,14 +197,14 @@ router.get(
         return;
       }
       
-      // Decrypt the data (server-side only)
-      const plaintextData = decryptEnv(
+      // Decrypt the data using project-specific key
+      const plaintextData = await decryptProjectData(
+        projectId,
         envFile.encryptedData,
         envFile.iv,
         envFile.authTag
       );
       
-      // Return content as JSON for editing
       res.json({ content: plaintextData });
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -233,8 +238,24 @@ router.get(
       }
       
       const projectId = req.params.projectId;
-      const environment = req.query.environment as string;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+
+      if (environmentParam) {
+        try {
+          assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+      }
+      const environment = environmentParam ? normalizeEnvSlug(environmentParam) : undefined;
       const version = req.query.version ? parseInt(req.query.version as string) : undefined;
+
+      if (!environment) {
+        res.status(400).json({ error: 'Environment query parameter is required' });
+        return;
+      }
       
       // Find the env file
       let envFile;
@@ -255,34 +276,31 @@ router.get(
       }
       
       if (!envFile) {
-        res.status(404).json({
-          error: 'Environment file not found',
-        });
+        const error = version
+          ? `No version ${version} found for the "${environment}" environment`
+          : `No environment file has been uploaded for "${environment}"`;
+        res.status(404).json({ error });
         return;
       }
       
-      // Decrypt the data (server-side only)
-      // SECURITY: Never log the decrypted content
-      const plaintextData = decryptEnv(
+      // Decrypt the data using project-specific key
+      const plaintextData = await decryptProjectData(
+        projectId,
         envFile.encryptedData,
         envFile.iv,
         envFile.authTag
       );
       
-      // Log the download action
       if (!req.user) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'download',
-        environment as 'dev' | 'staging' | 'prod',
-        { fileName: '.env' },
-        envFile._id.toString(),
-        envFile.version
-      );
+      
+      // Audit the download action
+      await auditEnv(projectId, req.user.userId, 'download', envFile._id.toString(), {
+        environment,
+        version: envFile.version,
+      }, req);
       
       // Return as downloadable file
       res.setHeader('Content-Type', 'text/plain');
@@ -314,7 +332,18 @@ router.get(
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
-      const environment = req.query.environment as string | undefined;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+
+      if (environmentParam) {
+        try {
+          assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+      }
+      const environment = environmentParam ? normalizeEnvSlug(environmentParam) : undefined;
       
       const query: any = { projectId };
       if (environment) {
@@ -326,7 +355,8 @@ router.get(
         .select('-encryptedData -iv -authTag') // Never return encrypted data
         .populate('uploadedBy', 'name email')
         .sort({ environment: 1, version: -1 });
-      
+
+      res.set('Cache-Control', 'no-store');
       res.json(envFiles);
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -337,17 +367,21 @@ router.get(
 );
 
 /**
- * Edit an environment file (owners only)
+ * Edit an environment file
  * PUT /api/projects/:projectId/env/:envFileId
- * Requires: project ownership
+ * Requires: write permission
+ * Body: { content: string, saveAsNewVersion?: boolean }
+ * When saveAsNewVersion is true, creates a new version instead of updating in place.
  */
 router.put(
   '/:projectId/env/:envFileId',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  validateEnvFileId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
-  [validateFileContent()],
+  validateProjectId(),
+  validateEnvFileId(),
+  requireProjectAccess('write'),
+  [
+    validateFileContent(),
+  ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
@@ -364,6 +398,10 @@ router.put(
       const projectId = req.params.projectId;
       const envFileId = req.params.envFileId;
       const content = req.body.content;
+      const saveAsNewVersion =
+        req.body.saveAsNewVersion === true ||
+        req.body.saveAsNewVersion === 'true' ||
+        req.query.saveAsNewVersion === 'true';
       
       // Find the env file
       const envFile = await EnvFile.findOne({
@@ -377,26 +415,57 @@ router.put(
       }
       
       const oldVersion = envFile.version;
+      const environment = envFile.environment;
       
-      // Encrypt the new content
-      const { encryptedData, iv, authTag } = encryptEnv(content);
+      // Encrypt the new content using project-specific key
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+
+      if (saveAsNewVersion) {
+        const latestEnvFile = await EnvFile.findOne({ projectId, environment })
+          .sort({ version: -1 })
+          .limit(1);
+
+        const nextVersion = latestEnvFile ? latestEnvFile.version + 1 : 1;
+
+        const newEnvFile = await EnvFile.create({
+          projectId: envFile.projectId,
+          environment,
+          encryptedData,
+          iv,
+          authTag,
+          version: nextVersion,
+          uploadedBy: req.user.userId,
+        });
+
+        await auditEnv(projectId, req.user.userId, 'upload', newEnvFile._id.toString(), {
+          environment,
+          version: nextVersion,
+          basedOnVersion: oldVersion,
+          createdFrom: 'edit',
+        }, req);
+
+        const populatedEnvFile = await EnvFile.findById(newEnvFile._id)
+          .populate('uploadedBy', 'name email')
+          .select('-encryptedData -iv -authTag');
+
+        res.status(201).json({
+          ...populatedEnvFile?.toObject(),
+          message: `Saved as new version ${nextVersion}`,
+        });
+        return;
+      }
       
-      // Update the env file
+      // Update the env file in place
       envFile.encryptedData = encryptedData;
       envFile.iv = iv;
       envFile.authTag = authTag;
       await envFile.save();
       
-      // Log the edit action
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'edit',
-        envFile.environment,
-        { oldVersion, newVersion: oldVersion },
-        envFileId,
-        oldVersion
-      );
+      // Audit the edit action
+      await auditEnv(projectId, req.user.userId, 'edit', envFileId, {
+        environment: envFile.environment,
+        version: oldVersion,
+      }, req);
       
       // Return updated metadata
       const populatedEnvFile = await EnvFile.findById(envFile._id)
@@ -416,16 +485,16 @@ router.put(
 );
 
 /**
- * Delete an environment file (owners only)
+ * Delete an environment file
  * DELETE /api/projects/:projectId/env/:envFileId
- * Requires: project ownership
+ * Requires: write permission
  */
 router.delete(
   '/:projectId/env/:envFileId',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  validateEnvFileId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  validateEnvFileId(),
+  requireProjectAccess('write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -456,16 +525,11 @@ router.delete(
       const environment = envFile.environment;
       const version = envFile.version;
       
-      // Log the delete action before deletion
-      await logEnvAction(
-        projectId,
-        req.user.userId,
-        'delete',
+      // Audit the delete action before deletion
+      await auditEnv(projectId, req.user.userId, 'delete', envFileId, {
         environment,
-        { oldVersion: version },
-        envFileId,
-        version
-      );
+        version,
+      }, req);
       
       // Delete the env file
       await EnvFile.findByIdAndDelete(envFileId);
@@ -480,30 +544,112 @@ router.delete(
 );
 
 /**
- * Get logs for a project (owners only)
+ * Compare two env file versions
+ * GET /api/projects/:projectId/env/diff?environment=dev&from=1&to=2
+ * Requires: read permission
+ */
+router.get(
+  '/:projectId/env/diff',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('read'),
+  [
+    validateEnvironmentQuery(),
+    query('from').isInt({ min: 1, max: 10000 }).withMessage('from version is required'),
+    query('to').isInt({ min: 1, max: 10000 }).withMessage('to version is required'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string;
+      const fromVersion = parseInt(req.query.from as string, 10);
+      const toVersion = parseInt(req.query.to as string, 10);
+
+      let environment: string;
+      try {
+        environment = assertEnvAllowed(project, environmentParam);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
+
+      if (fromVersion === toVersion) {
+        res.status(400).json({ error: 'from and to versions must be different' });
+        return;
+      }
+
+      const [fromFile, toFile] = await Promise.all([
+        EnvFile.findOne({ projectId, environment, version: fromVersion }),
+        EnvFile.findOne({ projectId, environment, version: toVersion }),
+      ]);
+
+      if (!fromFile) {
+        res.status(404).json({ error: `Version ${fromVersion} not found` });
+        return;
+      }
+      if (!toFile) {
+        res.status(404).json({ error: `Version ${toVersion} not found` });
+        return;
+      }
+
+      const [fromContent, toContent] = await Promise.all([
+        decryptProjectData(projectId, fromFile.encryptedData, fromFile.iv, fromFile.authTag),
+        decryptProjectData(projectId, toFile.encryptedData, toFile.iv, toFile.authTag),
+      ]);
+
+      res.json(diffEnvContent(fromContent, toContent));
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      console.error('Env diff error:', errMessage);
+      res.status(500).json({ error: 'Failed to diff environment versions' });
+    }
+  }
+);
+
+/**
+ * Get logs for a project
  * GET /api/projects/:projectId/env/logs?environment=prod
- * Requires: project ownership
+ * Requires: read permission
  */
 router.get(
   '/:projectId/env/logs',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  requireProjectAccess('read'),
   [validateEnvironmentQuery()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const projectId = req.params.projectId;
-      const environment = req.query.environment as string | undefined;
-      
-      const query: any = { projectId };
-      if (environment) {
-        query.environment = environment;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
       }
-      
-      const EnvLog = (await import('../models/EnvLog')).default;
-      const logs = await EnvLog.find(query)
+
+      const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+
+      const logQuery: Record<string, unknown> = { projectId, resourceType: 'env' };
+      if (environmentParam) {
+        try {
+          logQuery['metadata.environment'] = assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+      }
+
+      const AuditLog = (await import('../models/AuditLog')).default;
+      const logs = await AuditLog.find(logQuery)
         .sort({ createdAt: -1 })
-        .limit(1000); // Limit to last 1000 logs
+        .limit(1000);
       
       res.json(logs);
     } catch (error) {
@@ -515,72 +661,162 @@ router.get(
 );
 
 /**
- * Download logs as text file (owners only)
- * GET /api/projects/:projectId/env/logs/download?environment=prod
- * Requires: project ownership
+ * Rollback environment to a previous version (creates new version from old content)
+ * POST /api/projects/:projectId/env/rollback
+ * Requires: write permission
+ */
+router.post(
+  '/:projectId/env/rollback',
+  authenticate,
+  validateProjectId(),
+  requireProjectAccess('write'),
+  [
+    validateEnvironment(),
+    body('version').isInt({ min: 1, max: 10000 }).withMessage('Version must be a positive integer'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      if (!req.user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      let environment: string;
+      try {
+        environment = assertEnvAllowed(project, req.body.environment);
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+        return;
+      }
+      const rollbackVersion = parseInt(req.body.version, 10);
+
+      const sourceFile = await EnvFile.findOne({ projectId, environment, version: rollbackVersion });
+      if (!sourceFile) {
+        res.status(404).json({ error: 'Source version not found' });
+        return;
+      }
+
+      const plaintextData = await decryptProjectData(
+        projectId,
+        sourceFile.encryptedData,
+        sourceFile.iv,
+        sourceFile.authTag
+      );
+
+      const latestEnvFile = await EnvFile.findOne({ projectId, environment })
+        .sort({ version: -1 })
+        .limit(1);
+
+      const nextVersion = latestEnvFile ? latestEnvFile.version + 1 : 1;
+
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
+
+      const envFile = await EnvFile.create({
+        projectId,
+        environment,
+        encryptedData,
+        iv,
+        authTag,
+        version: nextVersion,
+        uploadedBy: req.user.userId,
+      });
+
+      await auditEnv(projectId, req.user.userId, 'rollback', envFile._id.toString(), {
+        environment,
+        version: nextVersion,
+        rolledBackFrom: rollbackVersion,
+      }, req);
+
+      const populatedEnvFile = await EnvFile.findById(envFile._id)
+        .populate('uploadedBy', 'name email')
+        .select('-encryptedData -iv -authTag');
+
+      res.status(201).json({
+        ...populatedEnvFile?.toObject(),
+        message: `Rolled back to version ${rollbackVersion} as new version ${nextVersion}`,
+      });
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      console.error('Rollback env file error:', errMessage);
+      res.status(500).json({ error: 'Failed to rollback environment file' });
+    }
+  }
+);
+
+/**
+ * Download logs as text file
+ * GET /api/projects/:projectId/env/logs/download
+ * Requires: read permission
  */
 router.get(
   '/:projectId/env/logs/download',
   authenticate,
-  validateProjectId(), // Security: Validate ObjectId format
-  requireProjectOwnership(),
+  validateProjectId(),
+  requireProjectAccess('read'),
   [validateEnvironmentQuery()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const projectId = req.params.projectId;
-      const environment = req.query.environment as string | undefined;
-      
-      const query: any = { projectId };
-      if (environment) {
-        query.environment = environment;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
       }
-      
-      const EnvLog = (await import('../models/EnvLog')).default;
-      const logs = await EnvLog.find(query)
+
+      const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      const environmentParam = req.query.environment as string | undefined;
+
+      const logQuery: Record<string, unknown> = { projectId, resourceType: 'env' };
+      if (environmentParam) {
+        try {
+          logQuery['metadata.environment'] = assertEnvAllowed(project, environmentParam);
+        } catch (err) {
+          res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid environment' });
+          return;
+        }
+      }
+
+      const AuditLog = (await import('../models/AuditLog')).default;
+      const logs = await AuditLog.find(logQuery)
         .sort({ createdAt: -1 })
         .limit(1000);
       
-      // Format logs as text
       let logText = `HashEnv Activity Logs\n`;
       logText += `Project ID: ${projectId}\n`;
-      if (environment) {
-        logText += `Environment: ${environment}\n`;
-      }
       logText += `Generated: ${new Date().toISOString()}\n`;
       logText += `${'='.repeat(80)}\n\n`;
       
       if (logs.length === 0) {
-        logText += 'No logs found.\n';
-      } else {
-        logs.forEach((log) => {
+        const error = environmentParam
+          ? `No activity logs found for the "${normalizeEnvSlug(environmentParam)}" environment`
+          : 'No activity logs found for this project';
+        res.status(404).json({ error });
+        return;
+      }
+
+      logs.forEach((log) => {
           const date = new Date(log.createdAt).toLocaleString();
           logText += `[${date}] ${log.action.toUpperCase()}\n`;
-          logText += `  Environment: ${log.environment}\n`;
-          if (log.version) {
-            logText += `  Version: ${log.version}\n`;
+          if (log.metadata?.environment) {
+            logText += `  Environment: ${log.metadata.environment}\n`;
           }
-          logText += `  Performed by: ${log.performedByName} (${log.performedByEmail})\n`;
-          if (log.metadata && Object.keys(log.metadata).length > 0) {
-            // Security: Sanitize metadata to prevent injection in logs
-            try {
-              const sanitizedMetadata = JSON.stringify(log.metadata);
-              logText += `  Details: ${sanitizedMetadata}\n`;
-            } catch (e) {
-              logText += `  Details: [Metadata unavailable]\n`;
-            }
+          if (log.metadata?.version) {
+            logText += `  Version: ${log.metadata.version}\n`;
+          }
+          logText += `  Actor: ${log.actorEmail || log.actorId}\n`;
+          if (log.ipAddress) {
+            logText += `  IP: ${log.ipAddress}\n`;
           }
           logText += '\n';
-        });
-      }
-      
-      // Log the access action (viewing logs)
-      await logEnvAction(
-        projectId,
-        req.user!.userId,
-        'access',
-        environment as 'dev' | 'staging' | 'prod' || 'dev',
-        { fileName: 'logs.txt' }
-      );
+      });
       
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', `attachment; filename="hashenv-logs-${Date.now()}.txt"`);

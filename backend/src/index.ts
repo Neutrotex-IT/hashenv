@@ -1,16 +1,27 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import morgan from 'morgan';
 import cron from 'node-cron';
 import authRoutes from './routes/auth';
+import inviteRoutes from './routes/invites';
+import organizationRoutes from './routes/organizations';
 import projectRoutes from './routes/projects';
+import environmentRoutes from './routes/environments';
 import envRoutes from './routes/env';
 import secretsRoutes from './routes/secrets';
+import associatedAccountsRoutes from './routes/associatedAccounts';
 import settingsRoutes from './routes/settings';
+import apiTokenRoutes from './routes/apiTokens';
+import publicApiRoutes from './routes/api';
 import { securityHeaders, apiRateLimiter } from './middleware/security';
 import { sanitizeError } from './middleware/security';
+import { bootstrapEncryption, getEncryptionStatus } from './crypto';
+import { runAutoFlush } from './lib/autoFlush';
+import Project from './models/Project';
+import { DEFAULT_ENVIRONMENTS } from './lib/environments';
 
 // Load environment variables
 dotenv.config();
@@ -75,10 +86,10 @@ const corsOptions: cors.CorsOptions = {
   origin: getCorsOrigins(),
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  // Security: Expose only necessary headers
-  exposedHeaders: [],
+  // Expose rate limit headers for API clients
+  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
   // Security: Max age for preflight requests (24 hours)
   maxAge: 86400,
   // Security: Validate origin in production
@@ -88,6 +99,9 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Cookie parser for refresh tokens
+app.use(cookieParser());
 
 // Security: Request size limits (prevent DoS)
 app.use(express.json({ limit: '100kb' })); // Limit JSON payloads
@@ -101,7 +115,16 @@ app.get('/health', (req, res) => {
 
 // /api/health - for application health checks and cron job pings
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const encryptionStatus = getEncryptionStatus();
+  res.json({
+    status: encryptionStatus.initialized ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    encryption: {
+      initialized: encryptionStatus.initialized,
+      hasInstanceKey: encryptionStatus.hasInstanceKey,
+      error: encryptionStatus.error,
+    },
+  });
 });
 
 // Security: Apply rate limiting to API routes
@@ -109,10 +132,18 @@ app.use('/api', apiRateLimiter);
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/invites', inviteRoutes);
+app.use('/api/organizations', organizationRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects', environmentRoutes);
 app.use('/api/projects', envRoutes);
 app.use('/api/projects', secretsRoutes);
+app.use('/api/projects', associatedAccountsRoutes);
+app.use('/api/projects', apiTokenRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// Public API (API token authenticated)
+app.use('/api/v1', publicApiRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -159,9 +190,17 @@ if (!MONGODB_URI) {
 }
 
 // Security: MongoDB connection options
+function shouldUseMongoTls(uri: string): boolean {
+  if (process.env.MONGODB_TLS === 'true') return true;
+  if (process.env.MONGODB_TLS === 'false') return false;
+  // Atlas / SRV and explicit tls=true URIs require TLS
+  if (uri.includes('mongodb+srv://')) return true;
+  if (/[?&]tls=true/i.test(uri)) return true;
+  return false;
+}
+
 const mongoOptions: mongoose.ConnectOptions = {
-  // Security: Use TLS/SSL in production
-  ...(process.env.NODE_ENV === 'production' && {
+  ...(shouldUseMongoTls(MONGODB_URI) && {
     tls: true,
     tlsAllowInvalidCertificates: false,
   }),
@@ -175,8 +214,29 @@ const mongoOptions: mongoose.ConnectOptions = {
 
 mongoose
   .connect(MONGODB_URI, mongoOptions)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    
+    // Bootstrap encryption system
+    try {
+      await bootstrapEncryption();
+    } catch (error) {
+      console.error('FATAL: Encryption bootstrap failed:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+
+    // Backfill default environments for existing projects
+    try {
+      const result = await Project.updateMany(
+        { $or: [{ environments: { $exists: false } }, { environments: { $size: 0 } }] },
+        { $set: { environments: [...DEFAULT_ENVIRONMENTS] } }
+      );
+      if (result.modifiedCount > 0) {
+        console.log(`Backfilled environments for ${result.modifiedCount} project(s)`);
+      }
+    } catch (error) {
+      console.warn('Environment backfill warning:', error instanceof Error ? error.message : 'Unknown error');
+    }
     
     // Start server
     app.listen(PORT, () => {
@@ -231,6 +291,14 @@ mongoose
     } else {
       console.log('[Health Ping] Skipped in development mode');
     }
+
+    // Auto-flush cron: check every hour for users with flushDuration configured
+    cron.schedule('0 * * * *', () => {
+      runAutoFlush().catch((error) => {
+        console.error('[AutoFlush] Job failed:', error instanceof Error ? error.message : 'Unknown error');
+      });
+    });
+    console.log('[AutoFlush] Cron job started - checking hourly');
   })
   .catch((error) => {
     // Security: Don't log full connection string

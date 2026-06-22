@@ -1,0 +1,21 @@
+
+Wipe database,
+from backend folder 
+
+cd backend
+
+
+# Preview what would be deleted (safe, no changes)
+npm run wipe-db -- --dry-run
+
+# Wipe everything
+npm run wipe-db -- --yes
+
+# Wipe all data but keep user accounts
+npm run wipe-db -- --yes --preserve-users
+
+# Wipe all data but keep user settings
+npm run wipe-db -- --yes --preserve-user-settings
+
+# Keep both users and usersettings
+npm run wipe-db -- --yes --preserve-users --preserve-user-settings

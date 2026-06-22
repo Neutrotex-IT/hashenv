@@ -1,13 +1,28 @@
 import express, { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User';
-import { hashPassword, comparePassword, generateToken, authenticate } from '../lib/auth';
+import Organization from '../models/Organization';
+import OrgMember from '../models/OrgMember';
+import RefreshToken, { generateRefreshToken, hashRefreshToken } from '../models/RefreshToken';
+import { hashPassword, comparePassword, generateAccessToken, authenticate, REFRESH_TOKEN_EXPIRES_DAYS } from '../lib/auth';
 import { AuthRequest } from '../lib/auth';
 import { authRateLimiter } from '../middleware/security';
 import { validateEmail, validatePassword } from '../middleware/validation';
 import { generateVerificationToken, sendVerificationEmail, sendPasswordResetEmail } from '../lib/email';
+import { createOrgEncryptionKey } from '../crypto';
+import { auditSession } from '../lib/audit';
+import OrgInvite from '../models/OrgInvite';
+import { acceptPendingInvitesForUser } from '../lib/orgInvite';
 
 const router = express.Router();
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict' as const,
+  maxAge: REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
+  path: '/api/auth',
+};
 
 /**
  * Register a new user
@@ -36,6 +51,10 @@ router.post(
       .withMessage('Username can only contain lowercase letters, numbers, and underscores'),
     validateEmail(),
     validatePassword(),
+    body('inviteToken')
+      .optional()
+      .isString()
+      .withMessage('Invalid invite token'),
   ],
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -45,7 +64,19 @@ router.post(
         return;
       }
       
-      const { name, username, email, password } = req.body;
+      const { name, username, email, password, inviteToken } = req.body;
+      
+      if (inviteToken) {
+        const invite = await OrgInvite.findOne({ token: inviteToken, status: 'pending' });
+        if (!invite || invite.expiresAt < new Date()) {
+          res.status(400).json({ error: 'Invalid or expired invite token' });
+          return;
+        }
+        if (invite.email !== email.toLowerCase()) {
+          res.status(400).json({ error: 'Registration email must match the invited email address' });
+          return;
+        }
+      }
       
       // Check if user with email already exists
       const existingUserByEmail = await User.findOne({ email: email.toLowerCase() });
@@ -61,35 +92,45 @@ router.post(
         return;
       }
       
-      // Hash password
       const hashedPassword = await hashPassword(password);
       
-      // Generate email verification token
       const emailVerificationToken = generateVerificationToken();
-      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
       
-      // Create user with emailVerified: false (role field is deprecated and not used for access control)
       const user = await User.create({
         name,
         username: username.toLowerCase(),
         email: email.toLowerCase(),
         password: hashedPassword,
-        role: 'admin', // Kept for backward compatibility, not used for access control
         emailVerified: false,
         emailVerificationToken,
         emailVerificationExpires,
       });
       
-      // Send verification email (in development mode, this will log to console)
+      // Create personal organization for the user
+      const personalOrg = await Organization.create({
+        name: `${name}'s Workspace`,
+        slug: `personal-${user._id.toString()}`,
+        type: 'personal',
+        createdBy: user._id,
+      });
+      
+      // Add user as owner of their personal org
+      await OrgMember.create({
+        organizationId: personalOrg._id,
+        userId: user._id,
+        role: 'owner',
+      });
+      
+      // Create encryption key for the personal org
+      await createOrgEncryptionKey(personalOrg._id.toString());
+      
       try {
         await sendVerificationEmail(user.email, emailVerificationToken, user.name);
       } catch (emailError) {
-        // If email sending fails, still return success but log the error
         console.error('Failed to send verification email:', emailError);
-        // Don't fail registration if email fails - user can request resend later
       }
       
-      // DO NOT return token - user must verify email first
       res.status(201).json({
         message: 'Registration successful. Please check your email to verify your account.',
         emailSent: true,
@@ -136,11 +177,11 @@ router.post(
       const isPasswordValid = await comparePassword(password, user.password);
       
       if (!isPasswordValid) {
+        await auditSession(user._id.toString(), 'login_failed', { email: user.email }, req);
         res.status(401).json({ error: 'Invalid email or password' });
         return;
       }
       
-      // Check if email is verified - CRITICAL: Account must be verified
       if (!user.emailVerified) {
         res.status(403).json({ 
           error: 'Email not verified. Please check your email and verify your account before logging in.',
@@ -149,18 +190,42 @@ router.post(
         return;
       }
       
-      // Generate token
-      const token = generateToken(user._id.toString(), user.email, user.role);
+      // Generate access token (short-lived)
+      const accessToken = generateAccessToken(user._id.toString(), user.email);
+      
+      // Generate and store refresh token
+      const refreshToken = generateRefreshToken();
+      const refreshTokenHash = hashRefreshToken(refreshToken);
+      const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+      
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+      const userAgent = req.headers['user-agent']?.substring(0, 500);
+      
+      await RefreshToken.create({
+        userId: user._id,
+        tokenHash: refreshTokenHash,
+        expiresAt,
+        ipAddress,
+        userAgent,
+      });
+      
+      // Set refresh token as HttpOnly cookie
+      res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
+      
+      // Audit the login
+      await auditSession(user._id.toString(), 'login', { email: user.email }, req);
+
+      const acceptedInvites = await acceptPendingInvitesForUser(user._id.toString(), user.email);
       
       res.json({
-        token,
+        accessToken,
         user: {
           id: user._id,
           name: user.name,
           username: user.username,
           email: user.email,
-          role: user.role,
         },
+        acceptedInvites,
       });
     } catch (error) {
       // Security: Don't log authentication errors in detail
@@ -203,8 +268,13 @@ router.get('/verify-email', async (req: Request, res: Response): Promise<void> =
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
+
+    const acceptedInvites = await acceptPendingInvitesForUser(user._id.toString(), user.email);
     
-    res.json({ message: 'Email verified successfully. You can now log in.' });
+    res.json({
+      message: 'Email verified successfully. You can now log in.',
+      acceptedInvites,
+    });
   } catch (error) {
     console.error('Email verification error:', error instanceof Error ? error.message : 'Verification failed');
     res.status(500).json({ error: 'Email verification failed' });
@@ -356,6 +426,9 @@ router.post(
       user.passwordResetToken = undefined;
       user.passwordResetExpires = undefined;
       await user.save();
+
+      // Invalidate all existing sessions after password reset
+      await RefreshToken.deleteMany({ userId: user._id });
       
       res.json({ message: 'Password reset successful. You can now log in with your new password.' });
     } catch (error) {
@@ -388,13 +461,103 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
       name: user.name,
       username: user.username,
       email: user.email,
-      role: user.role,
       emailVerified: user.emailVerified,
     });
     } catch (error) {
       console.error('Get user error:', error instanceof Error ? error.message : 'Failed to get user info');
       res.status(500).json({ error: 'Failed to get user info' });
     }
+});
+
+/**
+ * Refresh access token
+ * POST /api/auth/refresh
+ */
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+    
+    if (!refreshToken) {
+      res.status(401).json({ error: 'No refresh token provided' });
+      return;
+    }
+    
+    const tokenHash = hashRefreshToken(refreshToken);
+    const storedToken = await RefreshToken.findOne({ tokenHash });
+    
+    if (!storedToken) {
+      res.status(401).json({ error: 'Invalid refresh token' });
+      return;
+    }
+    
+    if (storedToken.expiresAt < new Date()) {
+      await RefreshToken.deleteOne({ _id: storedToken._id });
+      res.clearCookie('refreshToken', { path: '/api/auth' });
+      res.status(401).json({ error: 'Refresh token expired' });
+      return;
+    }
+    
+    const user = await User.findById(storedToken.userId);
+    if (!user || !user.emailVerified) {
+      await RefreshToken.deleteOne({ _id: storedToken._id });
+      res.clearCookie('refreshToken', { path: '/api/auth' });
+      res.status(401).json({ error: 'User not found or not verified' });
+      return;
+    }
+    
+    // Generate new access token
+    const accessToken = generateAccessToken(user._id.toString(), user.email);
+    
+    // Optionally rotate refresh token for better security
+    const newRefreshToken = generateRefreshToken();
+    const newRefreshTokenHash = hashRefreshToken(newRefreshToken);
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+    
+    storedToken.tokenHash = newRefreshTokenHash;
+    storedToken.expiresAt = expiresAt;
+    await storedToken.save();
+    
+    res.cookie('refreshToken', newRefreshToken, COOKIE_OPTIONS);
+    
+    res.json({
+      accessToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error instanceof Error ? error.message : 'Failed');
+    res.status(500).json({ error: 'Failed to refresh token' });
+  }
+});
+
+/**
+ * Logout user
+ * POST /api/auth/logout
+ */
+router.post('/logout', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+    
+    if (refreshToken) {
+      const tokenHash = hashRefreshToken(refreshToken);
+      const storedToken = await RefreshToken.findOne({ tokenHash });
+      
+      if (storedToken) {
+        await auditSession(storedToken.userId.toString(), 'logout', {}, req);
+        await RefreshToken.deleteOne({ _id: storedToken._id });
+      }
+    }
+    
+    res.clearCookie('refreshToken', { path: '/api/auth' });
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error instanceof Error ? error.message : 'Failed');
+    res.status(500).json({ error: 'Failed to logout' });
+  }
 });
 
 export default router;

@@ -1,29 +1,62 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI } from '@/lib/api';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { projectsAPI, Organization } from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
-import { CreateProjectButton } from '@/components/ui/CreateProjectButton';
+import { CreateOrganizationModal } from '@/components/CreateOrganizationModal';
+import { canCreateProject, OrgPermission } from '@/lib/permissions';
+import { useInvalidateProjects } from '@/hooks/queries/useProjects';
 
 export default function NewProjectPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { organizations, currentOrg } = useOrganization();
   const [name, setName] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(currentOrg?._id || '');
+  const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const invalidateProjects = useInvalidateProjects();
+
+  useEffect(() => {
+    if (currentOrg?._id) {
+      setSelectedOrgId(currentOrg._id);
+    }
+  }, [currentOrg?._id]);
+
+  const selectedOrg =
+    organizations.find((org) => org._id === (selectedOrgId || currentOrg?._id)) ?? currentOrg;
+  const selectedOrgPermissions = (selectedOrg?.permissions ?? []) as OrgPermission[];
+  const canCreateInSelectedOrg = selectedOrg
+    ? canCreateProject(selectedOrg.role, selectedOrgPermissions)
+    : false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    const orgId = selectedOrgId || currentOrg?._id;
+    if (!orgId) {
+      setError('Please select an organization');
+      return;
+    }
+
+    if (!canCreateInSelectedOrg) {
+      setError('You do not have permission to create projects in this organization');
+      return;
+    }
+    
     setLoading(true);
 
     try {
-      const project = await projectsAPI.create({ name });
+      const project = await projectsAPI.create({ name, organizationId: orgId });
+      invalidateProjects(orgId);
       router.push(`/projects/${project._id}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create project');
@@ -49,12 +82,46 @@ export default function NewProjectPage() {
             </div>
 
             {error && (
-              <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
                 <p className="text-sm text-[var(--error)]">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            {!canCreateInSelectedOrg && selectedOrg && (
+              <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
+                <p className="text-sm text-[var(--text-secondary)]">
+                  You do not have permission to create projects in {selectedOrg.name}. Contact an organization admin if you need access.
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="org" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                  Organization
+                </label>
+                <select
+                  id="org"
+                  value={selectedOrgId || currentOrg?._id || ''}
+                  onChange={(e) => setSelectedOrgId(e.target.value)}
+                  className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  required
+                >
+                  {organizations.map((org: Organization) => (
+                    <option key={org._id} value={org._id}>
+                      {org.name} {org.type === 'personal' ? '(Personal)' : '(Team)'}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setCreateOrgModalOpen(true)}
+                  className="mt-2 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                >
+                  + Create new organization
+                </button>
+              </div>
+
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-[var(--foreground)] mb-2">
                   Project Name
@@ -83,12 +150,17 @@ export default function NewProjectPage() {
                   variant="primary"
                   size="md"
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !canCreateInSelectedOrg}
                 >
                   {loading ? 'Creating...' : 'Create Project'}
                 </Button>
               </div>
             </form>
+
+            <CreateOrganizationModal
+              isOpen={createOrgModalOpen}
+              onClose={() => setCreateOrgModalOpen(false)}
+            />
           </div>
         </div>
       </AuthenticatedLayout>

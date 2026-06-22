@@ -1,265 +1,160 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, settingsAPI } from '@/lib/api';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { CreateProjectButton } from '@/components/ui/CreateProjectButton';
 import { ProjectCard } from '@/components/ProjectCard';
-import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
-import { Button } from '@/components/ui/Button';
-
-interface Project {
-  _id: string;
-  name: string;
-  createdBy: {
-    _id: string;
-    name: string;
-    email: string;
-  };
-  members: Array<{
-    userId: {
-      _id: string;
-      name: string;
-      email: string;
-    };
-    permission: 'read' | 'write';
-  }>;
-  createdAt: string;
-}
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { canCreateProject, OrgPermission } from '@/lib/permissions';
+import { useProjects, useInvalidateProjects } from '@/hooks/queries/useProjects';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [panicButtonSettings, setPanicButtonSettings] = useState<any>(null);
-  const [panicLoading, setPanicLoading] = useState(false);
+  const { currentOrg } = useOrganization();
+  const invalidateProjects = useInvalidateProjects();
+  const {
+    data: projects = [],
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useProjects(currentOrg?._id);
+
+  const error = queryError
+    ? (queryError as { response?: { data?: { error?: string } } }).response?.data?.error ||
+      'Failed to load projects'
+    : '';
 
   useEffect(() => {
-    loadProjects();
-    loadPanicSettings();
-  }, []);
+    const onPanicExecuted = () => {
+      invalidateProjects(currentOrg?._id);
+    };
 
-  const loadPanicSettings = async () => {
-    try {
-      const settings = await settingsAPI.get();
-      setPanicButtonSettings(settings.panicButton);
-    } catch (err) {
-      // Silent fail - panic button settings are optional
-      console.error('Failed to load panic button settings:', err);
-    }
-  };
+    window.addEventListener('hashenv:panic-executed', onPanicExecuted);
+    return () => window.removeEventListener('hashenv:panic-executed', onPanicExecuted);
+  }, [currentOrg?._id, invalidateProjects]);
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await projectsAPI.list();
-      setProjects(data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load projects');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const orgPermissions = (currentOrg?.permissions ?? []) as OrgPermission[];
+  const canCreate = currentOrg
+    ? canCreateProject(currentOrg.role, orgPermissions)
+    : true;
 
-  const handlePanicButton = async () => {
-    if (!panicButtonSettings) {
-      alert('Panic button not configured. Please configure it in Settings.');
-      return;
-    }
-
-    const { flushEnvs, revokeCollaborators, downloadEnvs, askConfirmation } = panicButtonSettings;
-
-    if (!flushEnvs && !revokeCollaborators && !downloadEnvs) {
-      alert('No panic actions configured. Please configure panic button settings first.');
-      return;
-    }
-
-    // Show confirmation if enabled
-    if (askConfirmation) {
-      const confirmMessage = `Are you sure you want to execute panic actions?\n\n` +
-        `${downloadEnvs ? '• Download all environment files\n' : ''}` +
-        `${flushEnvs ? '• Delete all environment files\n' : ''}` +
-        `${revokeCollaborators ? '• Revoke all collaborator access\n' : ''}`;
-      
-      if (!confirm(confirmMessage)) {
-        return;
-      }
-    }
-
-    setPanicLoading(true);
-    try {
-      const result = await settingsAPI.panic();
-
-      // Handle download if enabled
-      if (result.results?.downloadEnvs && result.results?.downloadContent) {
-        const blob = new Blob([result.results.downloadContent], { type: 'text/plain' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', result.results.downloadFilename || 'hashenv-backup.txt');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
-      }
-
-      // Show success message
-      const actions = [];
-      if (result.results?.downloadEnvs) actions.push('downloaded');
-      if (result.results?.flushEnvs) actions.push('flushed');
-      if (result.results?.revokeCollaborators) actions.push('collaborators revoked');
-
-      alert(`Panic actions executed successfully!\n\nActions: ${actions.join(', ')}`);
-      
-      // Reload projects to reflect changes
-      loadProjects();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to execute panic actions');
-    } finally {
-      setPanicLoading(false);
-    }
-  };
+  const ownedCount = projects.filter((p) => p.createdBy._id === user?.id).length;
+  const sharedCount = projects.filter(
+    (p) =>
+      p.members.some((m) => m.userId._id === user?.id) &&
+      p.createdBy._id !== user?.id
+  ).length;
 
   return (
     <ProtectedRoute>
       <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          {/* Panic Button - Top of Dashboard */}
-          <div className="mb-6 flex justify-end">
-            <Button
-              variant="danger"
-              size="md"
-              onClick={handlePanicButton}
-              disabled={panicLoading || !panicButtonSettings}
-              className="flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              {panicLoading ? 'Processing...' : 'Panic Button'}
-            </Button>
+        <PageHeader
+          title="Dashboard"
+          description={
+            currentOrg
+              ? `Projects in ${currentOrg.name}`
+              : 'Manage your environment files'
+          }
+          actions={canCreate ? <CreateProjectButton size="md" /> : undefined}
+        />
+
+        {!loading && projects.length > 0 && (
+          <section
+            aria-label="Project overview"
+            className="mb-8 border-y border-[var(--border-subtle)] py-6"
+          >
+            <dl className="grid grid-cols-3 gap-4 sm:gap-10">
+              <StatItem label="Total" value={projects.length} highlight />
+              <StatItem label="Owned" value={ownedCount} />
+              <StatItem label="Shared" value={sharedCount} />
+            </dl>
+          </section>
+        )}
+
+        {error && (
+          <div className="mb-6 rounded-[var(--radius-md)] border border-[var(--error)]/40 bg-[var(--error)]/10 p-4">
+            <p className="text-sm text-[var(--error)]">{error}</p>
           </div>
+        )}
 
-          {/* Header Section */}
-          <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--foreground)]">Dashboard</h1>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Manage your environment files across all projects
-              </p>
-            </div>
-            <CreateProjectButton size="lg" />
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-3 mb-8">
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-[var(--text-muted)]">Total Projects</p>
-                  <p className="text-2xl font-bold text-[var(--foreground)] mt-1">{projects.length}</p>
-                </div>
-                <div className="rounded-lg bg-[var(--accent)]/20 p-3">
-                  <svg className="w-6 h-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-[var(--text-muted)]">My Projects</p>
-                  <p className="text-2xl font-bold text-[var(--foreground)] mt-1">
-                    {projects.filter(p => p.createdBy._id === user?.id).length}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-green-500/20 p-3">
-                  <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-[var(--text-muted)]">Member Of</p>
-                  <p className="text-2xl font-bold text-[var(--foreground)] mt-1">
-                    {projects.filter(p => 
-                      p.members.some(m => m.userId._id === user?.id) && 
-                      p.createdBy._id !== user?.id
-                    ).length}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-blue-500/20 p-3">
-                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-              <p className="text-sm text-[var(--error)]">{error}</p>
-            </div>
-          )}
-
-          {/* Projects Grid */}
+        <section aria-labelledby="projects-heading">
           {loading ? (
-            <>
-              <div className="mb-4 flex items-center justify-between">
-                <Skeleton variant="rectangular" height={28} width={150} />
-                <Skeleton variant="rectangular" height={20} width={100} />
-              </div>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            </>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
           ) : projects.length === 0 ? (
-            <div className="text-center py-12 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-              <svg className="mx-auto h-16 w-16 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <h3 className="mt-4 text-xl font-semibold text-[var(--foreground)]">No projects found</h3>
-              <p className="mt-2 text-sm text-[var(--text-muted)] max-w-md mx-auto">
-                Get started by creating your first project. You can then upload environment files for dev, staging, and production.
-              </p>
-              <div className="mt-6">
-                <CreateProjectButton size="lg" />
+            <div className="panel py-16 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-md)] bg-[var(--accent-muted)]">
+                <svg className="h-6 w-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
               </div>
+              <h2 id="projects-heading" className="text-lg font-semibold text-[var(--foreground)]">
+                No projects yet
+              </h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-muted)]">
+                {canCreate
+                  ? 'Create a project to upload and share environment files across dev, staging, and prod.'
+                  : 'You do not have permission to create projects in this organization.'}
+              </p>
+              {canCreate && (
+                <div className="mt-6">
+                  <CreateProjectButton size="md" />
+                </div>
+              )}
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">All Projects</h2>
-                <span className="text-sm text-[var(--text-muted)]">
-                  {projects.length} project{projects.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <h2
+                id="projects-heading"
+                className="mb-4 text-sm font-semibold text-[var(--text-secondary)]"
+              >
+                All projects
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {projects.map((project) => (
-                  <ProjectCard 
-                    key={project._id} 
+                  <ProjectCard
+                    key={project._id}
                     project={project}
-                    onRefresh={loadProjects}
+                    onRefresh={() => void refetch()}
                   />
                 ))}
               </div>
             </>
           )}
-        </div>
+        </section>
       </AuthenticatedLayout>
     </ProtectedRoute>
+  );
+}
+
+function StatItem({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl md:text-4xl ${
+          highlight ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }

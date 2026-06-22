@@ -5,7 +5,6 @@ export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
-  role: 'admin' | 'user'; // DEPRECATED: Not used for access control
   emailVerified: boolean;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
@@ -43,15 +42,7 @@ const UserSchema: Schema = new Schema(
       type: String,
       required: [true, 'Password is required'],
       minlength: [8, 'Password must be at least 8 characters'],
-      select: false, // Don't return password by default
-    },
-    role: {
-      type: String,
-      enum: ['admin', 'user'],
-      default: 'admin',
-      required: true,
-      // DEPRECATED: Role field is kept for backward compatibility but is not used for access control.
-      // Access control is now based on project ownership and collaboration membership.
+      select: false,
     },
     emailVerified: {
       type: Boolean,
@@ -60,7 +51,7 @@ const UserSchema: Schema = new Schema(
     },
     emailVerificationToken: {
       type: String,
-      select: false, // Don't return by default
+      select: false,
     },
     emailVerificationExpires: {
       type: Date,
@@ -68,7 +59,7 @@ const UserSchema: Schema = new Schema(
     },
     passwordResetToken: {
       type: String,
-      select: false, // Don't return by default
+      select: false,
     },
     passwordResetExpires: {
       type: Date,
@@ -79,7 +70,5 @@ const UserSchema: Schema = new Schema(
     timestamps: { createdAt: true, updatedAt: false },
   }
 );
-
-// Note: email and username indexes are automatically created by unique: true
 
 export default mongoose.model<IUser>('User', UserSchema);

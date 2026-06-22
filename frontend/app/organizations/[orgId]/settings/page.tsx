@@ -1,0 +1,165 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { organizationsAPI } from '@/lib/api';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { Button } from '@/components/ui/Button';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { OrgPageHeader } from '@/components/OrgPageHeader';
+import { hasOrgPermission, OrgPermission, canConfigureOrgPanic } from '@/lib/permissions';
+import { useToast } from '@/contexts/ToastContext';
+import { DataTransferPanel } from '@/components/ui/DataTransferPanel';
+import { OrgPanicSettingsPanel } from '@/components/ui/OrgPanicSettingsPanel';
+
+export default function OrganizationSettingsPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
+  const { organizations, refreshOrganizations, setCurrentOrg } = useOrganization();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const org = organizations.find((item) => item._id === orgId);
+
+  const customPermissions = (org?.permissions ?? []) as OrgPermission[];
+  const canUpdate = org
+    ? hasOrgPermission(org.role, customPermissions, 'org:update')
+    : false;
+  const canConfigurePanic = org
+    ? canConfigureOrgPanic(org.role, customPermissions)
+    : false;
+  const canExport = org?.role === 'owner' || org?.role === 'admin';
+  const canImport = org
+    ? org.role === 'owner' ||
+      org.role === 'admin' ||
+      hasOrgPermission(org.role, customPermissions, 'org:create_project')
+    : false;
+
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (org) {
+      setName(org.name);
+      setLoading(false);
+    }
+  }, [org]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canUpdate) return;
+
+    setSubmitting(true);
+    setFieldErrors({});
+
+    try {
+      const updated = await organizationsAPI.update(orgId, { name: name.trim() });
+      await refreshOrganizations();
+      if (org) {
+        setCurrentOrg({ ...org, name: updated.name });
+      }
+      toastSuccess('Organization renamed successfully');
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: {
+          status?: number;
+          data?: { error?: string; errors?: Array<{ path?: string; msg?: string }> };
+        };
+      };
+      if (axiosErr.response?.status === 403) {
+        toastError('You do not have permission to update this organization.');
+      } else if (axiosErr.response?.data?.errors) {
+        const next: Record<string, string> = {};
+        for (const item of axiosErr.response.data.errors) {
+          if (item.path) next[item.path] = item.msg || 'Invalid value';
+        }
+        setFieldErrors(next);
+      } else {
+        toastError(axiosErr.response?.data?.error || 'Failed to update organization');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full">
+        <SkeletonCard />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      {org && (
+        <OrgPageHeader
+          orgId={orgId}
+          orgName={org.name}
+          title="Organization settings"
+          description="Manage organization details."
+        />
+      )}
+
+      {org && (canExport || canImport) && (
+        <DataTransferPanel
+          scope="organization"
+          orgId={orgId}
+          canExport={canExport}
+          canImport={canImport}
+          resourceName={org.name}
+        />
+      )}
+
+      {org && (
+        <OrgPanicSettingsPanel
+          orgId={orgId}
+          orgName={org.name}
+          canConfigure={canConfigurePanic}
+        />
+      )}
+
+      {canUpdate ? (
+        <section className="content-section">
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">General</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Update the display name for this organization.
+          </p>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                Organization name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={100}
+                className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              />
+              {fieldErrors.name && (
+                <p className="mt-1 text-sm text-[var(--error)]">{fieldErrors.name}</p>
+              )}
+            </div>
+            {org?.type === 'team' && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Slug: <code className="font-mono">{org.slug}</code> (cannot be changed)
+              </p>
+            )}
+            <div className="border-t border-[var(--border)] pt-4">
+              <Button
+                variant="primary"
+                size="md"
+                type="submit"
+                disabled={submitting || !name.trim() || name.trim() === org?.name}
+              >
+                {submitting ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  );
+}

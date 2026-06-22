@@ -12,6 +12,7 @@ function VerifyEmailForm() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const token = searchParams.get('token');
+  const inviteToken = searchParams.get('invite');
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -22,9 +23,15 @@ function VerifyEmailForm() {
       }
 
       try {
-        await authAPI.verifyEmail(token);
+        const result = await authAPI.verifyEmail(token);
         setStatus('success');
-        setMessage('Email verified successfully! You can now log in.');
+        if (result.acceptedInvites?.length) {
+          setMessage('Email verified and organization invitation accepted. You can now log in.');
+        } else if (inviteToken) {
+          setMessage('Email verified successfully. You can now log in and accept your organization invitation.');
+        } else {
+          setMessage('Email verified successfully! You can now log in.');
+        }
       } catch (err: any) {
         setStatus('error');
         setMessage(err.response?.data?.error || 'Email verification failed. The link may be invalid or expired.');
@@ -48,7 +55,7 @@ function VerifyEmailForm() {
       </div>
 
       <div className="relative w-full max-w-md z-10">
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8 text-center">
+        <div className="border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
             <Image 
               src="/hashenv-transparent.svg" 
@@ -78,7 +85,7 @@ function VerifyEmailForm() {
               <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Email Verified!</h2>
               <p className="text-[var(--text-muted)] mb-6">{message}</p>
               <Link
-                href="/login"
+                href={inviteToken ? `/login?invite=${encodeURIComponent(inviteToken)}` : '/login'}
                 className="inline-block rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] transition-all font-[var(--font-inter)]"
               >
                 Go to Login

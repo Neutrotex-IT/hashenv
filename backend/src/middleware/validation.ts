@@ -1,5 +1,6 @@
 import { body, param, query, ValidationChain } from 'express-validator';
 import { isValidObjectId } from './security';
+import { isValidEnvSlug, normalizeEnvSlug } from '../lib/environments';
 
 /**
  * Enhanced input validation middleware
@@ -105,22 +106,73 @@ export const validateProjectName = (): ValidationChain => {
 };
 
 /**
- * Validate environment parameter
+ * Validate environment slug in request body
  */
 export const validateEnvironment = (): ValidationChain => {
   return body('environment')
-    .isIn(['dev', 'staging', 'prod'])
-    .withMessage('Environment must be one of: dev, staging, prod');
+    .trim()
+    .notEmpty()
+    .withMessage('Environment is required')
+    .custom((value) => {
+      if (!isValidEnvSlug(value)) {
+        throw new Error(
+          'Environment must be 2-32 lowercase characters, start with a letter, and use only letters, numbers, and hyphens'
+        );
+      }
+      return true;
+    })
+    .customSanitizer((value) => normalizeEnvSlug(value));
 };
 
 /**
- * Validate environment query parameter
+ * Validate environment query parameter (optional slug)
  */
 export const validateEnvironmentQuery = (): ValidationChain => {
   return query('environment')
     .optional()
-    .isIn(['dev', 'staging', 'prod'])
-    .withMessage('Environment must be one of: dev, staging, prod');
+    .custom((value) => {
+      if (value && !isValidEnvSlug(value)) {
+        throw new Error('Invalid environment slug');
+      }
+      return true;
+    })
+    .customSanitizer((value) => (value ? normalizeEnvSlug(value) : value));
+};
+
+/**
+ * Validate environment slug in URL param
+ */
+export const validateEnvironmentSlugParam = (): ValidationChain => {
+  return param('slug')
+    .trim()
+    .notEmpty()
+    .withMessage('Environment slug is required')
+    .custom((value) => {
+      if (!isValidEnvSlug(value)) {
+        throw new Error('Invalid environment slug');
+      }
+      return true;
+    })
+    .customSanitizer((value) => normalizeEnvSlug(value));
+};
+
+/**
+ * Validate new environment name in body (for create/rename)
+ */
+export const validateEnvironmentName = (): ValidationChain => {
+  return body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Environment name is required')
+    .custom((value) => {
+      if (!isValidEnvSlug(value)) {
+        throw new Error(
+          'Environment name must be 2-32 lowercase characters, start with a letter, and use only letters, numbers, and hyphens'
+        );
+      }
+      return true;
+    })
+    .customSanitizer((value) => normalizeEnvSlug(value));
 };
 
 /**

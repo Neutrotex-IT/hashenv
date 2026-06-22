@@ -2,11 +2,7 @@ import express, { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User';
 import UserSettings from '../models/UserSettings';
-import Project from '../models/Project';
-import EnvFile from '../models/EnvFile';
-import Secret from '../models/Secret';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { decryptEnv } from '../lib/crypto';
 
 const router = express.Router();
 
@@ -22,24 +18,16 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
     }
 
     const settings = await UserSettings.findOne({ userId: req.user.userId });
-    
-    // Return default settings if none exist
+
     if (!settings) {
       res.json({
-        flushDuration: null, // Default disabled
-        panicButton: {
-          flushEnvs: false,
-          revokeCollaborators: false,
-          downloadEnvs: false,
-          askConfirmation: true,
-        },
+        flushDuration: null,
       });
       return;
     }
 
     res.json({
       flushDuration: settings.flushDuration || null,
-      panicButton: settings.panicButton,
     });
   } catch (error) {
     console.error('Get settings error:', error instanceof Error ? error.message : 'Failed to get settings');
@@ -58,9 +46,8 @@ router.put(
     body('flushDuration')
       .optional()
       .custom((value) => {
-        // Allow null/undefined (disabled) or values between 1 and 1000
         if (value === null || value === undefined || value === '') {
-          return true; // Disabled is allowed
+          return true;
         }
         const numValue = Number(value);
         if (isNaN(numValue) || !Number.isInteger(numValue)) {
@@ -71,22 +58,6 @@ router.put(
         }
         return true;
       }),
-    body('panicButton.flushEnvs')
-      .optional()
-      .isBoolean()
-      .withMessage('flushEnvs must be a boolean'),
-    body('panicButton.revokeCollaborators')
-      .optional()
-      .isBoolean()
-      .withMessage('revokeCollaborators must be a boolean'),
-    body('panicButton.downloadEnvs')
-      .optional()
-      .isBoolean()
-      .withMessage('downloadEnvs must be a boolean'),
-    body('panicButton.askConfirmation')
-      .optional()
-      .isBoolean()
-      .withMessage('askConfirmation must be a boolean'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -101,37 +72,30 @@ router.put(
         return;
       }
 
-      const { flushDuration, panicButton } = req.body;
+      const { flushDuration } = req.body;
 
       let settings = await UserSettings.findOne({ userId: req.user.userId });
 
       if (!settings) {
         settings = await UserSettings.create({
           userId: req.user.userId,
-          flushDuration: flushDuration === null || flushDuration === undefined || flushDuration === '' ? null : Number(flushDuration),
-          panicButton: panicButton || {
-            flushEnvs: false,
-            revokeCollaborators: false,
-            downloadEnvs: false,
-            askConfirmation: true,
-          },
+          flushDuration:
+            flushDuration === null || flushDuration === undefined || flushDuration === ''
+              ? null
+              : Number(flushDuration),
         });
       } else {
         if (flushDuration !== undefined) {
-          settings.flushDuration = flushDuration === null || flushDuration === undefined || flushDuration === '' ? null : Number(flushDuration);
-        }
-        if (panicButton) {
-          settings.panicButton = {
-            ...settings.panicButton,
-            ...panicButton,
-          };
+          settings.flushDuration =
+            flushDuration === null || flushDuration === undefined || flushDuration === ''
+              ? null
+              : Number(flushDuration);
         }
         await settings.save();
       }
 
       res.json({
         flushDuration: settings.flushDuration,
-        panicButton: settings.panicButton,
       });
     } catch (error) {
       console.error('Update settings error:', error instanceof Error ? error.message : 'Failed to update settings');
@@ -161,7 +125,7 @@ router.get('/profile', authenticate, async (req: AuthRequest, res: Response): Pr
       id: user._id,
       name: user.name,
       username: user.username,
-      email: user.email, // Include but note it can't be edited
+      email: user.email,
     });
   } catch (error) {
     console.error('Get profile error:', error instanceof Error ? error.message : 'Failed to get profile');
@@ -217,12 +181,10 @@ router.put(
         return;
       }
 
-      // Update name if provided
       if (name !== undefined) {
         user.name = name.trim();
       }
 
-      // Update username if provided and check for duplicates
       if (username !== undefined && username.trim().toLowerCase() !== user.username) {
         const newUsername = username.trim().toLowerCase();
         const existingUser = await User.findOne({ username: newUsername });
@@ -244,143 +206,15 @@ router.put(
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error('Update profile error:', errMsg);
-      
-      // Handle duplicate key error
+
       if (errMsg.includes('duplicate key') || errMsg.includes('E11000')) {
         res.status(400).json({ error: 'Username already taken' });
         return;
       }
-      
+
       res.status(500).json({ error: 'Failed to update profile' });
     }
   }
 );
-
-/**
- * Execute panic button actions
- * POST /api/settings/panic
- * 
- * NOTE: Only affects projects owned by the user (createdBy = userId).
- * Does NOT affect projects where the user is a collaborator.
- */
-router.post('/panic', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
-
-    const settings = await UserSettings.findOne({ userId: req.user.userId });
-    if (!settings) {
-      res.status(400).json({ error: 'Panic button not configured' });
-      return;
-    }
-
-    const { flushEnvs, revokeCollaborators, downloadEnvs } = settings.panicButton;
-
-    if (!flushEnvs && !revokeCollaborators && !downloadEnvs) {
-      res.status(400).json({ error: 'No panic actions configured' });
-      return;
-    }
-
-    const results: any = {
-      downloadEnvs: false,
-      flushEnvs: false,
-      revokeCollaborators: false,
-    };
-
-    // Get only projects owned by the user (not projects where user is a collaborator)
-    const projects = await Project.find({ createdBy: req.user.userId });
-
-    // 1. Download all envs first (if enabled)
-    if (downloadEnvs) {
-      try {
-        const envFiles: Array<{ projectName: string; environment: string; version: number; content: string }> = [];
-        
-        for (const project of projects) {
-          const projectEnvs = await EnvFile.find({ projectId: project._id }).sort({ createdAt: -1 });
-          
-          // Get latest version of each environment
-          const latestByEnv: { [key: string]: any } = {};
-          for (const envFile of projectEnvs) {
-            const env = envFile.environment;
-            if (!latestByEnv[env] || envFile.version > latestByEnv[env].version) {
-              latestByEnv[env] = envFile;
-            }
-          }
-
-          for (const env of Object.keys(latestByEnv)) {
-            const envFile = latestByEnv[env];
-            try {
-              const decryptedContent = decryptEnv(envFile.encryptedData, envFile.iv, envFile.authTag);
-              envFiles.push({
-                projectName: project.name,
-                environment: env,
-                version: envFile.version,
-                content: decryptedContent,
-              });
-            } catch (decryptError) {
-              console.error(`Failed to decrypt env for ${project.name} ${env}:`, decryptError);
-            }
-          }
-        }
-
-        // Format as downloadable text
-        let downloadContent = `# HashEnv Backup - ${new Date().toISOString()}\n\n`;
-        for (const envFile of envFiles) {
-          downloadContent += `# Project: ${envFile.projectName} - Environment: ${envFile.environment} - Version: ${envFile.version}\n`;
-          downloadContent += `${envFile.content}\n\n`;
-        }
-
-        results.downloadEnvs = true;
-        results.downloadContent = downloadContent;
-        results.downloadFilename = `hashenv-backup-${Date.now()}.txt`;
-      } catch (error) {
-        console.error('Download envs error:', error);
-        results.downloadError = error instanceof Error ? error.message : 'Failed to download envs';
-      }
-    }
-
-    // 2. Flush envs (if enabled)
-    if (flushEnvs) {
-      try {
-        const projectIds = projects.map(p => p._id);
-        // Count before deletion
-        const countBefore = await EnvFile.countDocuments({ projectId: { $in: projectIds } });
-        
-        for (const project of projects) {
-          await EnvFile.deleteMany({ projectId: project._id });
-        }
-        results.flushEnvs = true;
-        results.flushedCount = countBefore;
-      } catch (error) {
-        console.error('Flush envs error:', error);
-        results.flushError = error instanceof Error ? error.message : 'Failed to flush envs';
-      }
-    }
-
-    // 3. Revoke all collaborator access (if enabled)
-    if (revokeCollaborators) {
-      try {
-        for (const project of projects) {
-          project.members = [];
-          await project.save();
-        }
-        results.revokeCollaborators = true;
-      } catch (error) {
-        console.error('Revoke collaborators error:', error);
-        results.revokeError = error instanceof Error ? error.message : 'Failed to revoke collaborators';
-      }
-    }
-
-    res.json({
-      success: true,
-      results,
-    });
-  } catch (error) {
-    console.error('Panic button error:', error instanceof Error ? error.message : 'Failed to execute panic actions');
-    res.status(500).json({ error: 'Failed to execute panic actions' });
-  }
-});
 
 export default router;

@@ -7,28 +7,28 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
-import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { SettingsNav } from '@/components/ui/SettingsNav';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [activeSection, setActiveSection] = useState('profile');
 
-  // Profile state
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
 
-  // Settings state
   const [flushDuration, setFlushDuration] = useState<number | null>(null);
-  const [panicButton, setPanicButton] = useState({
-    flushEnvs: false,
-    revokeCollaborators: false,
-    downloadEnvs: false,
-    askConfirmation: true,
-  });
+  const [savedProfile, setSavedProfile] = useState({ name: '', username: '' });
+  const [savedFlushDuration, setSavedFlushDuration] = useState<number | null>(null);
+
+  const profileDirty =
+    name !== savedProfile.name || username !== savedProfile.username;
+  const flushDirty = flushDuration !== savedFlushDuration;
 
   useEffect(() => {
     loadData();
@@ -45,12 +45,14 @@ export default function SettingsPage() {
       setName(profile.name);
       setUsername(profile.username);
       setEmail(profile.email);
-      setFlushDuration(settings.flushDuration || null);
-      if (settings.panicButton) {
-        setPanicButton(settings.panicButton);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load settings');
+      setSavedProfile({ name: profile.name, username: profile.username });
+
+      const nextFlushDuration = settings.flushDuration || null;
+      setFlushDuration(nextFlushDuration);
+      setSavedFlushDuration(nextFlushDuration);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toastError(axiosErr.response?.data?.error || 'Failed to load settings');
     } finally {
       setLoading(false);
     }
@@ -59,22 +61,27 @@ export default function SettingsPage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       const updatedProfile = await settingsAPI.updateProfile({ name, username });
       setName(updatedProfile.name);
       setUsername(updatedProfile.username);
-      setSuccess('Profile updated successfully');
-      
-      // Update auth context if needed
+      setSavedProfile({ name: updatedProfile.name, username: updatedProfile.username });
+      toastSuccess('Profile updated successfully');
+
       if (user) {
         user.name = updatedProfile.name;
         user.username = updatedProfile.username;
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to update profile');
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { error?: string; errors?: Array<{ msg?: string }> } };
+      };
+      toastError(
+        axiosErr.response?.data?.error ||
+          axiosErr.response?.data?.errors?.[0]?.msg ||
+          'Failed to update profile'
+      );
     } finally {
       setSaving(false);
     }
@@ -82,25 +89,38 @@ export default function SettingsPage() {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate flush duration (only if not null/empty)
-    if (flushDuration !== null && flushDuration !== undefined && (flushDuration < 1 || flushDuration > 1000)) {
-      setError('Flush duration must be between 1 and 1000 hours, or empty to disable');
+
+    if (
+      flushDuration !== null &&
+      flushDuration !== undefined &&
+      (flushDuration < 1 || flushDuration > 1000)
+    ) {
+      toastError('Flush duration must be between 1 and 1000 hours, or empty to disable');
       return;
     }
-    
+
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
+      const nextFlushDuration =
+        flushDuration === null || flushDuration === undefined || flushDuration === 0
+          ? null
+          : flushDuration;
+
       await settingsAPI.update({
-        flushDuration: flushDuration === null || flushDuration === undefined || flushDuration === 0 ? null : flushDuration,
-        panicButton,
+        flushDuration: nextFlushDuration,
       });
-      setSuccess('Settings saved successfully');
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save settings');
+      setSavedFlushDuration(nextFlushDuration);
+      toastSuccess('Settings saved successfully');
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { error?: string; errors?: Array<{ msg?: string }> } };
+      };
+      toastError(
+        axiosErr.response?.data?.error ||
+          axiosErr.response?.data?.errors?.[0]?.msg ||
+          'Failed to save settings'
+      );
     } finally {
       setSaving(false);
     }
@@ -110,7 +130,7 @@ export default function SettingsPage() {
     return (
       <ProtectedRoute>
         <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
+        <div className="w-full">
             <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
             <SkeletonCard className="mb-6" />
             <SkeletonCard />
@@ -123,184 +143,134 @@ export default function SettingsPage() {
   return (
     <ProtectedRoute>
       <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mb-6">
-            <Link href="/dashboard" className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block">
-              ← Back to Dashboard
-            </Link>
-            <h1 className="text-3xl font-bold text-[var(--foreground)]">Settings</h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your account settings and preferences</p>
-          </div>
+        <div className="w-full">
+          <PageHeader
+            title="Account settings"
+            description="Profile and automation settings for your account."
+            breadcrumbs={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Settings' },
+            ]}
+          />
 
-          {error && (
-            <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-              <p className="text-sm text-[var(--error)]">{error}</p>
+          <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <aside className="lg:sticky lg:top-6 lg:self-start">
+              <SettingsNav activeId={activeSection} onSelect={setActiveSection} />
+            </aside>
+
+            <div className="min-w-0 space-y-8">
+              {activeSection === 'profile' && (
+                <section>
+                  <h2 className="text-lg font-semibold text-[var(--foreground)]">Profile</h2>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Your public name and username across HashEnv.
+                  </p>
+                  <form onSubmit={handleSaveProfile} className="mt-6 space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                        required
+                        maxLength={100}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                        Username
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) =>
+                          setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+                        }
+                        className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                        required
+                        minLength={3}
+                        maxLength={30}
+                        pattern="[a-z0-9_]+"
+                      />
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        3-30 characters, lowercase letters, numbers, and underscores only
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[var(--text-muted)]">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        disabled
+                        className="block w-full max-w-md cursor-not-allowed rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[var(--text-muted)]"
+                      />
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Email cannot be changed
+                      </p>
+                    </div>
+
+                    <div className="border-t border-[var(--border)] pt-4">
+                      <Button type="submit" variant="primary" size="md" disabled={saving || !profileDirty}>
+                        {saving ? 'Saving...' : 'Save profile'}
+                      </Button>
+                    </div>
+                  </form>
+                </section>
+              )}
+
+              {activeSection === 'auto-flush' && (
+                <section>
+                  <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                    Auto-flush environment files
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Automatically delete environment files on projects where you can run panic
+                    actions, across all organizations you belong to.
+                  </p>
+                  <form onSubmit={handleSaveSettings} className="mt-6 space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                        Flush interval (hours)
+                      </label>
+                      <input
+                        type="number"
+                        value={flushDuration || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || value === null || value === undefined) {
+                            setFlushDuration(null);
+                          } else {
+                            const numValue = parseInt(value, 10);
+                            if (!isNaN(numValue)) {
+                              setFlushDuration(Math.min(Math.max(numValue, 1), 1000));
+                            }
+                          }
+                        }}
+                        min="1"
+                        max="1000"
+                        placeholder="Leave empty to disable"
+                        className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                      />
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Between 1 and 1000 hours, or leave empty to disable.
+                      </p>
+                    </div>
+                    <div className="border-t border-[var(--border)] pt-4">
+                      <Button type="submit" variant="primary" size="md" disabled={saving || !flushDirty}>
+                        {saving ? 'Saving...' : 'Save auto-flush'}
+                      </Button>
+                    </div>
+                  </form>
+                </section>
+              )}
             </div>
-          )}
-
-          {success && (
-            <div className="mb-6 rounded-lg border border-green-500/50 bg-green-500/10 p-4">
-              <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
-            </div>
-          )}
-
-          {/* Profile Section */}
-          <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-            <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">Profile</h2>
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  required
-                  maxLength={100}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  required
-                  minLength={3}
-                  maxLength={30}
-                  pattern="[a-z0-9_]+"
-                />
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  3-30 characters, lowercase letters, numbers, and underscores only
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-[var(--text-muted)] cursor-not-allowed"
-                />
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Email cannot be changed
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border)]">
-                <Button type="submit" variant="primary" size="md" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Profile'}
-                </Button>
-              </div>
-            </form>
-          </div>
-
-          {/* Flush Duration Section */}
-          <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-            <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">Auto-Flush Environment Files</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-4">
-              Automatically delete all environment files across all your projects at a specified interval.
-            </p>
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                  Flush Duration (hours)
-                </label>
-                <input
-                  type="number"
-                  value={flushDuration || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '' || value === null || value === undefined) {
-                      setFlushDuration(null);
-                    } else {
-                      const numValue = parseInt(value);
-                      if (!isNaN(numValue)) {
-                        setFlushDuration(Math.min(Math.max(numValue, 1), 1000));
-                      }
-                    }
-                  }}
-                  min="1"
-                  max="1000"
-                  placeholder="Enter hours (leave empty to disable)"
-                  className="block w-full max-w-md rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                />
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Set the time interval (in hours) for automatic deletion. Must be between 1 and 1000 hours, or leave empty to disable auto-flush.
-                </p>
-              </div>
-            </form>
-          </div>
-
-          {/* Panic Button Settings */}
-          <div className="mb-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-            <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Panic Button Settings</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-4">
-              Configure what happens when you press the panic button. Use this in emergency situations.
-            </p>
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div className="space-y-3">
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={panicButton.flushEnvs}
-                    onChange={(e) => setPanicButton({ ...panicButton, flushEnvs: e.target.checked })}
-                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                  />
-                  <span className="text-sm text-[var(--foreground)]">Flush Envs Immediately</span>
-                </label>
-
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={panicButton.revokeCollaborators}
-                    onChange={(e) => setPanicButton({ ...panicButton, revokeCollaborators: e.target.checked })}
-                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                  />
-                  <span className="text-sm text-[var(--foreground)]">Revoke All Collaborator Access</span>
-                </label>
-
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={panicButton.downloadEnvs}
-                    onChange={(e) => setPanicButton({ ...panicButton, downloadEnvs: e.target.checked })}
-                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                  />
-                  <span className="text-sm text-[var(--foreground)]">Download All Envs</span>
-                </label>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border)]">
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={panicButton.askConfirmation}
-                    onChange={(e) => setPanicButton({ ...panicButton, askConfirmation: e.target.checked })}
-                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
-                  />
-                  <span className="text-sm text-[var(--foreground)]">Ask confirmation after panic button</span>
-                </label>
-                <p className="mt-1 text-xs text-[var(--text-muted)] ml-7">
-                  If checked, a confirmation dialog will appear before executing panic actions.
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border)]">
-                <Button type="submit" variant="primary" size="md" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Settings'}
-                </Button>
-              </div>
-            </form>
           </div>
         </div>
       </AuthenticatedLayout>

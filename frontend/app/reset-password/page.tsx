@@ -5,40 +5,39 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
+import { PasswordInput } from '@/components/ui/PasswordInput';
+import { useToast } from '@/contexts/ToastContext';
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const token = searchParams.get('token');
 
   useEffect(() => {
     if (!token) {
-      setError('Reset token is missing. Please request a new password reset link.');
+      toastError('Reset token is missing. Please request a new password reset link.');
     }
-  }, [token]);
+  }, [token, toastError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     if (!token) {
-      setError('Reset token is missing');
+      toastError('Reset token is missing');
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      toastError('Password must be at least 8 characters');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      toastError('Passwords do not match');
       return;
     }
 
@@ -46,12 +45,12 @@ function ResetPasswordForm() {
 
     try {
       await authAPI.resetPassword(token, password);
-      setSuccess('Password reset successful! Redirecting to login...');
+      toastSuccess('Password reset successful! Redirecting to login...');
       setTimeout(() => {
         router.push('/login');
       }, 2000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Password reset failed. The link may be invalid or expired.');
+      toastError(err.response?.data?.error || 'Password reset failed. The link may be invalid or expired.');
     } finally {
       setLoading(false);
     }
@@ -103,7 +102,7 @@ function ResetPasswordForm() {
             }}></div>
             
             <form 
-              className="relative rounded-lg border border-[var(--border)] bg-[var(--surface)]/50 backdrop-blur-sm p-8 sm:p-10 space-y-6 z-10"
+              className="relative border border-[var(--border)] bg-[var(--surface)] rounded-[var(--radius-lg)] p-8 sm:p-10 space-y-6 z-10"
               onSubmit={handleSubmit}
             >
               {/* Corner Accents */}
@@ -112,32 +111,18 @@ function ResetPasswordForm() {
               <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-[var(--accent)]/30 rounded-bl-lg"></div>
               <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-[var(--accent)]/30 rounded-br-lg"></div>
 
-              {error && (
-                <div className="rounded-md border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
-                  <p className="text-sm text-[var(--error)] font-[var(--font-inter)]">{error}</p>
-                </div>
-              )}
-
-              {success && (
-                <div className="rounded-md border border-green-500/50 bg-green-500/10 p-4">
-                  <p className="text-sm text-green-600 dark:text-green-400 font-[var(--font-inter)]">{success}</p>
-                </div>
-              )}
-
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
                   New Password
                 </label>
-                <input
+                <PasswordInput
                   id="password"
                   name="password"
-                  type="password"
+                  value={password}
+                  onChange={setPassword}
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter new password (min 8 characters)"
                 />
               </div>
@@ -146,16 +131,14 @@ function ResetPasswordForm() {
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--foreground)] font-[var(--font-inter)] mb-2">
                   Confirm Password
                 </label>
-                <input
+                <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
-                  type="password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="block w-full rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2.5 text-[var(--foreground)] placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all font-[var(--font-inter)]"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
                 />
               </div>
@@ -177,10 +160,16 @@ function ResetPasswordForm() {
                 </button>
               </div>
 
-              <div className="text-center pt-2">
+              <div className="text-center pt-2 space-y-2">
+                <Link
+                  href="/forgot-password"
+                  className="block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                >
+                  Request a new reset link
+                </Link>
                 <Link
                   href="/login"
-                  className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
+                  className="block text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-[var(--font-inter)]"
                 >
                   Back to Login
                 </Link>

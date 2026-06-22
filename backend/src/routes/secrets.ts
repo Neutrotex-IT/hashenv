@@ -1,11 +1,12 @@
 import express, { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import Secret from '../models/Secret';
-import { encryptEnv, decryptEnv } from '../lib/crypto';
+import { encryptProjectData, decryptProjectData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
 import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
 import { validateProjectId, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
+import { auditSecret } from '../lib/audit';
 
 const router = express.Router();
 
@@ -68,9 +69,9 @@ router.post(
         return;
       }
 
-      // Encrypt the secret content
+      // Encrypt the secret content using project-specific key
       const plaintextData = content || '';
-      const { encryptedData, iv, authTag } = encryptEnv(plaintextData);
+      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
 
       // Create the secret
       const secret = await Secret.create({
@@ -81,6 +82,15 @@ router.post(
         authTag,
         createdBy: req.user.userId,
       });
+
+      await auditSecret(
+        projectId,
+        req.user.userId,
+        'create',
+        secret._id.toString(),
+        { secretName: secret.name },
+        req
+      );
 
       // Return secret metadata (without encrypted data)
       const populatedSecret = await Secret.findById(secret._id)
@@ -168,8 +178,19 @@ router.get(
         return;
       }
 
-      // Decrypt the secret content
-      const decryptedContent = decryptEnv(secret.encryptedData, secret.iv, secret.authTag);
+      // Decrypt the secret content using project-specific key
+      const decryptedContent = await decryptProjectData(projectId, secret.encryptedData, secret.iv, secret.authTag);
+
+      if (req.user) {
+        await auditSecret(
+          projectId,
+          req.user.userId,
+          'read',
+          secret._id.toString(),
+          { secretName: secret.name },
+          req
+        );
+      }
 
       res.json({
         _id: secret._id,
@@ -266,15 +287,24 @@ router.put(
         secret.name = name.trim();
       }
 
-      // Update content if provided (re-encrypt)
+      // Update content if provided (re-encrypt with project-specific key)
       if (content !== undefined) {
-        const { encryptedData, iv, authTag } = encryptEnv(content);
+        const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
         secret.encryptedData = encryptedData;
         secret.iv = iv;
         secret.authTag = authTag;
       }
 
       await secret.save();
+
+      await auditSecret(
+        projectId,
+        req.user.userId,
+        'update',
+        secret._id.toString(),
+        { secretName: secret.name },
+        req
+      );
 
       // Return updated secret metadata
       const populatedSecret = await Secret.findById(secret._id)
@@ -326,6 +356,17 @@ router.delete(
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
+      }
+
+      if (req.user) {
+        await auditSecret(
+          projectId,
+          req.user.userId,
+          'delete',
+          secret._id.toString(),
+          { secretName: secret.name },
+          req
+        );
       }
 
       res.json({ message: 'Secret deleted successfully' });

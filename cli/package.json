@@ -1,0 +1,13 @@
+{
+  "name": "@hashenv/cli",
+  "version": "0.1.0",
+  "description": "HashEnv CLI — pull env files and run commands with injected secrets",
+  "bin": {
+    "hashenv": "./bin/hashenv.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": ["hashenv", "env", "secrets", "cli"],
+  "license": "UNLICENSED"
+}

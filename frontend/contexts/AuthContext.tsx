@@ -1,24 +1,24 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '@/lib/api';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authAPI, getAccessToken, setAccessToken } from '@/lib/api';
 
 interface User {
   id: string;
   name: string;
   username: string;
   email: string;
-  role: 'admin' | 'user'; // DEPRECATED: Not used for access control
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  /** True after session bootstrap completes (authenticated or confirmed unauthenticated). */
+  sessionReady: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, username: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  register: (name: string, username: string, email: string, password: string, inviteToken?: string) => Promise<void>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
-  isAdmin: boolean; // DEPRECATED: Always false, kept for backward compatibility
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,60 +27,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user from localStorage on mount
+  // Try to restore session on mount using refresh token (HttpOnly cookie)
   useEffect(() => {
-    const loadUser = async () => {
-      const token = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      
-      if (token && storedUser) {
-        try {
-          // Verify token is still valid
+    const restoreSession = async () => {
+      try {
+        // If we already have a token in memory, verify it
+        if (getAccessToken()) {
           const userData = await authAPI.me();
           setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
-        } catch (error) {
-          // Token invalid, clear storage
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+        } else {
+          // Try to refresh the token using the HttpOnly cookie
+          const data = await authAPI.refresh();
+          setAccessToken(data.accessToken);
+          setUser(data.user);
         }
+      } catch {
+        // No valid session, user needs to log in
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     
-    loadUser();
+    restoreSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     const data = await authAPI.login({ email, password });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    // accessToken is set in authAPI.login via setAccessToken
     setUser(data.user);
-  };
+  }, []);
 
-  const register = async (name: string, username: string, email: string, password: string) => {
-    const data = await authAPI.register({ name, username, email, password });
-    // Registration now returns a message instead of token - user must verify email first
-    // Don't set token or user - they need to verify email before logging in
+  const register = useCallback(async (name: string, username: string, email: string, password: string, inviteToken?: string) => {
+    const data = await authAPI.register({ name, username, email, password, inviteToken });
     return data;
-  };
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-  };
+  const logout = useCallback(async () => {
+    try {
+      await authAPI.logout();
+    } finally {
+      setUser(null);
+    }
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
+        sessionReady: !loading,
         login,
         register,
         logout,
         isAuthenticated: !!user,
-        isAdmin: false, // DEPRECATED: Role-based access is no longer used
       }}
     >
       {children}

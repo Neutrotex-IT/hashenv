@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IEnvFile extends Document {
   projectId: mongoose.Types.ObjectId;
-  environment: 'dev' | 'staging' | 'prod';
+  environment: string;
   encryptedData: Buffer;
   iv: Buffer;
   authTag: Buffer;
@@ -20,8 +20,8 @@ const EnvFileSchema: Schema = new Schema(
     },
     environment: {
       type: String,
-      enum: ['dev', 'staging', 'prod'],
       required: [true, 'Environment is required'],
+      index: true,
     },
     encryptedData: {
       type: Buffer,

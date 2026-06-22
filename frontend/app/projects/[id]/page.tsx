@@ -1,16 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
-import { projectsAPI, envAPI, secretsAPI } from '@/lib/api';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { AuthenticatedLayout } from '@/components/AuthenticatedLayout';
+import { projectsAPI, envAPI, secretsAPI, accountsAPI, ProjectPermissionsResponse, ProjectEnvironment } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { UploadEnvButton } from '@/components/ui/UploadEnvButton';
-import { formatPermission } from '@/lib/permissions';
+import { canReadProject, canWriteProject } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
+import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
+import { EnvCompareModal } from '@/components/ui/EnvCompareModal';
+import { formatEnvLabel } from '@/lib/environments';
+import { useConfirm } from '@/contexts/ConfirmContext';
+import { useToast } from '@/contexts/ToastContext';
+import { shallowRecordEqual } from '@/lib/formUtils';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryKeys';
+import { fetchProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
+
+interface AccountFormSnapshot {
+  label: string;
+  provider: string;
+  providerOther: string;
+  email: string;
+  loginUrl: string;
+  usesSSO: boolean;
+  ssoProvider: string;
+  password: string;
+  notes: string;
+}
 
 interface Project {
   _id: string;
@@ -33,7 +54,7 @@ interface Project {
 
 interface EnvVersion {
   _id: string;
-  environment: 'dev' | 'staging' | 'prod';
+  environment: string;
   version: number;
   uploadedBy: {
     _id: string;
@@ -55,16 +76,57 @@ interface Secret {
   updatedAt: string;
 }
 
+interface AssociatedAccount {
+  _id: string;
+  label: string;
+  provider: string;
+  providerOther?: string;
+  email: string;
+  loginUrl?: string;
+  usesSSO: boolean;
+  ssoProvider?: string;
+  createdBy: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+const ACCOUNT_PROVIDERS = [
+  { value: 'google', label: 'Google' },
+  { value: 'microsoft', label: 'Microsoft' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'aws', label: 'AWS' },
+  { value: 'slack', label: 'Slack' },
+  { value: 'stripe', label: 'Stripe' },
+  { value: 'vercel', label: 'Vercel' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+function formatProvider(provider: string, providerOther?: string) {
+  if (provider === 'other' && providerOther) return providerOther;
+  return ACCOUNT_PROVIDERS.find((p) => p.value === provider)?.label || provider;
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
+  const [permissionInfo, setPermissionInfo] = useState<ProjectPermissionsResponse | null>(null);
   const [envVersions, setEnvVersions] = useState<EnvVersion[]>([]);
+  const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironment[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
-  const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets'>('environments');
-  const [selectedEnv, setSelectedEnv] = useState<'dev' | 'staging' | 'prod'>('dev');
+  const [accounts, setAccounts] = useState<AssociatedAccount[]>([]);
+  const [selectedTab, setSelectedTab] = useState<'environments' | 'secrets' | 'accounts'>('environments');
+  const [selectedEnv, setSelectedEnv] = useState<string>('dev');
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareInitialFrom, setCompareInitialFrom] = useState<number | undefined>();
+  const [compareInitialTo, setCompareInitialTo] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretFormOpen, setSecretFormOpen] = useState(false);
@@ -72,6 +134,54 @@ export default function ProjectDetailPage() {
   const [secretName, setSecretName] = useState('');
   const [secretContent, setSecretContent] = useState('');
   const [submittingSecret, setSubmittingSecret] = useState(false);
+  const [accountFormOpen, setAccountFormOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AssociatedAccount | null>(null);
+  const [accountLabel, setAccountLabel] = useState('');
+  const [accountProvider, setAccountProvider] = useState('google');
+  const [accountProviderOther, setAccountProviderOther] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountLoginUrl, setAccountLoginUrl] = useState('');
+  const [accountUsesSSO, setAccountUsesSSO] = useState(false);
+  const [accountSsoProvider, setAccountSsoProvider] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountNotes, setAccountNotes] = useState('');
+  const [submittingAccount, setSubmittingAccount] = useState(false);
+  const [secretSnapshot, setSecretSnapshot] = useState<{ name: string; content: string } | null>(null);
+  const [accountSnapshot, setAccountSnapshot] = useState<AccountFormSnapshot | null>(null);
+  const [sensitiveModal, setSensitiveModal] = useState<{
+    title: string;
+    fields: SensitiveField[];
+    loading?: boolean;
+    error?: string;
+  } | null>(null);
+
+  const { confirm } = useConfirm();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const queryClient = useQueryClient();
+
+  const getAccountFormSnapshot = (): AccountFormSnapshot => ({
+    label: accountLabel,
+    provider: accountProvider,
+    providerOther: accountProviderOther,
+    email: accountEmail,
+    loginUrl: accountLoginUrl,
+    usesSSO: accountUsesSSO,
+    ssoProvider: accountSsoProvider,
+    password: accountPassword,
+    notes: accountNotes,
+  });
+
+  const secretFormDirty = Boolean(
+    editingSecret &&
+      secretSnapshot &&
+      (secretName !== secretSnapshot.name || secretContent !== secretSnapshot.content)
+  );
+
+  const accountFormDirty = Boolean(
+    editingAccount &&
+      accountSnapshot &&
+      !shallowRecordEqual(getAccountFormSnapshot(), accountSnapshot)
+  );
 
   useEffect(() => {
     if (projectId) {
@@ -80,20 +190,46 @@ export default function ProjectDetailPage() {
   }, [projectId]);
 
   useEffect(() => {
+    const envParam = searchParams.get('environment');
+    if (envParam && projectEnvironments.some((e) => e.slug === envParam)) {
+      setSelectedEnv(envParam);
+    }
+  }, [searchParams, projectEnvironments]);
+
+  useEffect(() => {
     if (project && projectId) {
       if (selectedTab === 'environments') {
         loadEnvVersions();
       } else if (selectedTab === 'secrets') {
         loadSecrets();
+      } else if (selectedTab === 'accounts') {
+        loadAccounts();
       }
     }
   }, [project, projectId, selectedEnv, selectedTab]);
 
   const loadProject = async () => {
     try {
-      const data = await projectsAPI.get(projectId);
+      const cachedProject = queryClient.getQueryData<Project>(queryKeys.project(projectId));
+      const cachedPermissions = queryClient.getQueryData<ProjectPermissionsResponse>(
+        queryKeys.projectPermissions(projectId)
+      );
+
+      const [data, permissionsData, envList] = await Promise.all([
+        cachedProject ? Promise.resolve(cachedProject) : projectsAPI.get(projectId),
+        cachedPermissions ? Promise.resolve(cachedPermissions) : projectsAPI.getPermissions(projectId),
+        fetchProjectEnvironments(queryClient, projectId),
+      ]);
       setProject(data);
-      setError(''); // Clear any previous errors
+      setPermissionInfo(permissionsData);
+      setProjectEnvironments(envList);
+      const envParam = searchParams.get('environment');
+      if (envParam && envList.some((e) => e.slug === envParam)) {
+        setSelectedEnv(envParam);
+      } else if (envList.length > 0 && !envList.some((e) => e.slug === selectedEnv)) {
+        setSelectedEnv(envList[0].slug);
+      }
+      setError('');
     } catch (err: any) {
       const status = err.response?.status;
       const errorMessage = err.response?.data?.error || 'Failed to load project';
@@ -150,20 +286,71 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const loadAccounts = async () => {
+    if (!project) {
+      return;
+    }
+
+    try {
+      const data = await accountsAPI.list(projectId);
+      setAccounts(data);
+    } catch (err: any) {
+      const status = err.response?.status;
+      if (status !== 403) {
+        console.error('Failed to load associated accounts:', err);
+      }
+      setAccounts([]);
+    }
+  };
+
   const handleDownload = async (environment: string, version?: number) => {
     try {
       await envAPI.download(projectId, environment, version);
-      // Refresh versions list after download
       loadEnvVersions();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download file');
+      toastError(err instanceof Error ? err.message : 'Failed to download environment file');
+    }
+  };
+
+  const handleViewEnv = async (version: EnvVersion) => {
+    const title = `${formatEnvLabel(selectedEnv)} v${version.version}`;
+    setSensitiveModal({ title, fields: [], loading: true });
+    try {
+      const data = await envAPI.getFileContent(projectId, version._id);
+      setSensitiveModal({
+        title,
+        fields: [{ label: 'Content', value: data.content, sensitive: true, multiline: true }],
+      });
+    } catch (err: any) {
+      setSensitiveModal({
+        title,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load environment file',
+      });
+    }
+  };
+
+  const handleRollback = async (version: number) => {
+    const ok = await confirm({
+      title: `Rollback to version ${version}?`,
+      message: `This creates a new version with the content from v${version}. Current history is preserved.`,
+      confirmLabel: 'Rollback',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await envAPI.rollback(projectId, selectedEnv, version);
+      toastSuccess(`Rolled back to version ${version}`);
+      loadEnvVersions();
+    } catch (err: any) {
+      toastError(err.response?.data?.error || 'Failed to rollback');
     }
   };
 
   const handleCreateSecret = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!secretName.trim() || !secretContent.trim()) {
-      alert('Secret name and content are required');
+      toastError('Secret name and content are required');
       return;
     }
 
@@ -185,8 +372,9 @@ export default function ProjectDetailPage() {
       setSecretName('');
       setSecretContent('');
       loadSecrets();
+      toastSuccess(editingSecret ? 'Secret updated' : 'Secret created');
     } catch (err: any) {
-      alert(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save secret');
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save secret');
     } finally {
       setSubmittingSecret(false);
     }
@@ -198,31 +386,45 @@ export default function ProjectDetailPage() {
       setEditingSecret(secret);
       setSecretName(secretData.name);
       setSecretContent(secretData.content);
+      setSecretSnapshot({ name: secretData.name, content: secretData.content });
       setSecretFormOpen(true);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load secret');
+      toastError(err.response?.data?.error || 'Failed to load secret');
     }
   };
 
   const handleDeleteSecret = async (secretId: string) => {
-    if (!confirm('Are you sure you want to delete this secret? This action cannot be undone.')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Delete secret?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       await secretsAPI.delete(projectId, secretId);
+      toastSuccess('Secret deleted');
       loadSecrets();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete secret');
+      toastError(err.response?.data?.error || 'Failed to delete secret');
     }
   };
 
   const handleViewSecret = async (secret: Secret) => {
+    setSensitiveModal({ title: secret.name, fields: [], loading: true });
     try {
       const secretData = await secretsAPI.get(projectId, secret._id);
-      alert(`Secret: ${secretData.name}\n\nContent:\n${secretData.content}`);
+      setSensitiveModal({
+        title: secretData.name,
+        fields: [{ label: 'Content', value: secretData.content, sensitive: true }],
+      });
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load secret');
+      setSensitiveModal({
+        title: secret.name,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load secret',
+      });
     }
   };
 
@@ -244,7 +446,7 @@ export default function ProjectDetailPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to download secret');
+      toastError(err instanceof Error ? err.message : 'Failed to download secret');
     }
   };
 
@@ -253,42 +455,183 @@ export default function ProjectDetailPage() {
     setEditingSecret(null);
     setSecretName('');
     setSecretContent('');
+    setSecretSnapshot(null);
   };
 
-  // Check if user is the project owner (created it) or check their membership permission
-  const isProjectOwner = project && project.createdBy._id === user?.id;
-  const userPermission = project?.members.find(
-    (m) => m.userId._id === user?.id
-  )?.permission || null;
+  const resetAccountForm = () => {
+    setAccountLabel('');
+    setAccountProvider('google');
+    setAccountProviderOther('');
+    setAccountEmail('');
+    setAccountLoginUrl('');
+    setAccountUsesSSO(false);
+    setAccountSsoProvider('');
+    setAccountPassword('');
+    setAccountNotes('');
+  };
 
-  // Only project owner (admin who created it) or users with write permission can write
-  const canWrite = isProjectOwner || userPermission === 'write';
-  // Project owner, or members with read/write can read
-  const canRead = isProjectOwner || userPermission === 'read' || userPermission === 'write';
+  const closeAccountForm = () => {
+    setAccountFormOpen(false);
+    setEditingAccount(null);
+    setAccountSnapshot(null);
+    resetAccountForm();
+  };
+
+  const openCreateAccountForm = () => {
+    setEditingAccount(null);
+    setAccountSnapshot(null);
+    resetAccountForm();
+    setAccountFormOpen(true);
+  };
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!accountLabel.trim() || !accountEmail.trim()) {
+      toastError('Label and email/username are required');
+      return;
+    }
+
+    if (accountProvider === 'other' && !accountProviderOther.trim()) {
+      toastError('Please specify the provider name');
+      return;
+    }
+
+    if (accountUsesSSO && !accountSsoProvider.trim()) {
+      toastError('Please specify the SSO provider');
+      return;
+    }
+
+    if (!accountUsesSSO && !editingAccount && !accountPassword.trim()) {
+      toastError('Password is required when SSO is not used');
+      return;
+    }
+
+    setSubmittingAccount(true);
+    try {
+      const payload = {
+        label: accountLabel.trim(),
+        provider: accountProvider,
+        providerOther: accountProvider === 'other' ? accountProviderOther.trim() : undefined,
+        email: accountEmail.trim(),
+        loginUrl: accountLoginUrl.trim() || undefined,
+        usesSSO: accountUsesSSO,
+        ssoProvider: accountUsesSSO ? accountSsoProvider.trim() : undefined,
+        password: accountUsesSSO ? '' : accountPassword || undefined,
+        notes: accountNotes.trim() || undefined,
+      };
+
+      if (editingAccount) {
+        await accountsAPI.update(projectId, editingAccount._id, payload);
+      } else {
+        await accountsAPI.create(projectId, payload);
+      }
+
+      closeAccountForm();
+      loadAccounts();
+      toastSuccess(editingAccount ? 'Account updated' : 'Account created');
+    } catch (err: any) {
+      toastError(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to save account');
+    } finally {
+      setSubmittingAccount(false);
+    }
+  };
+
+  const handleEditAccount = async (account: AssociatedAccount) => {
+    try {
+      const data = await accountsAPI.getCredentials(projectId, account._id);
+      const snapshot: AccountFormSnapshot = {
+        label: data.label,
+        provider: data.provider,
+        providerOther: data.providerOther || '',
+        email: data.email,
+        loginUrl: data.loginUrl || '',
+        usesSSO: data.usesSSO,
+        ssoProvider: data.ssoProvider || '',
+        password: data.password || '',
+        notes: data.notes || '',
+      };
+      setEditingAccount(account);
+      setAccountLabel(snapshot.label);
+      setAccountProvider(snapshot.provider);
+      setAccountProviderOther(snapshot.providerOther);
+      setAccountEmail(snapshot.email);
+      setAccountLoginUrl(snapshot.loginUrl);
+      setAccountUsesSSO(snapshot.usesSSO);
+      setAccountSsoProvider(snapshot.ssoProvider);
+      setAccountPassword(snapshot.password);
+      setAccountNotes(snapshot.notes);
+      setAccountSnapshot(snapshot);
+      setAccountFormOpen(true);
+    } catch (err: any) {
+      toastError(err.response?.data?.error || 'Failed to load account credentials');
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    const ok = await confirm({
+      title: 'Delete associated account?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    try {
+      await accountsAPI.delete(projectId, accountId);
+      toastSuccess('Account deleted');
+      loadAccounts();
+    } catch (err: any) {
+      toastError(err.response?.data?.error || 'Failed to delete account');
+    }
+  };
+
+  const handleViewAccount = async (account: AssociatedAccount) => {
+    setSensitiveModal({ title: account.label, fields: [], loading: true });
+    try {
+      const data = await accountsAPI.getCredentials(projectId, account._id);
+      const fields: SensitiveField[] = [
+        { label: 'Provider', value: formatProvider(data.provider, data.providerOther), sensitive: false },
+        { label: 'Email / Username', value: data.email, sensitive: false },
+      ];
+      if (data.loginUrl) fields.push({ label: 'Login URL', value: data.loginUrl, sensitive: false });
+      if (data.usesSSO) {
+        fields.push({ label: 'SSO Provider', value: data.ssoProvider || '', sensitive: false });
+      } else {
+        fields.push({ label: 'Password', value: data.password || '', sensitive: true });
+      }
+      if (data.notes) fields.push({ label: 'Notes', value: data.notes, sensitive: false });
+      setSensitiveModal({ title: data.label, fields });
+    } catch (err: any) {
+      setSensitiveModal({
+        title: account.label,
+        fields: [],
+        error: err.response?.data?.error || 'Failed to load account credentials',
+      });
+    }
+  };
+
+  const effectivePermissions = permissionInfo?.effective ?? [];
+  const canRead = canReadProject(effectivePermissions);
+  const canWrite = canWriteProject(effectivePermissions);
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="p-6 lg:p-8">
-            <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
-            <div className="grid gap-4 md:grid-cols-3 mb-8">
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-            <SkeletonCard />
-          </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+      <>
+        <Skeleton variant="rectangular" height={48} width="40%" className="mb-6" />
+        <div className="grid gap-4 md:grid-cols-3 mb-8">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <SkeletonCard />
+      </>
     );
   }
 
   if (!project) {
     return (
-      <ProtectedRoute>
-        <AuthenticatedLayout>
-          <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex items-center justify-center py-16">
             <div className="text-center max-w-md">
               <div className="mb-6">
                 <svg className="mx-auto h-16 w-16 text-[var(--error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,62 +649,84 @@ export default function ProjectDetailPage() {
                   You can only access projects you created or projects where you are a collaborator.
                 </p>
               )}
-              <Button variant="primary" size="md" asLink href="/dashboard">
-                Back to Dashboard
-              </Button>
-            </div>
+            <Button variant="primary" size="md" asLink href="/dashboard">
+              Back to Dashboard
+            </Button>
           </div>
-        </AuthenticatedLayout>
-      </ProtectedRoute>
+        </div>
     );
   }
 
   const filteredVersions = envVersions.filter((v) => v.environment === selectedEnv);
   const latestVersion = filteredVersions.length > 0 ? filteredVersions[0] : null;
 
+  const openCompare = (fromVersion?: number, toVersion?: number) => {
+    setCompareInitialFrom(fromVersion);
+    setCompareInitialTo(toVersion);
+    setCompareOpen(true);
+  };
+
+  const closeCompare = () => {
+    setCompareOpen(false);
+    setCompareInitialFrom(undefined);
+    setCompareInitialTo(undefined);
+  };
+
   return (
-    <ProtectedRoute>
-      <AuthenticatedLayout>
-        <div className="p-6 lg:p-8">
-          <div className="mb-6">
-            <Link href="/dashboard" className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] mb-4 inline-block">
-              ← Back to Dashboard
-            </Link>
-            <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">{project.name}</h1>
-            <p className="text-sm text-[var(--text-muted)]">Manage environment files for this project</p>
-          </div>
+    <>
+          <PageHeader
+            title={project.name}
+            description="Environment files, secrets, and associated accounts for this project."
+            breadcrumbs={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: project.name },
+            ]}
+          />
 
           {error && (
-            <div className="mb-6 rounded-lg border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
+            <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-4">
               <p className="text-sm text-[var(--error)]">{error}</p>
             </div>
           )}
 
-          {/* Main Tabs: Environments vs Secrets */}
+          {permissionInfo && (
+            <EffectivePermissionsPanel
+              scope="project"
+              catalog={permissionInfo.catalog.project}
+              effective={permissionInfo.effective}
+              className="mb-6"
+            />
+          )}
+
+          {/* Content tabs */}
           <div className="mb-6">
-            <div className="border-b border-[var(--border)]">
-              <nav className="-mb-px flex space-x-8">
+            <div
+              role="tablist"
+              aria-label="Project data"
+              className="segmented-control"
+            >
+              {(
+                [
+                  { id: 'environments' as const, label: 'Env files' },
+                  { id: 'secrets' as const, label: 'Secrets' },
+                  { id: 'accounts' as const, label: 'Accounts' },
+                ] as const
+              ).map((tab) => (
                 <button
-                  onClick={() => setSelectedTab('environments')}
-                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                    selectedTab === 'environments'
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedTab === tab.id}
+                  onClick={() => setSelectedTab(tab.id)}
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    selectedTab === tab.id
+                      ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'
                   }`}
                 >
-                  Environments
+                  {tab.label}
                 </button>
-                <button
-                  onClick={() => setSelectedTab('secrets')}
-                  className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                    selectedTab === 'secrets'
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  Other Secrets
-                </button>
-              </nav>
+              ))}
             </div>
           </div>
 
@@ -369,28 +734,35 @@ export default function ProjectDetailPage() {
           {selectedTab === 'environments' && (
             <div className="mb-6">
               <div className="border-b border-[var(--border)]">
-                <nav className="-mb-px flex space-x-8">
-                  {(['dev', 'staging', 'prod'] as const).map((env) => (
+                <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                  {projectEnvironments.map((env) => (
                     <button
-                      key={env}
-                      onClick={() => setSelectedEnv(env)}
+                      key={env.slug}
+                      onClick={() => setSelectedEnv(env.slug)}
                       className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
-                        selectedEnv === env
+                        selectedEnv === env.slug
                           ? 'border-[var(--accent)] text-[var(--accent)]'
                           : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
                       }`}
                     >
-                      {env.charAt(0).toUpperCase() + env.slice(1)}
+                      {formatEnvLabel(env.slug)}
                     </button>
                   ))}
                 </nav>
+                {canWrite && (
+                  <Link
+                    href={`/projects/${projectId}/environments`}
+                    className="text-xs text-[var(--accent)] hover:underline mt-2 inline-block"
+                  >
+                    Manage environments
+                  </Link>
+                )}
               </div>
             </div>
           )}
 
-          {selectedTab === 'environments' ? (
+          {selectedTab === 'environments' && (
             <>
-              {/* Actions */}
               <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
                 <div>
                   {latestVersion && (
@@ -400,18 +772,27 @@ export default function ProjectDetailPage() {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {latestVersion && canRead && (
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={() => handleDownload(selectedEnv)}
-                    >
+                    <>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() => handleViewEnv(latestVersion)}
+                      >
+                        View Latest
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => handleDownload(selectedEnv)}
+                      >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                       Download Latest
                     </Button>
+                    </>
                   )}
                   {canWrite && (
                     <UploadEnvButton
@@ -422,17 +803,14 @@ export default function ProjectDetailPage() {
                       label="Upload New Version"
                     />
                   )}
-                  {isProjectOwner && (
-                    <Button
-                      variant="outline"
-                      size="md"
-                      asLink
-                      href={`/projects/${projectId}/logs`}
-                    >
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      View Logs
+                  {canRead && filteredVersions.length >= 2 && (
+                    <Button variant="outline" size="md" onClick={() => openCompare()}>
+                      Compare
+                    </Button>
+                  )}
+                  {canRead && (
+                    <Button variant="outline" size="md" asLink href={`/projects/${projectId}/activity`}>
+                      Activity
                     </Button>
                   )}
                 </div>
@@ -440,7 +818,7 @@ export default function ProjectDetailPage() {
 
               {/* Versions List */}
               {filteredVersions.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+            <div className="data-table-wrap">
               <table className="min-w-full divide-y divide-[var(--border)]">
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>
@@ -470,17 +848,49 @@ export default function ProjectDetailPage() {
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
                         {new Date(version.createdAt).toLocaleString()}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-3">
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                           {canRead && (
+                            <>
+                              <button
+                                onClick={() => handleViewEnv(version)}
+                                className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={() => handleDownload(selectedEnv, version.version)}
+                                className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                              >
+                                Download
+                              </button>
+                            </>
+                          )}
+                          {canRead && filteredVersions.length >= 2 && latestVersion && version.version !== latestVersion.version && (
                             <button
-                              onClick={() => handleDownload(selectedEnv, version.version)}
+                              onClick={() => openCompare(version.version, latestVersion.version)}
                               className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                             >
-                              Download
+                              Compare with latest
                             </button>
                           )}
-                          {isProjectOwner && (
+                          {canRead && filteredVersions.length >= 2 && (!latestVersion || version.version === latestVersion.version) && (
+                            <button
+                              onClick={() => openCompare()}
+                              className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                            >
+                              Compare
+                            </button>
+                          )}
+                          {canWrite && latestVersion && version.version !== latestVersion.version && (
+                            <button
+                              onClick={() => handleRollback(version.version)}
+                              className="text-[var(--warning)] hover:opacity-80 transition-colors"
+                            >
+                              Rollback
+                            </button>
+                          )}
+                          {canWrite && (
                             <>
                               <button
                                 onClick={() => router.push(`/projects/${projectId}/env/edit/${version._id}?environment=${selectedEnv}&version=${version.version}`)}
@@ -490,13 +900,19 @@ export default function ProjectDetailPage() {
                               </button>
                               <button
                                 onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this version? This action cannot be undone.')) {
-                                    try {
-                                      await envAPI.delete(projectId, version._id);
-                                      loadEnvVersions();
-                                    } catch (err: any) {
-                                      alert(err.response?.data?.error || 'Failed to delete file');
-                                    }
+                                  const ok = await confirm({
+                                    title: 'Delete env version?',
+                                    message: 'This action cannot be undone.',
+                                    confirmLabel: 'Delete',
+                                    variant: 'danger',
+                                  });
+                                  if (!ok) return;
+                                  try {
+                                    await envAPI.delete(projectId, version._id);
+                                    toastSuccess('Version deleted');
+                                    loadEnvVersions();
+                                  } catch (err: any) {
+                                    toastError(err.response?.data?.error || 'Failed to delete file');
                                   }
                                 }}
                                 className="text-[var(--error)] hover:text-[#F85149] transition-colors"
@@ -513,7 +929,7 @@ export default function ProjectDetailPage() {
               </table>
             </div>
           ) : (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+            <div className="empty-state">
               <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -531,7 +947,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
             </>
-          ) : (
+          )}
+
+          {selectedTab === 'secrets' && (
             <>
               {/* Secrets Section */}
               <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
@@ -548,6 +966,7 @@ export default function ProjectDetailPage() {
                       setEditingSecret(null);
                       setSecretName('');
                       setSecretContent('');
+                      setSecretSnapshot(null);
                       setSecretFormOpen(true);
                     }}
                   >
@@ -561,7 +980,7 @@ export default function ProjectDetailPage() {
 
               {/* Secret Form Modal */}
               {secretFormOpen && (
-                <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+                <div className="content-section">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-[var(--foreground)]">
                       {editingSecret ? 'Edit Secret' : 'Create New Secret'}
@@ -624,7 +1043,12 @@ export default function ProjectDetailPage() {
                         type="submit"
                         variant="primary"
                         size="md"
-                        disabled={submittingSecret || !secretName.trim() || !secretContent.trim()}
+                        disabled={
+                          submittingSecret ||
+                          !secretName.trim() ||
+                          !secretContent.trim() ||
+                          (editingSecret ? !secretFormDirty : false)
+                        }
                       >
                         {submittingSecret ? 'Saving...' : editingSecret ? 'Update Secret' : 'Create Secret'}
                       </Button>
@@ -635,7 +1059,7 @@ export default function ProjectDetailPage() {
 
               {/* Secrets List */}
               {secrets.length > 0 ? (
-                <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="data-table-wrap">
                   <table className="min-w-full divide-y divide-[var(--border)]">
                     <thead className="bg-[var(--surface-elevated)]">
                       <tr>
@@ -707,7 +1131,7 @@ export default function ProjectDetailPage() {
                   </table>
                 </div>
               ) : (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+                <div className="empty-state">
                   <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -732,37 +1156,322 @@ export default function ProjectDetailPage() {
             </>
           )}
 
-          {/* Members Section (Project Owner only) */}
-          {isProjectOwner && (
-            <div className="mt-12">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-[var(--foreground)]">Project Members</h2>
-                <Button variant="outline" size="sm" asLink href={`/projects/${projectId}/members`}>
-                  Manage Members
-                </Button>
-              </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
-                {project.members.length === 0 ? (
-                  <p className="text-[var(--text-muted)] text-center py-4">No members added yet.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {project.members.map((member, idx) => (
-                      <li key={idx} className="flex items-center justify-between p-3 rounded-md bg-[var(--surface-elevated)]">
-                        <p className="text-sm font-medium text-[var(--foreground)]">
-                          {typeof member.userId === 'object' ? member.userId.name : 'Unknown'}
-                        </p>
-                        <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
-                          {formatPermission(member.permission)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+          {selectedTab === 'accounts' && (
+            <>
+              <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Store credentials for services linked to this project (e.g. Google, AWS, GitHub).
+                  </p>
+                  <p className="text-sm text-[var(--text-muted)] mt-1">
+                    {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+                  </p>
+                </div>
+                {canWrite && (
+                  <Button variant="primary" size="md" onClick={openCreateAccountForm}>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Account
+                  </Button>
                 )}
               </div>
-            </div>
+
+              {accountFormOpen && (
+                <div className="content-section">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-[var(--foreground)]">
+                      {editingAccount ? 'Edit Associated Account' : 'Add Associated Account'}
+                    </h3>
+                    <button
+                      onClick={closeAccountForm}
+                      className="text-[var(--text-muted)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <form onSubmit={handleCreateAccount} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Label
+                        </label>
+                        <input
+                          type="text"
+                          value={accountLabel}
+                          onChange={(e) => setAccountLabel(e.target.value)}
+                          placeholder="e.g., Google Workspace Admin"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={100}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Provider
+                        </label>
+                        <select
+                          value={accountProvider}
+                          onChange={(e) => setAccountProvider(e.target.value)}
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                        >
+                          {ACCOUNT_PROVIDERS.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {accountProvider === 'other' && (
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Provider Name
+                        </label>
+                        <input
+                          type="text"
+                          value={accountProviderOther}
+                          onChange={(e) => setAccountProviderOther(e.target.value)}
+                          placeholder="e.g., DigitalOcean"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={50}
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Email / Username
+                        </label>
+                        <input
+                          type="text"
+                          value={accountEmail}
+                          onChange={(e) => setAccountEmail(e.target.value)}
+                          placeholder="account@company.com"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required
+                          maxLength={200}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Login URL (optional)
+                        </label>
+                        <input
+                          type="url"
+                          value={accountLoginUrl}
+                          onChange={(e) => setAccountLoginUrl(e.target.value)}
+                          placeholder="https://accounts.google.com"
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          maxLength={500}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={accountUsesSSO}
+                          onChange={(e) => setAccountUsesSSO(e.target.checked)}
+                          className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                        />
+                        <span className="text-sm font-medium text-[var(--foreground)]">
+                          This account uses SSO (Single Sign-On)
+                        </span>
+                      </label>
+                      {accountUsesSSO && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                            SSO Provider
+                          </label>
+                          <input
+                            type="text"
+                            value={accountSsoProvider}
+                            onChange={(e) => setAccountSsoProvider(e.target.value)}
+                            placeholder="e.g., Okta, Azure AD, Google Workspace SSO"
+                            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                            required={accountUsesSSO}
+                            maxLength={100}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {!accountUsesSSO && (
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                          Password
+                        </label>
+                        <input
+                          type="password"
+                          value={accountPassword}
+                          onChange={(e) => setAccountPassword(e.target.value)}
+                          placeholder={editingAccount ? 'Leave blank to keep current password' : 'Enter password'}
+                          className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                          required={!editingAccount}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                        Notes (optional)
+                      </label>
+                      <textarea
+                        value={accountNotes}
+                        onChange={(e) => setAccountNotes(e.target.value)}
+                        placeholder="Recovery codes, 2FA details, or other notes..."
+                        rows={3}
+                        className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] text-sm"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="md"
+                        onClick={closeAccountForm}
+                        disabled={submittingAccount}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="md"
+                        disabled={
+                          submittingAccount ||
+                          !accountLabel.trim() ||
+                          !accountEmail.trim() ||
+                          (editingAccount ? !accountFormDirty : false)
+                        }
+                      >
+                        {submittingAccount ? 'Saving...' : editingAccount ? 'Update Account' : 'Add Account'}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {accounts.length > 0 ? (
+                <div className="data-table-wrap">
+                  <table className="min-w-full divide-y divide-[var(--border)]">
+                    <thead className="bg-[var(--surface-elevated)]">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Label
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Provider
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Email / Username
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Auth
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
+                      {accounts.map((account) => (
+                        <tr key={account._id} className="hover:bg-[var(--surface-elevated)] transition-colors">
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-[var(--foreground)]">
+                            {account.label}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                            {formatProvider(account.provider, account.providerOther)}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                            {account.email}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm">
+                            {account.usesSSO ? (
+                              <span className="rounded-full bg-[var(--accent)]/20 px-3 py-1 text-xs font-medium text-[var(--accent)]">
+                                SSO: {account.ssoProvider}
+                              </span>
+                            ) : (
+                              <span className="text-[var(--text-muted)]">Password</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-3">
+                              {canRead && (
+                                <button
+                                  onClick={() => handleViewAccount(account)}
+                                  className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                                >
+                                  View
+                                </button>
+                              )}
+                              {canWrite && (
+                                <>
+                                  <button
+                                    onClick={() => handleEditAccount(account)}
+                                    className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAccount(account._id)}
+                                    className="text-[var(--error)] hover:text-[#F85149] transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <p className="text-[var(--text-secondary)]">No associated accounts added yet.</p>
+                  {canWrite && (
+                    <Button variant="primary" size="lg" onClick={openCreateAccountForm} className="mt-4">
+                      Add the first account
+                    </Button>
+                  )}
+                </div>
+              )}
+            </>
           )}
-        </div>
-      </AuthenticatedLayout>
-    </ProtectedRoute>
+
+        {compareOpen && filteredVersions.length >= 2 && (
+          <EnvCompareModal
+            projectId={projectId}
+            environment={selectedEnv}
+            versions={filteredVersions}
+            initialFromVersion={compareInitialFrom}
+            initialToVersion={compareInitialTo}
+            onClose={closeCompare}
+          />
+        )}
+
+        {sensitiveModal && (
+          <SensitiveValueModal
+            title={sensitiveModal.title}
+            fields={sensitiveModal.fields}
+            loading={sensitiveModal.loading}
+            error={sensitiveModal.error}
+            onClose={() => setSensitiveModal(null)}
+          />
+        )}
+    </>
   );
 }
