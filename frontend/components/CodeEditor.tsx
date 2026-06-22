@@ -46,8 +46,8 @@ export function CodeEditor({ compact = false }: CodeEditorProps) {
             </div>
           </div>
           
-          <div className="flex-1 py-3 px-4 font-mono text-xs leading-5 font-[var(--font-geist-mono)]">
-            <div className="space-y-0">
+          <div className="flex-1 py-3 px-4 font-mono text-xs leading-5 font-[var(--font-geist-mono)] text-left">
+            <div className="space-y-0 text-left">
               <div className="text-[var(--text-muted)]">
                 <span># API Configuration</span>
               </div>
@@ -63,7 +63,7 @@ export function CodeEditor({ compact = false }: CodeEditorProps) {
                 <span className="text-[var(--text-secondary)]"> sk_live_...</span>
               </div>
               <div className="h-0.5"></div>
-              <div className="relative bg-[var(--accent)]/5 border-l-2 border-[var(--accent)] pl-2 -ml-4 pr-4">
+              <div className="relative bg-[var(--accent)]/5 border-l-2 border-[var(--accent)] pl-2 ml-0">
                 <span className="text-[var(--accent)]">ENCRYPTION_KEY</span>
                 <span className="text-[var(--foreground)]">=</span>
                 <span className="text-[var(--text-secondary)]"> aJGa51Kee...</span>

@@ -313,7 +313,7 @@ export default function ProjectDetailPage() {
   };
 
   const handleViewEnv = async (version: EnvVersion) => {
-    const title = `${formatEnvLabel(selectedEnv)} — v${version.version}`;
+    const title = `${formatEnvLabel(selectedEnv)} v${version.version}`;
     setSensitiveModal({ title, fields: [], loading: true });
     try {
       const data = await envAPI.getFileContent(projectId, version._id);
@@ -772,7 +772,7 @@ export default function ProjectDetailPage() {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {latestVersion && canRead && (
                     <>
                       <Button
@@ -848,8 +848,8 @@ export default function ProjectDetailPage() {
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
                         {new Date(version.createdAt).toLocaleString()}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-3">
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                           {canRead && (
                             <>
                               <button

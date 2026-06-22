@@ -10,7 +10,7 @@ const PROJECT_ACCESS_LABELS: Record<string, string> = {
 
 const MISSING_HINTS: Record<string, string> = {
   'project:read': 'You cannot view project resources',
-  'project:write': 'You have read-only access — you cannot upload or edit',
+  'project:write': 'You have read-only access. You cannot upload or edit',
   'project:invite': 'You cannot invite members to this project',
   'project:manage_members': 'You cannot edit or remove project members',
   'project:manage_tokens': 'You cannot create or revoke API tokens',

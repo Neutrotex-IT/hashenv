@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './Button';
+import { Modal, ModalActions } from './Modal';
 import { downloadJsonFile } from '@/lib/download';
 import { getApiErrorMessage } from '@/lib/apiErrors';
 import { dataTransferAPI, DataTransferImportResult } from '@/lib/api';
@@ -227,101 +228,95 @@ export function DataTransferPanel({
         </div>
       </div>
 
-      {importModalOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => {
-              if (!importing) closeImportModal();
-            }}
-          />
-          <div
-            className="relative w-full max-w-lg card p-6 shadow-xl"
-            role="dialog"
-            aria-labelledby="import-dialog-title"
-            aria-describedby="import-dialog-description"
-          >
-            <h3 id="import-dialog-title" className="text-lg font-semibold text-[var(--foreground)] mb-1">
-              Import JSON
-            </h3>
-            <p id="import-dialog-description" className="text-sm text-[var(--text-muted)] mb-5">
-              Import data into {importTarget}. Choose a file, set import options, then confirm.
-            </p>
+      <Modal
+        open={importModalOpen}
+        onClose={closeImportModal}
+        size="md"
+        labelledBy="import-dialog-title"
+        describedBy="import-dialog-description"
+        closeOnBackdrop={!importing}
+        closeOnEscape={!importing}
+        zIndex={90}
+      >
+        <h3 id="import-dialog-title" className="text-lg font-semibold text-[var(--foreground)] mb-1">
+          Import JSON
+        </h3>
+        <p id="import-dialog-description" className="text-sm text-[var(--text-muted)] mb-5">
+          Import data into {importTarget}. Choose a file, set import options, then confirm.
+        </p>
 
-            <div className="space-y-5">
-              <div>
-                <label htmlFor="import-json-file" className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                  Backup file
-                </label>
-                <input
-                  ref={fileInputRef}
-                  id="import-json-file"
-                  type="file"
-                  accept="application/json,.json"
-                  disabled={importing}
-                  onChange={(e) => {
-                    void handleFileSelect(e.target.files?.[0]);
-                  }}
-                  className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[var(--accent-hover)] file:cursor-pointer disabled:opacity-50"
-                />
-                {selectedFile && (
-                  <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                    Selected:{' '}
-                    <span className="font-medium text-[var(--foreground)]">{selectedFile.name}</span>{' '}
-                    ({formatFileSize(selectedFile.size)})
-                  </p>
-                )}
-                {fileError && (
-                  <p className="mt-2 text-sm text-[var(--error)]">{fileError}</p>
-                )}
-              </div>
+        <div className="space-y-5">
+          <div>
+            <label htmlFor="import-json-file" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              Backup file
+            </label>
+            <input
+              ref={fileInputRef}
+              id="import-json-file"
+              type="file"
+              accept="application/json,.json"
+              disabled={importing}
+              onChange={(e) => {
+                void handleFileSelect(e.target.files?.[0]);
+              }}
+              className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[var(--accent-hover)] file:cursor-pointer disabled:opacity-50"
+            />
+            {selectedFile && (
+              <p className="mt-2 text-sm text-[var(--text-secondary)] break-all">
+                Selected:{' '}
+                <span className="font-medium text-[var(--foreground)]">{selectedFile.name}</span>{' '}
+                ({formatFileSize(selectedFile.size)})
+              </p>
+            )}
+            {fileError && (
+              <p className="mt-2 text-sm text-[var(--error)]">{fileError}</p>
+            )}
+          </div>
 
-              <div className="border-t border-[var(--border)] pt-4">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={overwrite}
-                    disabled={importing}
-                    onChange={(e) => setOverwrite(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-[var(--foreground)]">
-                      Overwrite existing secrets and accounts
-                    </span>
-                    <span className="block text-sm text-[var(--text-muted)] mt-1">
-                      {overwrite
-                        ? 'Matching secrets and accounts will be replaced with values from the import file.'
-                        : 'Existing secrets and accounts with the same name will be left unchanged.'}
-                    </span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={closeImportModal}
+          <div className="border-t border-[var(--border)] pt-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={overwrite}
                 disabled={importing}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                onClick={() => void handleImport()}
-                disabled={!selectedFile || importing}
-              >
-                {importing ? 'Importing...' : 'Import'}
-              </Button>
-            </div>
+                onChange={(e) => setOverwrite(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="block text-sm font-medium text-[var(--foreground)]">
+                  Overwrite existing secrets and accounts
+                </span>
+                <span className="block text-sm text-[var(--text-muted)] mt-1">
+                  {overwrite
+                    ? 'Matching secrets and accounts will be replaced with values from the import file.'
+                    : 'Existing secrets and accounts with the same name will be left unchanged.'}
+                </span>
+              </span>
+            </label>
           </div>
         </div>
-      )}
+
+        <ModalActions className="mt-6">
+          <Button
+            type="button"
+            variant="outline"
+            size="md"
+            onClick={closeImportModal}
+            disabled={importing}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={() => void handleImport()}
+            disabled={!selectedFile || importing}
+          >
+            {importing ? 'Importing...' : 'Import'}
+          </Button>
+        </ModalActions>
+      </Modal>
     </>
   );
 }

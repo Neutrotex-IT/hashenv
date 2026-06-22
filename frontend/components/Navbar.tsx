@@ -10,10 +10,26 @@ import { Button } from './ui/Button';
 export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const isHomePage = pathname === '/';
   const { isAuthenticated, loading } = useAuth();
+
+  useEffect(() => {
+    if (!isHomePage) {
+      setIsScrolled(false);
+      return;
+    }
+
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 24);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isHomePage]);
 
   const handleDashboardClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -37,10 +53,20 @@ export function Navbar() {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
+  const isNavSolid = !isHomePage || isScrolled || isMobileMenuOpen;
+
   return (
-    <nav className="sticky top-0 z-50 bg-[var(--surface)] border-b border-[var(--border)]">
+    <nav
+      className={`top-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300 ${
+        isHomePage ? 'fixed inset-x-0' : 'sticky'
+      } ${
+        isNavSolid
+          ? 'bg-[var(--surface)]/90 backdrop-blur-md border-b border-[var(--border)]'
+          : 'bg-transparent border-b border-transparent'
+      }`}
+    >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-14 sm:h-16 items-center justify-between">
           <div className="flex items-center flex-1">
             <Link href="/" className="flex items-center gap-2 text-xl font-bold text-[var(--foreground)] hover:opacity-80 transition-opacity">
               <Image 
@@ -54,7 +80,7 @@ export function Navbar() {
             </Link>
             
             {/* Desktop Navigation */}
-            <div className="ml-10 hidden md:flex space-x-8">
+            <div className="ml-6 lg:ml-10 hidden md:flex space-x-6 lg:space-x-8">
               <Link
                 href="/"
                 className="text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors text-sm font-medium"
@@ -138,7 +164,7 @@ export function Navbar() {
             isMobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
-          <div className="py-4 space-y-3 border-t border-[var(--border)]">
+          <div className={`py-4 space-y-3 border-t ${isNavSolid ? 'border-[var(--border)]' : 'border-[var(--border)]/40'}`}>
             <Link
               href="/"
               className="block px-4 py-2 text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface-elevated)] rounded-md transition-colors"

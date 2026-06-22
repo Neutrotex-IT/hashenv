@@ -47,6 +47,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
 }
 
 body {
@@ -138,11 +139,127 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* Bordered table container */
+/* Scrollable table container — horizontal scroll on narrow viewports */
 .data-table-wrap {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.data-table-wrap > table {
+  width: 100%;
+  min-width: 34rem;
+}
+
+.data-table-wrap--wide > table {
+  min-width: 48rem;
+}
+
+@media (max-width: 639px) {
+  .data-table-wrap th,
+  .data-table-wrap td {
+    padding-inline: 0.75rem;
+  }
+}
+
+/* Modal shell — bottom sheet on small screens, centered on sm+ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-height: min(90dvh, 100%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 1rem;
+  }
+
+  .modal-panel {
+    max-height: min(85dvh, calc(100vh - 2rem));
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+  }
+}
+
+.modal-panel-sm {
+  max-width: 28rem;
+}
+
+.modal-panel-md {
+  max-width: 32rem;
+}
+
+.modal-panel-lg {
+  max-width: 48rem;
+}
+
+.modal-panel-xl {
+  max-width: 56rem;
+}
+
+.modal-panel-sheet {
+  display: flex;
+  max-height: min(92dvh, 100%);
+  flex-direction: column;
   overflow: hidden;
+  padding: 0;
+}
+
+@media (min-width: 640px) {
+  .modal-panel-sheet {
+    max-height: min(85dvh, calc(100vh - 2rem));
+  }
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.75rem;
+}
+
+.modal-actions > * {
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .modal-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .modal-actions > * {
+    width: auto;
+  }
 }
 
 /* Inline tab / segment control */
@@ -247,6 +364,77 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+/* Landing page typography — Geist Sans, fluid scale, readable on dark */
+.landing-h1 {
+  font-size: clamp(2.25rem, 4.5vw, 3.75rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.landing-hero .landing-h1 {
+  font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  line-height: 1.1;
+}
+
+.landing-hero .landing-prose {
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.6;
+}
+
+.landing-h2 {
+  font-size: clamp(1.75rem, 3.5vw, 3rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.landing-h3 {
+  text-wrap: balance;
+}
+
+.landing-prose {
+  font-size: clamp(0.9375rem, 1.25vw, 1.125rem);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.landing-stat {
+  font-size: clamp(2.25rem, 3.5vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.landing-section-alt {
+  background: var(--surface);
+}
+
+/* Hero — clears fixed transparent nav + breathing room above headline */
+.landing-hero {
+  min-height: min(100vh, 56rem);
+}
+
+.landing-hero-inner {
+  padding-top: calc(var(--topbar-height) + clamp(2.5rem, 8vw, 5rem));
+  padding-bottom: clamp(3rem, 6vw, 5rem);
+}
+
+@media (max-width: 639px) {
+  .landing-hero .absolute.-z-10 > div:not(:first-child) {
+    display: none;
+  }
+
+  .landing-hero .absolute.-z-10 > div:first-child {
+    opacity: 1;
+  }
 }
 
 /* Tab underline animation */

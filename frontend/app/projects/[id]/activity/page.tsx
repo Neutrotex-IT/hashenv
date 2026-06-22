@@ -186,7 +186,7 @@ export default function ProjectActivityPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Time</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Event</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Type</th>
+                    <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Type</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase text-[var(--text-muted)]">Actor</th>
                   </tr>
                 </thead>
@@ -204,7 +204,7 @@ export default function ProjectActivityPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm capitalize text-[var(--text-secondary)]">
+                      <td className="hidden sm:table-cell px-4 py-3 text-sm capitalize text-[var(--text-secondary)]">
                         {log.resourceType.replace('_', ' ')}
                         {log.metadata?.environment && (
                           <span className="block font-mono text-xs text-[var(--text-muted)]">

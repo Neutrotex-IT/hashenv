@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { OrgMember } from '@/lib/api';
 import { OrgPermission } from '@/lib/permissions';
 import { arraysEqual } from '@/lib/formUtils';
 import { Button } from '@/components/ui/Button';
 import { OrgPermissionPicker } from '@/components/ui/PermissionPicker';
+import { Modal, ModalActions } from '@/components/ui/Modal';
 
 interface EditOrgMemberModalProps {
   member: OrgMember;
@@ -34,14 +35,6 @@ export function EditOrgMemberModal({
     role !== initialRole ||
     (role === 'member' && !arraysEqual(permissions, initialPermissions));
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -62,73 +55,72 @@ export function EditOrgMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-lg card p-6 shadow-xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--foreground)]">Edit member</h3>
-            <p className="text-sm text-[var(--text-muted)]">{member.user.name} · {member.user.email}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--foreground)] transition-colors"
-            aria-label="Close"
+    <Modal open onClose={onClose} size="md">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-[var(--foreground)]">Edit member</h3>
+          <p className="text-sm text-[var(--text-muted)] break-all">
+            {member.user.name} · {member.user.email}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 text-[var(--text-muted)] hover:text-[var(--foreground)] transition-colors"
+          aria-label="Close"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
+          <p className="text-sm text-[var(--error)]">{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Organization role</label>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
+            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <option value="member">Member</option>
+            {canAssignAdmin && <option value="admin">Admin</option>}
+          </select>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-[var(--radius-sm)] border border-[var(--error)]/50 bg-[var(--error)]/10 p-3">
-            <p className="text-sm text-[var(--error)]">{error}</p>
+        {role === 'member' && (
+          <div>
+            <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              Permissions
+            </label>
+            <OrgPermissionPicker
+              grantable={grantablePermissions}
+              selected={permissions}
+              onChange={setPermissions}
+            />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--foreground)] mb-2">Organization role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
-              className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            >
-              <option value="member">Member</option>
-              {canAssignAdmin && <option value="admin">Admin</option>}
-            </select>
-          </div>
+        {role === 'admin' && (
+          <p className="text-xs text-[var(--text-muted)]">
+            Admins receive all organization permissions automatically.
+          </p>
+        )}
 
-          {role === 'member' && (
-            <div>
-              <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                Permissions
-              </label>
-              <OrgPermissionPicker
-                grantable={grantablePermissions}
-                selected={permissions}
-                onChange={setPermissions}
-              />
-            </div>
-          )}
-
-          {role === 'admin' && (
-            <p className="text-xs text-[var(--text-muted)]">
-              Admins receive all organization permissions automatically.
-            </p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2 border-t border-[var(--border)]">
-            <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="md" disabled={submitting || !hasChanges}>
-              {submitting ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <ModalActions className="pt-2 border-t border-[var(--border)]">
+          <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="md" disabled={submitting || !hasChanges}>
+            {submitting ? 'Saving...' : 'Save changes'}
+          </Button>
+        </ModalActions>
+      </form>
+    </Modal>
   );
 }

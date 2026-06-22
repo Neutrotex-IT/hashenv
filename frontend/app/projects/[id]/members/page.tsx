@@ -398,7 +398,7 @@ export default function ManageMembersPage() {
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">User</th>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Access</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Capabilities</th>
+                        <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Capabilities</th>
                         {canManageMembers && (
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actions</th>
                         )}
@@ -419,7 +419,7 @@ export default function ManageMembersPage() {
                                 {formatPermission(member.permission)}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">
+                            <td className="hidden md:table-cell px-6 py-4 text-sm text-[var(--text-secondary)]">
                               {member.permissions && member.permissions.length > 0 ? (
                                 <span className="text-xs">
                                   {member.permissions.map((p) => formatProjectPermission(p as ProjectPermission)).join(', ')}

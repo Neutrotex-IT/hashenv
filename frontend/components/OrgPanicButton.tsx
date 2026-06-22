@@ -48,7 +48,7 @@ export function OrgPanicButton({ variant = 'fab', collapsed = false }: OrgPanicB
           type="button"
           onClick={() => void execute()}
           disabled={loading}
-          title={collapsed ? 'Panic button' : `Panic button — ${eligibleProjectCount} eligible projects`}
+          title={collapsed ? 'Panic button' : `Panic button: ${eligibleProjectCount} eligible projects`}
           className={`flex w-full items-center justify-center gap-2 rounded-full bg-[var(--error)] text-sm font-medium text-white transition-colors hover:bg-[#F85149] disabled:cursor-not-allowed disabled:opacity-50 ${
             collapsed ? 'p-2' : 'px-4 py-2'
           }`}

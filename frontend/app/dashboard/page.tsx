@@ -63,11 +63,16 @@ export default function DashboardPage() {
         />
 
         {!loading && projects.length > 0 && (
-          <div className="mb-6 flex flex-wrap gap-2">
-            <StatChip label="Total" value={projects.length} />
-            <StatChip label="Owned" value={ownedCount} />
-            <StatChip label="Shared" value={sharedCount} />
-          </div>
+          <section
+            aria-label="Project overview"
+            className="mb-8 border-y border-[var(--border-subtle)] py-6"
+          >
+            <dl className="grid grid-cols-3 gap-4 sm:gap-10">
+              <StatItem label="Total" value={projects.length} highlight />
+              <StatItem label="Owned" value={ownedCount} />
+              <StatItem label="Shared" value={sharedCount} />
+            </dl>
+          </section>
         )}
 
         {error && (
@@ -106,12 +111,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 id="projects-heading" className="text-sm font-semibold text-[var(--text-secondary)]">
-                  All projects
-                </h2>
-                <span className="text-xs text-[var(--text-muted)]">{projects.length} total</span>
-              </div>
+              <h2
+                id="projects-heading"
+                className="mb-4 text-sm font-semibold text-[var(--text-secondary)]"
+              >
+                All projects
+              </h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {projects.map((project) => (
                   <ProjectCard
@@ -129,11 +134,27 @@ export default function DashboardPage() {
   );
 }
 
-function StatChip({ label, value }: { label: string; value: number }) {
+function StatItem({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+}) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1.5">
-      <span className="text-xs text-[var(--text-muted)]">{label}</span>
-      <span className="text-sm font-semibold tabular-nums text-[var(--foreground)]">{value}</span>
+    <div className="min-w-0">
+      <dt className="text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl md:text-4xl ${
+          highlight ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
+        }`}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

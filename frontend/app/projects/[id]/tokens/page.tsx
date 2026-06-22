@@ -164,7 +164,7 @@ export default function ProjectApiTokensPage() {
   const apiExamples = [
     {
       id: 'get-env',
-      title: 'GET /env — Download environment file',
+      title: 'GET /env: Download environment file',
       scope: 'read',
       description: 'Returns the latest decrypted .env content for an environment.',
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -172,7 +172,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'list-env',
-      title: 'GET /env/list — List environments',
+      title: 'GET /env/list: List environments',
       scope: 'read',
       description: 'Lists each environment with its latest version number.',
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -180,7 +180,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'put-env',
-      title: 'PUT /env — Upload environment file',
+      title: 'PUT /env: Upload environment file',
       scope: 'write',
       description: 'Creates a new version from raw key=value content.',
       curl: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -190,7 +190,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'list-secrets',
-      title: 'GET /secrets — List secrets',
+      title: 'GET /secrets: List secrets',
       scope: 'read',
       description: 'Returns secret names and metadata (not values).',
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -198,7 +198,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'get-secret',
-      title: 'GET /secrets/:name — Get secret value',
+      title: 'GET /secrets/:name: Get secret value',
       scope: 'read',
       description: 'Returns the decrypted content for a secret by name.',
       curl: `curl -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -206,7 +206,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'post-secret',
-      title: 'POST /secrets — Create secret',
+      title: 'POST /secrets: Create secret',
       scope: 'write',
       description: 'Creates a new secret with the given name and content.',
       curl: `curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -216,7 +216,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'put-secret',
-      title: 'PUT /secrets/:name — Update secret',
+      title: 'PUT /secrets/:name: Update secret',
       scope: 'write',
       description: 'Updates the content of an existing secret.',
       curl: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -226,7 +226,7 @@ export default function ProjectApiTokensPage() {
     },
     {
       id: 'delete-secret',
-      title: 'DELETE /secrets/:name — Delete secret',
+      title: 'DELETE /secrets/:name: Delete secret',
       scope: 'write',
       description: 'Permanently deletes a secret by name.',
       curl: `curl -X DELETE -H "Authorization: Bearer YOUR_TOKEN" \\
@@ -459,7 +459,7 @@ export default function ProjectApiTokensPage() {
 
           {/* Tokens List */}
           {tokens.length > 0 ? (
-            <div className="data-table-wrap">
+            <div className="data-table-wrap data-table-wrap--wide">
               <table className="min-w-full divide-y divide-[var(--border)]">
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>
@@ -472,10 +472,10 @@ export default function ProjectApiTokensPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                       Scopes
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                    <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                       Last Used
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
+                    <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                       Expires
                     </th>
                     {canManageTokens && (
@@ -510,12 +510,12 @@ export default function ProjectApiTokensPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                      <td className="hidden md:table-cell whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
                         {token.lastUsedAt
                           ? new Date(token.lastUsedAt).toLocaleDateString()
                           : 'Never'}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
+                      <td className="hidden md:table-cell whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
                         {token.expiresAt
                           ? new Date(token.expiresAt).toLocaleDateString()
                           : 'Never'}

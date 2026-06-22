@@ -31,56 +31,62 @@ export default function Home() {
     <div className="min-h-screen bg-[var(--background)]">
       <Navbar />
       
-      {/* Hero Section */}
-      <section className="relative isolate overflow-hidden">
-        {/* Cryptographic Artifacts */}
+      {/* Hero Section — extends under transparent nav */}
+      <section className="landing-hero relative isolate overflow-hidden">
+        {/* Background atmosphere */}
         <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-          {/* Floating Lock Icons */}
-          <div className="absolute top-20 left-10 w-16 h-16 opacity-5 sm:opacity-20 animate-pulse">
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse 70% 55% at 50% -15%, var(--accent-muted), transparent 70%)',
+            }}
+          />
+          <div className="absolute top-20 left-10 w-16 h-16 opacity-[0.08] sm:opacity-20 animate-pulse">
             <svg className="w-full h-full text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <div className="absolute top-40 right-20 w-12 h-12 opacity-4 sm:opacity-15 animate-pulse delay-1000">
+          <div className="absolute top-40 right-20 w-12 h-12 opacity-[0.06] sm:opacity-[0.15] animate-pulse delay-1000">
             <svg className="w-full h-full text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
           
           {/* Shield Icons */}
-          <div className="absolute bottom-20 left-20 w-20 h-20 opacity-3 sm:opacity-10 animate-pulse delay-500">
+          <div className="absolute bottom-20 left-20 w-20 h-20 opacity-[0.05] sm:opacity-10 animate-pulse delay-500">
             <svg className="w-full h-full text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
-          <div className="absolute top-60 right-40 w-14 h-14 opacity-3 sm:opacity-12 animate-pulse delay-700">
+          <div className="absolute top-60 right-40 w-14 h-14 opacity-[0.05] sm:opacity-[0.12] animate-pulse delay-700">
             <svg className="w-full h-full text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
           
           {/* Encryption Symbols - Hex Patterns */}
-          <div className="absolute top-32 right-10 w-24 h-24 opacity-3 sm:opacity-10">
+          <div className="absolute top-32 right-10 w-24 h-24 opacity-[0.05] sm:opacity-10">
             <svg className="w-full h-full text-[var(--accent)]" viewBox="0 0 100 100">
               <polygon points="50,10 90,30 90,70 50,90 10,70 10,30" fill="none" stroke="currentColor" strokeWidth="2" />
               <polygon points="50,25 75,35 75,65 50,75 25,65 25,35" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.5" />
             </svg>
           </div>
-          <div className="absolute bottom-40 right-32 w-18 h-18 opacity-2 sm:opacity-8">
+          <div className="absolute bottom-40 right-32 w-18 h-18 opacity-[0.04] sm:opacity-[0.08]">
             <svg className="w-full h-full text-[var(--accent)]" viewBox="0 0 100 100">
               <polygon points="50,10 90,30 90,70 50,90 10,70 10,30" fill="none" stroke="currentColor" strokeWidth="2" />
             </svg>
           </div>
           
           {/* Key Icons */}
-          <div className="absolute top-80 left-1/4 w-10 h-10 opacity-4 sm:opacity-15 animate-pulse delay-300">
+          <div className="absolute top-80 left-1/4 w-10 h-10 opacity-[0.06] sm:opacity-[0.15] animate-pulse delay-300">
             <svg className="w-full h-full text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
           
           {/* Geometric Encryption Pattern */}
-          <div className="absolute bottom-10 left-1/3 w-32 h-32 opacity-2 sm:opacity-5">
+          <div className="absolute bottom-10 left-1/3 w-32 h-32 opacity-[0.04] sm:opacity-[0.05]">
             <svg className="w-full h-full text-[var(--accent)]" viewBox="0 0 200 200">
               <circle cx="50" cy="50" r="8" fill="currentColor" />
               <circle cx="150" cy="50" r="8" fill="currentColor" />
@@ -95,63 +101,41 @@ export default function Home() {
           </div>
         </div>
         
-        <div className="mx-auto max-w-7xl px-6 pt-12 pb-16 sm:pt-16 sm:pb-20 lg:px-8 lg:pt-20">
-          <div className="mx-auto max-w-7xl">
-            <div className="flex flex-col lg:flex-row items-start gap-8 lg:gap-8">
-              {/* Text Content */}
-              <div className="flex-1 lg:max-w-2xl xl:max-w-3xl relative z-10">
-                {/* Eye-catching Tagline */}
-                <div className="mb-4">
-                  <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-sm font-medium border border-[var(--accent)]/20">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    AES-256-GCM Encryption • Enterprise-Grade Security
-                  </span>
-                </div>
-                
-                <h1 className="text-4xl font-bold tracking-tight text-[var(--foreground)] sm:text-6xl font-[var(--font-outfit)]">
-              Secure .env management
-              <span className="text-[var(--accent)] block mt-2">for modern teams</span>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 landing-hero-inner">
+          <div className="mx-auto max-w-4xl text-center relative z-10">
+            <h1 className="landing-h1 text-[var(--foreground)] px-1 sm:px-0">
+              Your{' '}
+              <code className="text-[var(--accent)] font-mono text-[0.92em]">.env</code>{' '}
+              files don&apos;t belong in Git.
+              <span className="text-[var(--accent)] block mt-2">
+                Lock them down. Ship with confidence.
+              </span>
             </h1>
-                <p className="mt-6 text-sm sm:text-lg leading-7 sm:leading-8 text-[var(--text-secondary)] font-[var(--font-inter)]">
-                  Encrypt, store, and share your <code className="text-[var(--accent)] bg-[var(--surface-elevated)] px-2 py-0.5 rounded font-mono text-xs sm:text-sm">.env</code> files securely with 
-                  <code className="text-[var(--accent)] bg-[var(--surface-elevated)] px-2 py-0.5 rounded mx-1 font-mono text-xs sm:text-sm">AES-256-GCM</code> encryption. 
-                  Manage multiple environments, track versions, and collaborate with your team using granular access control. Complete audit logs keep you informed of every change.
-                </p>
-                <div className="mt-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-x-6">
-                  <Button variant="primary" size="lg" asLink href="/login" className="w-full sm:w-auto">
-                Get started
+            <p className="mt-4 sm:mt-5 landing-prose mx-auto max-w-2xl px-1 sm:px-0">
+              HashEnv encrypts every environment file with AES-256-GCM, gives your team
+              granular access control, and logs every change, so secrets stay secret
+              from commit to deploy.
+            </p>
+            <div className="mt-6 sm:mt-7 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 px-2 sm:px-0">
+              <Button variant="primary" size="lg" asLink href="/login" className="w-full sm:w-auto min-w-0 sm:min-w-[180px]">
+                Start free
               </Button>
-                  <Button variant="outline" size="lg" asLink href="#features" className="w-full sm:w-auto">
-                Learn more
+              <Button variant="outline" size="lg" asLink href="#features" className="w-full sm:w-auto min-w-0 sm:min-w-[180px]">
+                See how it works
               </Button>
-                </div>
-                
-                {/* Code Editor Preview in Hero */}
-                <div className={`mt-12 max-w-lg transition-all duration-700 ${isScrolled ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-                  <CodeEditor compact={true} />
-                </div>
-              </div>
-              
-              {/* GIF with transparent background - smaller and pushed right */}
-              <div className="flex-shrink-0 w-full lg:w-auto lg:ml-auto lg:mr-0 relative z-10">
-                <img
-                  src="/hashenv.gif"
-                  alt="HashEnv Security Animation"
-                  className="w-full max-w-xs lg:max-w-sm xl:max-w-md mx-auto lg:ml-auto lg:mr-0"
-                  width={400}
-                  height={300}
-                  style={{ background: 'transparent' }}
-                />
-              </div>
+            </div>
+
+            <div
+              className={`mt-6 sm:mt-8 mx-auto max-w-2xl w-full text-left px-1 sm:px-0 transition-all duration-700 ${isScrolled ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+            >
+              <CodeEditor compact={true} />
             </div>
           </div>
         </div>
       </section>
 
       {/* Code Editor Section - Full Size with Labels */}
-      <section ref={editorSectionRef} className="py-24 sm:py-32 bg-[var(--background)] relative">
+      <section ref={editorSectionRef} className="py-16 sm:py-24 lg:py-32 landing-section-alt relative">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="relative mx-auto max-w-5xl">
             {/* Code Editor */}
@@ -167,10 +151,10 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 font-[var(--font-outfit)]">
+                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 landing-h3">
                   Automatic Encryption
                 </h3>
-                <p className="text-sm text-[var(--text-secondary)] font-[var(--font-inter)]">
+                <p className="text-sm text-[var(--text-secondary)] ">
                   Every file is encrypted server-side with AES-256-GCM
                 </p>
               </div>
@@ -181,10 +165,10 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 font-[var(--font-outfit)]">
+                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 landing-h3">
                   Secure Storage
                 </h3>
-                <p className="text-sm text-[var(--text-secondary)] font-[var(--font-inter)]">
+                <p className="text-sm text-[var(--text-secondary)] ">
                   Keys never leave the server. Zero-knowledge architecture.
                 </p>
               </div>
@@ -196,10 +180,10 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 font-[var(--font-outfit)]">
+                <h3 className="text-base font-semibold text-[var(--foreground)] mb-1 landing-h3">
                   Version Control
                 </h3>
-                <p className="text-sm text-[var(--text-secondary)] font-[var(--font-inter)]">
+                <p className="text-sm text-[var(--text-secondary)] ">
                   Track all changes with complete version history
                 </p>
               </div>
@@ -209,16 +193,16 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 sm:py-32 bg-[var(--background)]">
+      <section id="features" className="py-16 sm:py-24 lg:py-32 bg-[var(--background)]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl lg:text-center mb-16">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--accent)] mb-4 font-[var(--font-inter)]">
+          <div className="mx-auto max-w-2xl lg:text-center mb-10 sm:mb-16">
+            <p className="text-sm font-semibold text-[var(--accent)] mb-3">
               Features
-            </h2>
-            <p className="text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl font-[var(--font-outfit)]">
-              Secrets management without the headache
             </p>
-            <p className="mt-4 text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
+            <h2 className="landing-h2 text-[var(--foreground)]">
+              Secrets management without the headache
+            </h2>
+            <p className="mt-4 landing-prose mx-auto">
               Built with security best practices from the ground up. Your secrets are encrypted server-side 
               and never exposed to clients. Manage multiple projects, environments, and versions with complete 
               access control and audit logging.
@@ -227,17 +211,17 @@ export default function Home() {
           
           {/* Three-Column Grid with Nested Cards */}
           <div className="mx-auto max-w-7xl">
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 border-t border-[var(--border)] lg:divide-x lg:divide-[var(--border)]">
+            <div className="grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-3 border-t border-[var(--border)] lg:divide-x lg:divide-[var(--border)]">
               {/* Column 1: Your secrets stay secret */}
-              <div className="flex flex-col gap-6 pt-8 lg:px-8">
+              <div className="flex flex-col gap-5 sm:gap-6 pt-6 sm:pt-8 lg:px-8">
                 <div>
-                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 font-[var(--font-outfit)]">
+                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 landing-h3">
                     Your secrets stay secret.
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 font-[var(--font-inter)]">
+                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 ">
                     Military-grade <code className="text-[var(--accent)] bg-[var(--surface-elevated)] px-1.5 py-0.5 rounded text-sm font-mono">AES-256-GCM</code> encryption ensures your environment files are protected at rest.
                   </p>
-                  <div className="flex items-center text-[var(--accent)] text-sm font-medium font-[var(--font-inter)] hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
+                  <div className="flex items-center text-[var(--accent)] text-sm font-medium  hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
                     Learn about encryption
                     <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -247,23 +231,23 @@ export default function Home() {
                 
                 {/* Nested Card: Encryption Progress */}
                 <div className="p-5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
-                  <h4 className="text-sm font-semibold text-[var(--foreground)] mb-4 font-[var(--font-inter)]">
+                  <h4 className="text-sm font-semibold text-[var(--foreground)] mb-4 ">
                     Encryption Progress
                   </h4>
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-[var(--foreground)] font-medium font-[var(--font-inter)]">97% (All files)</span>
-                      <span className="text-[var(--text-muted)] text-xs font-[var(--font-inter)]">3% remaining</span>
+                      <span className="text-[var(--foreground)] font-medium ">97% (All files)</span>
+                      <span className="text-[var(--text-muted)] text-xs ">3% remaining</span>
                     </div>
                     <div className="w-full bg-[var(--surface-elevated)] rounded-full h-2 overflow-hidden">
-                      <div className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] h-full rounded-full" style={{ width: '97%' }}></div>
+                      <div className="bg-[var(--accent)] h-full rounded-full" style={{ width: '97%' }}></div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-[var(--text-muted)] font-[var(--font-inter)] mb-3">
+                  <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]  mb-3">
                     <span>• All files encrypted</span>
                     <span>• Server-side only</span>
                   </div>
-                  <div className="text-xs text-[var(--text-secondary)] font-[var(--font-inter)]">
+                  <div className="text-xs text-[var(--text-secondary)] ">
                     <div className="mb-1">Encryption active since deployment</div>
                     <div className="font-medium text-[var(--foreground)]">Status: Active</div>
                   </div>
@@ -271,15 +255,15 @@ export default function Home() {
               </div>
 
               {/* Column 2: Dependencies you can depend on. */}
-              <div className="flex flex-col gap-6 pt-8 lg:px-8">
+              <div className="flex flex-col gap-5 sm:gap-6 pt-6 sm:pt-8 lg:px-8">
                 <div>
-                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 font-[var(--font-outfit)]">
+                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 landing-h3">
                     Team collaboration, simplified.
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 font-[var(--font-inter)]">
+                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 ">
                     Granular access control per project. Assign read or write permissions to team members. Invite collaborators, manage members, and control who can access what.
                   </p>
-                  <div className="flex items-center text-[var(--accent)] text-sm font-medium font-[var(--font-inter)] hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
+                  <div className="flex items-center text-[var(--accent)] text-sm font-medium  hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
                     Learn about access control
                     <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -290,10 +274,10 @@ export default function Home() {
                 {/* Nested Card: Projects List */}
                 <div className="p-5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-semibold text-[var(--foreground)] font-[var(--font-inter)]">
+                    <h4 className="text-sm font-semibold text-[var(--foreground)] ">
                       Projects defined
                     </h4>
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--surface-elevated)] text-[var(--text-secondary)] border border-[var(--border)] font-[var(--font-inter)]">
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--surface-elevated)] text-[var(--text-secondary)] border border-[var(--border)] ">
                       3
                     </span>
                   </div>
@@ -306,7 +290,7 @@ export default function Home() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                             </svg>
                           </div>
-                          <span className="text-sm text-[var(--foreground)] font-[var(--font-inter)]">{project}</span>
+                          <span className="text-sm text-[var(--foreground)] ">{project}</span>
                         </div>
                         <svg className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors opacity-0 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -318,15 +302,15 @@ export default function Home() {
               </div>
 
               {/* Column 3: Environment secrets, encrypted and organized */}
-              <div className="flex flex-col gap-6 pt-8 lg:px-8">
+              <div className="flex flex-col gap-5 sm:gap-6 pt-6 sm:pt-8 lg:px-8">
                 <div>
-                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 font-[var(--font-outfit)]">
+                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3 landing-h3">
                     Environment secrets, encrypted and organized.
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 font-[var(--font-inter)]">
+                  <p className="text-base leading-7 text-[var(--text-secondary)] mb-4 ">
                     Track every action with comprehensive audit logs. Monitor uploads, downloads, edits, and access across all versions and environments. Know who did what, when, and where.
                   </p>
-                  <div className="flex items-center text-[var(--accent)] text-sm font-medium font-[var(--font-inter)] hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
+                  <div className="flex items-center text-[var(--accent)] text-sm font-medium  hover:text-[var(--accent-hover)] transition-colors cursor-pointer">
                     Learn about versioning
                     <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -337,16 +321,16 @@ export default function Home() {
                 {/* Nested Card: Audit Log */}
                 <div className="p-5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
                   <div className="mb-4">
-                    <div className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wide mb-2 font-[var(--font-inter)]">
+                    <div className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wide mb-2">
                       Activity Log
                     </div>
                     <div className="space-y-2">
-                      <div className="text-xs font-mono bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border)] font-[var(--font-inter)]">
+                      <div className="text-xs font-mono bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border)] ">
                         <div className="text-[var(--accent)]">[2024-01-15 10:23:45]</div>
                         <div className="text-[var(--foreground)]">DOWNLOAD • prod • v3</div>
                         <div className="text-[var(--text-muted)]">user@example.com</div>
                       </div>
-                      <div className="text-xs font-mono bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border)] font-[var(--font-inter)] opacity-75">
+                      <div className="text-xs font-mono bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border)]  opacity-75">
                         <div className="text-[var(--text-muted)]">[2024-01-15 09:15:12]</div>
                         <div className="text-[var(--foreground)]">UPLOAD • staging • v2</div>
                         <div className="text-[var(--text-muted)]">admin@example.com</div>
@@ -354,10 +338,10 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="p-3 rounded bg-[var(--surface-elevated)] border border-[var(--border)]">
-                    <div className="text-xs font-medium text-[var(--foreground)] mb-1 font-[var(--font-inter)]">
+                    <div className="text-xs font-medium text-[var(--foreground)] mb-1 ">
                       All actions logged
                     </div>
-                    <div className="text-xs text-[var(--text-muted)] font-[var(--font-inter)]">
+                    <div className="text-xs text-[var(--text-muted)] ">
                       Upload, download, edit, delete, and access events tracked with full metadata
                     </div>
                   </div>
@@ -366,28 +350,28 @@ export default function Home() {
             </div>
 
             {/* Bottom Stats Grid */}
-            <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 border-t border-[var(--border)] lg:divide-x lg:divide-[var(--border)] pt-8">
+            <div className="mt-10 sm:mt-16 grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-3 border-t border-[var(--border)] lg:divide-x lg:divide-[var(--border)] pt-6 sm:pt-8">
               <div className="lg:px-8">
-                <div className="text-5xl font-bold text-[var(--foreground)] mb-2 font-[var(--font-outfit)]">
+                <div className="landing-stat text-[var(--foreground)] mb-2">
                   256-bit
                 </div>
-                <div className="text-base text-[var(--text-secondary)] font-[var(--font-inter)]">
+                <div className="text-base text-[var(--text-secondary)] ">
                   AES-GCM encryption strength. Military-grade security for your environment variables.
                 </div>
               </div>
               <div className="lg:px-8">
-                <div className="text-5xl font-bold text-[var(--foreground)] mb-2 font-[var(--font-outfit)]">
+                <div className="landing-stat text-[var(--foreground)] mb-2">
                   3
                 </div>
-                <div className="text-base text-[var(--text-secondary)] font-[var(--font-inter)]">
-                  Environments per project. Use dev, staging, prod, or add custom names like qa and preview — each with independent versioning.
+                <div className="text-base text-[var(--text-secondary)] ">
+                  Environments per project. Use dev, staging, prod, or add custom names like qa and preview, each with independent versioning.
                 </div>
               </div>
               <div className="lg:px-8">
-                <div className="text-5xl font-bold text-[var(--foreground)] mb-2 font-[var(--font-outfit)]">
+                <div className="landing-stat text-[var(--foreground)] mb-2">
                   100%
                 </div>
-                <div className="text-base text-[var(--text-secondary)] font-[var(--font-inter)]">
+                <div className="text-base text-[var(--text-secondary)] ">
                   Server-side encryption. Your keys never leave our secure infrastructure.
                 </div>
               </div>
@@ -397,32 +381,31 @@ export default function Home() {
       </section>
 
       {/* How It Works */}
-      <section className="relative py-32 sm:py-40 lg:py-48 bg-[var(--background)] overflow-hidden">
+      <section className="relative py-20 sm:py-32 lg:py-40 xl:py-48 landing-section-alt overflow-hidden">
         {/* Glitch Background Effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {/* Pixelated background elements with glitch effect */}
-          <div className="absolute top-20 left-10 w-2 h-2 bg-[var(--accent)] opacity-20 animate-pulse" style={{ filter: 'blur(1px)', boxShadow: '1px 0 0 rgba(0, 255, 255, 0.6), -1px 0 0 rgba(255, 0, 0, 0.6)' }}></div>
-          <div className="absolute top-40 right-20 w-1.5 h-1.5 bg-[var(--accent)] opacity-15 animate-pulse delay-300" style={{ filter: 'blur(1px)', boxShadow: '1px 0 0 rgba(0, 255, 255, 0.6), -1px 0 0 rgba(255, 0, 0, 0.6)' }}></div>
-          <div className="absolute bottom-32 left-1/4 w-2 h-2 bg-[var(--accent)] opacity-18 animate-pulse delay-500" style={{ filter: 'blur(1px)', boxShadow: '1px 0 0 rgba(0, 255, 255, 0.6), -1px 0 0 rgba(255, 0, 0, 0.6)' }}></div>
-          <div className="absolute top-60 right-1/3 w-1.5 h-1.5 bg-[var(--accent)] opacity-12 animate-pulse delay-700" style={{ filter: 'blur(1px)', boxShadow: '1px 0 0 rgba(0, 255, 255, 0.6), -1px 0 0 rgba(255, 0, 0, 0.6)' }}></div>
+          <div className="absolute top-20 left-10 w-2 h-2 bg-[var(--accent)] opacity-20 animate-pulse"></div>
+          <div className="absolute top-40 right-20 w-1.5 h-1.5 bg-[var(--accent)] opacity-15 animate-pulse delay-300"></div>
+          <div className="absolute bottom-32 left-1/4 w-2 h-2 bg-[var(--accent)] opacity-[0.18] animate-pulse delay-500"></div>
+          <div className="absolute top-60 right-1/3 w-1.5 h-1.5 bg-[var(--accent)] opacity-12 animate-pulse delay-700"></div>
           
-          {/* More pixel elements */}
-          <div className="absolute top-1/3 left-1/5 w-1 h-1 bg-[#00FF88] opacity-15 animate-pulse delay-200" style={{ filter: 'blur(0.5px)', boxShadow: '0.5px 0 0 rgba(0, 255, 255, 0.5), -0.5px 0 0 rgba(255, 0, 0, 0.5)' }}></div>
-          <div className="absolute bottom-1/4 right-1/4 w-1 h-1 bg-[#00FF88] opacity-12 animate-pulse delay-600" style={{ filter: 'blur(0.5px)', boxShadow: '0.5px 0 0 rgba(0, 255, 255, 0.5), -0.5px 0 0 rgba(255, 0, 0, 0.5)' }}></div>
+          <div className="absolute top-1/3 left-1/5 w-1 h-1 bg-[var(--success)] opacity-15 animate-pulse delay-200"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-1 h-1 bg-[var(--success)] opacity-12 animate-pulse delay-600"></div>
           
           {/* Cross patterns */}
-          <div className="absolute top-32 left-1/3 w-3 h-3 opacity-10" style={{ filter: 'blur(0.5px)' }}>
+          <div className="absolute top-32 left-1/3 w-3 h-3 opacity-10">
             <svg className="w-full h-full text-[var(--accent)]" viewBox="0 0 10 10">
-              <line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" strokeWidth="1" style={{ filter: 'drop-shadow(1px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-1px 0 0 rgba(255, 0, 0, 0.5))' }} />
-              <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1" style={{ filter: 'drop-shadow(1px 0 0 rgba(0, 255, 255, 0.5)) drop-shadow(-1px 0 0 rgba(255, 0, 0, 0.5))' }} />
+              <line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" strokeWidth="1" />
+              <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1" />
             </svg>
           </div>
         </div>
         
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-20">
           {/* Section Heading */}
-          <div className="mb-16 md:mb-20">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[var(--foreground)] font-[var(--font-outfit)]">
+          <div className="mb-10 sm:mb-16 md:mb-20">
+            <h2 className="landing-h2 text-[var(--foreground)]">
               How it works
             </h2>
           </div>
@@ -434,27 +417,27 @@ export default function Home() {
               {/* Top Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[var(--border)]/40">
                 {/* Block 01 - Top Left */}
-                <div className="p-8 md:p-12">
-                  <div className="text-xs text-[var(--text-muted)] font-[var(--font-inter)] mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <div className="p-6 sm:p-8 md:p-12">
+                  <div className="text-xs text-[var(--text-muted)]  mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     01/
                   </div>
-                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 font-[var(--font-outfit)] leading-tight">
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 landing-h3 leading-tight">
                     Create a Project
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
-                    Start by creating a project. Invite team members and assign granular permissions — read-only for viewing or read-write for full access. Each project supports multiple environments and complete version history.
+                  <p className="text-base leading-7 text-[var(--text-secondary)] ">
+                    Start by creating a project. Invite team members and assign granular permissions: read-only for viewing or read-write for full access. Each project supports multiple environments and complete version history.
                   </p>
                 </div>
                 
                 {/* Block 02 - Top Right */}
-                <div className="p-8 md:p-12">
-                  <div className="text-xs text-[var(--text-muted)] font-[var(--font-inter)] mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <div className="p-6 sm:p-8 md:p-12">
+                  <div className="text-xs text-[var(--text-muted)]  mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     02/
                   </div>
-                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 font-[var(--font-outfit)] leading-tight">
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 landing-h3 leading-tight">
                     Upload Environment Files
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
+                  <p className="text-base leading-7 text-[var(--text-secondary)] ">
                     Upload your .env files via file upload or paste content directly. Choose from default or custom environments. Files are automatically encrypted server-side with AES-256-GCM, versioned, and tracked with complete metadata.
                   </p>
                 </div>
@@ -466,28 +449,28 @@ export default function Home() {
               {/* Bottom Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[var(--border)]/40">
                 {/* Block 03 - Bottom Left */}
-                <div className="p-8 md:p-12">
-                  <div className="text-xs text-[var(--text-muted)] font-[var(--font-inter)] mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <div className="p-6 sm:p-8 md:p-12">
+                  <div className="text-xs text-[var(--text-muted)]  mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     03/
                   </div>
-                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 font-[var(--font-outfit)] leading-tight">
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 landing-h3 leading-tight">
                     Automatic Encryption
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
-                    Files are encrypted server-side using AES-256-GCM before storage. All encryption and decryption happens on the server — your keys never leave our secure infrastructure. Zero configuration required.
+                  <p className="text-base leading-7 text-[var(--text-secondary)] ">
+                    Files are encrypted server-side using AES-256-GCM before storage. All encryption and decryption happens on the server. Your keys never leave our secure infrastructure. Zero configuration required.
                   </p>
                 </div>
                 
                 {/* Block 04 - Bottom Right */}
-                <div className="p-8 md:p-12">
-                  <div className="text-xs text-[var(--text-muted)] font-[var(--font-inter)] mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <div className="p-6 sm:p-8 md:p-12">
+                  <div className="text-xs text-[var(--text-muted)]  mb-3 tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     04/
                   </div>
-                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 font-[var(--font-outfit)] leading-tight">
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[var(--foreground)] mb-4 landing-h3 leading-tight">
                     Secure Access & Audit
                   </h3>
-                  <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)]">
-                    Only authorized team members with proper permissions can access files. Every action — upload, download, edit, delete, or view — is logged with timestamps, user information, and metadata. Download complete audit logs anytime.
+                  <p className="text-base leading-7 text-[var(--text-secondary)] ">
+                    Only authorized team members with proper permissions can access files. Every action (upload, download, edit, delete, or view) is logged with timestamps, user information, and metadata. Download complete audit logs anytime.
                   </p>
                 </div>
               </div>
@@ -497,10 +480,10 @@ export default function Home() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-24 sm:py-32 bg-[var(--background)]">
+      <section className="py-16 sm:py-24 lg:py-32 bg-[var(--background)]">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-16">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[var(--foreground)] font-[var(--font-outfit)]">
+          <div className="mb-10 sm:mb-16">
+            <h2 className="landing-h2 text-[var(--foreground)]">
               Frequently asked questions
             </h2>
           </div>
@@ -540,13 +523,13 @@ export default function Home() {
             ].map((faq, index) => {
               const isExpanded = expandedFaq === index;
               return (
-                <div key={index} className="border-t border-[#30363D] first:border-t-0 overflow-hidden">
+                <div key={index} className="border-t border-[var(--border)] first:border-t-0 overflow-hidden">
                   <button
                     onClick={() => setExpandedFaq(isExpanded ? null : index)}
-                    className="w-full flex items-center justify-between py-6 text-left hover:opacity-80 transition-opacity group"
+                    className="w-full flex items-center justify-between py-5 sm:py-6 text-left hover:opacity-80 transition-opacity group"
                     aria-expanded={isExpanded}
                   >
-                    <h3 className={`text-lg font-[var(--font-inter)] text-[var(--foreground)] pr-8 transition-all duration-300 ${
+                    <h3 className={`text-base sm:text-lg text-[var(--foreground)] pr-6 sm:pr-8 transition-all duration-300 ${
                       isExpanded ? 'font-bold' : 'font-normal'
                     }`}>
                       {faq.question}
@@ -563,7 +546,7 @@ export default function Home() {
                         </svg>
                       ) : (
                         <svg 
-                          className="w-5 h-5 text-[#7C3AED] transition-transform duration-300 group-hover:scale-110" 
+                          className="w-5 h-5 text-[var(--accent)] transition-transform duration-300 group-hover:scale-110" 
                           fill="none" 
                           stroke="currentColor" 
                           viewBox="0 0 24 24"
@@ -581,13 +564,13 @@ export default function Home() {
                     }`}
                   >
                     <div className="pb-6 pt-2">
-                      <p className="text-base leading-7 text-[var(--text-secondary)] font-[var(--font-inter)] mb-4">
+                      <p className="text-base leading-7 text-[var(--text-secondary)]  mb-4">
                         {faq.answer}
                       </p>
                       {faq.link && (
                         <Link 
                           href={faq.link.href} 
-                          className="inline-flex items-center text-sm text-[#2F81F7] hover:text-[#58A6FF] transition-colors font-[var(--font-inter)] font-medium"
+                          className="inline-flex items-center text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors font-medium"
                         >
                           {faq.link.text}
                           <svg 
@@ -610,7 +593,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section id="about" className="relative py-24 sm:py-32 bg-[var(--background)] overflow-hidden">
+      <section id="about" className="relative py-16 sm:py-24 lg:py-32 landing-section-alt overflow-hidden">
         {/* Grid Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{
@@ -621,18 +604,11 @@ export default function Home() {
             backgroundSize: '48px 48px'
           }}></div>
         </div>
-        
-        {/* Diagonal Grid Lines */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, var(--border) 2px, var(--border) 4px)'
-          }}></div>
-        </div>
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 z-10">
           {/* Main CTA Container with Grid Border */}
           <div className="relative max-w-4xl mx-auto">
-            <div className="border border-[var(--border)]/40 rounded-lg bg-[var(--surface)]/50 backdrop-blur-sm p-8 sm:p-12 lg:p-16">
+            <div className="border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] p-6 sm:p-8 lg:p-12 xl:p-16">
               {/* Inner Grid Pattern */}
               <div className="absolute inset-0 rounded-lg opacity-5" style={{
                 backgroundImage: `
@@ -643,19 +619,19 @@ export default function Home() {
               }}></div>
               
               <div className="relative z-10 text-center">
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[var(--foreground)] font-[var(--font-outfit)] mb-6">
+                <h2 className="landing-h2 text-[var(--foreground)] mb-6">
               Stop committing secrets.<br />Start managing them securely.
             </h2>
-                <p className="text-lg sm:text-xl leading-8 text-[var(--text-secondary)] font-[var(--font-inter)] mb-10 max-w-2xl mx-auto">
+                <p className="landing-prose text-lg sm:text-xl mb-10 max-w-2xl mx-auto">
               Encrypt. Organize. Collaborate. Get started in minutes. No credit card required.
             </p>
                 
                 {/* Button Container with Grid Layout */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
-                  <Button variant="primary" size="lg" asLink href="/login" className="min-w-[200px]">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 lg:gap-6">
+                  <Button variant="primary" size="lg" asLink href="/login" className="w-full sm:w-auto min-w-0 sm:min-w-[200px]">
                 Get started for free
               </Button>
-                  <Button variant="outline" size="lg" asLink href="#features" className="min-w-[200px]">
+                  <Button variant="outline" size="lg" asLink href="#features" className="w-full sm:w-auto min-w-0 sm:min-w-[200px]">
                     Learn more
                   </Button>
                 </div>
@@ -670,58 +646,53 @@ export default function Home() {
           </div>
           
           {/* Additional Grid Elements */}
-          <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            <div className="border border-[var(--border)]/30 rounded-lg p-6 bg-[var(--surface)]/30 backdrop-blur-sm text-center">
+          <div className="mt-10 sm:mt-16 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 max-w-5xl mx-auto">
+            <div className="border border-[var(--border)] rounded-xl p-5 sm:p-6 bg-[var(--surface-elevated)] text-center">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--accent)]/10 flex items-center justify-center border border-[var(--accent)]/20">
                 <svg className="w-6 h-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] font-[var(--font-inter)] mb-2">Enterprise Security</h3>
-              <p className="text-xs text-[var(--text-muted)] font-[var(--font-inter)]">AES-256-GCM encryption</p>
+              <h3 className="text-sm font-semibold text-[var(--foreground)]  mb-2">Enterprise Security</h3>
+              <p className="text-xs text-[var(--text-muted)] ">AES-256-GCM encryption</p>
             </div>
             
-            <div className="border border-[var(--border)]/30 rounded-lg p-6 bg-[var(--surface)]/30 backdrop-blur-sm text-center">
+            <div className="border border-[var(--border)] rounded-xl p-5 sm:p-6 bg-[var(--surface-elevated)] text-center">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--accent)]/10 flex items-center justify-center border border-[var(--accent)]/20">
                 <svg className="w-6 h-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] font-[var(--font-inter)] mb-2">Secrets management without the headache</h3>
-              <p className="text-xs text-[var(--text-muted)] font-[var(--font-inter)]">Get started in minutes</p>
+              <h3 className="text-sm font-semibold text-[var(--foreground)]  mb-2">Secrets management without the headache</h3>
+              <p className="text-xs text-[var(--text-muted)] ">Get started in minutes</p>
             </div>
             
-            <div className="border border-[var(--border)]/30 rounded-lg p-6 bg-[var(--surface)]/30 backdrop-blur-sm text-center">
+            <div className="border border-[var(--border)] rounded-xl p-5 sm:p-6 bg-[var(--surface-elevated)] text-center">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--accent)]/10 flex items-center justify-center border border-[var(--accent)]/20">
                 <svg className="w-6 h-6 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <h3 className="text-sm font-semibold text-[var(--foreground)] font-[var(--font-inter)] mb-2">Team Collaboration</h3>
-              <p className="text-xs text-[var(--text-muted)] font-[var(--font-inter)]">Granular access control</p>
+              <h3 className="text-sm font-semibold text-[var(--foreground)]  mb-2">Team Collaboration</h3>
+              <p className="text-xs text-[var(--text-muted)] ">Granular access control</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative py-20 sm:py-24 bg-[var(--background)] overflow-hidden">
+      <footer className="relative py-14 sm:py-20 lg:py-24 bg-[var(--background)] overflow-hidden">
         {/* Background Watermark Effect */}
         <div className="absolute inset-0 flex items-end justify-center pointer-events-none opacity-20" style={{ paddingBottom: '-10rem' }}>
-          <div className="text-[15rem] sm:text-[20rem] font-bold font-[var(--font-outfit)] text-[var(--accent)] select-none transform translate-y-32 sm:translate-y-40" style={{
-            background: 'linear-gradient(to right, var(--accent), #FF8C42)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text'
-          }}>
+          <div className="text-[8rem] sm:text-[15rem] lg:text-[20rem] font-bold text-[var(--accent)] opacity-[0.06] select-none transform translate-y-24 sm:translate-y-32 lg:translate-y-40">
             HashEnv
           </div>
         </div>
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Main Footer Container */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-xl p-8 sm:p-12 lg:p-16">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12 mb-12">
+          <div className="bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl p-6 sm:p-8 lg:p-12 xl:p-16">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12 mb-8 sm:mb-12">
               {/* Column 1: Company Branding & Description */}
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
@@ -732,38 +703,38 @@ export default function Home() {
                     height={40}
                     className="w-10 h-10"
                   />
-                  <h3 className="text-2xl font-bold font-[var(--font-outfit)] text-[var(--foreground)]">
+                  <h3 className="text-2xl font-bold  text-[var(--foreground)]">
                     HashEnv
                   </h3>
                 </div>
-                <p className="text-sm leading-6 text-[var(--text-secondary)] font-[var(--font-inter)] max-w-sm">
-                  HashEnv empowers development teams to securely manage environment variables with enterprise-grade AES-256-GCM encryption, granular access control, multi-environment support, version tracking, and complete audit logging — making every deployment safe, traceable, and efficient.
+                <p className="text-sm leading-6 text-[var(--text-secondary)]  max-w-sm">
+                  HashEnv empowers development teams to securely manage environment variables with enterprise-grade AES-256-GCM encryption, granular access control, multi-environment support, version tracking, and complete audit logging, making every deployment safe, traceable, and efficient.
                 </p>
               </div>
 
               {/* Column 2: Links Section */}
               <div className="space-y-6">
-                <h4 className="text-base font-semibold text-[var(--accent)] font-[var(--font-inter)]">
+                <h4 className="text-base font-semibold text-[var(--accent)] ">
                   Resources
                 </h4>
                 <ul className="space-y-4">
                   <li>
-                    <Link href="/docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors font-[var(--font-inter)]">
+                    <Link href="/docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors ">
                       Documentation
                     </Link>
                   </li>
                   <li>
-                    <Link href="/features" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors font-[var(--font-inter)]">
+                    <Link href="/features" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors ">
                       Features
                     </Link>
                   </li>
                   <li>
-                    <Link href="/security" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors font-[var(--font-inter)]">
+                    <Link href="/security" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors ">
                       Security
                     </Link>
                   </li>
                   <li>
-                    <Link href="/api-docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors font-[var(--font-inter)]">
+                    <Link href="/api-docs" className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors ">
                       API Reference
                     </Link>
                   </li>
@@ -772,7 +743,7 @@ export default function Home() {
 
               {/* Column 3: Social Media */}
               <div className="space-y-6">
-                <h4 className="text-base font-semibold text-[var(--accent)] font-[var(--font-inter)]">
+                <h4 className="text-base font-semibold text-[var(--accent)] ">
                   Follow Us
                 </h4>
                 <div className="flex items-center gap-4">
@@ -829,14 +800,14 @@ export default function Home() {
 
             {/* Bottom Section: Copyright & Legal Links */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-              <p className="text-sm text-[var(--text-muted)] font-[var(--font-inter)]">
+              <p className="text-sm text-[var(--text-muted)] ">
                 &copy; {new Date().getFullYear()} HashEnv. All rights reserved.
               </p>
               <div className="flex items-center gap-6">
-                <Link href="/privacy" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors font-[var(--font-inter)]">
+                <Link href="/privacy" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors ">
                   Privacy Policy
                 </Link>
-                <Link href="/terms" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors font-[var(--font-inter)]">
+                <Link href="/terms" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors ">
                   Terms of Service
                 </Link>
               </div>

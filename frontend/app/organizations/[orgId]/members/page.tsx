@@ -297,9 +297,9 @@ export default function OrganizationMembersPage() {
                   <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Pending Invitations</h2>
                   <div className="space-y-3">
                     {invites.map((invite) => (
-                      <div key={invite.id} className="flex items-center justify-between border-b border-[var(--border-subtle)] py-3 last:border-b-0">
-                        <div>
-                          <p className="font-medium text-[var(--foreground)]">{invite.email}</p>
+                      <div key={invite.id} className="flex flex-col gap-3 border-b border-[var(--border-subtle)] py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium text-[var(--foreground)] break-all">{invite.email}</p>
                           <p className="text-xs text-[var(--text-muted)]">
                             Role: {invite.role}
                             {invite.permissions && invite.permissions.length > 0 && (
@@ -308,7 +308,7 @@ export default function OrganizationMembersPage() {
                             {' · '}Expires {new Date(invite.expiresAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex shrink-0 items-center gap-3">
                           {canInvite && (
                             <button
                               onClick={() => handleResendInvite(invite.id)}
@@ -343,7 +343,7 @@ export default function OrganizationMembersPage() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">User</th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Permissions</th>
+                      <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Permissions</th>
                       {canManageMembers && (
                         <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actions</th>
                       )}
@@ -357,7 +357,7 @@ export default function OrganizationMembersPage() {
                           <p className="text-[var(--text-muted)]">{member.user.email}</p>
                         </td>
                         <td className="px-6 py-4 text-sm text-[var(--text-secondary)] capitalize">{member.role}</td>
-                        <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">
+                        <td className="hidden md:table-cell px-6 py-4 text-sm text-[var(--text-secondary)]">
                           {member.role === 'owner' || member.role === 'admin' ? (
                             <span className="text-xs text-[var(--text-muted)]">All organization permissions</span>
                           ) : member.permissions && member.permissions.length > 0 ? (

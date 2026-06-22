@@ -31,8 +31,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
         >
           <TopBar onLogout={logout} onMenuOpen={() => setMobileOpen(true)} />
 
-          <main className="flex-1 px-5 py-6 sm:px-8 lg:px-10">
-            <div className="mx-auto w-full max-w-[75rem]">{children}</div>
+          <main className="flex-1 min-w-0 px-4 py-6 sm:px-8 lg:px-10">
+            <div className="mx-auto w-full min-w-0 max-w-[75rem]">{children}</div>
           </main>
 
           <OrgPanicButton variant="fab" />

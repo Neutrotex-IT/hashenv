@@ -20,11 +20,11 @@ function formatResource(log: AuditLogEntry): string {
 }
 
 function formatMetadata(metadata: Record<string, unknown> | undefined): string {
-  if (!metadata || Object.keys(metadata).length === 0) return '—';
+  if (!metadata || Object.keys(metadata).length === 0) return '-';
   try {
     return JSON.stringify(metadata);
   } catch {
-    return '—';
+    return '-';
   }
 }
 
@@ -117,38 +117,36 @@ export default function OrganizationAuditPage() {
       )}
 
       {!forbidden && logs.length > 0 ? (
-        <div className="data-table-wrap">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[var(--border)]">
-              <thead className="bg-[var(--surface-elevated)]">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actor</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Resource</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Metadata</th>
+        <div className="data-table-wrap data-table-wrap--wide">
+          <table className="min-w-full divide-y divide-[var(--border)]">
+            <thead className="bg-[var(--surface-elevated)]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Time</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actor</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Resource</th>
+                <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Metadata</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
+              {logs.map((log) => (
+                <tr key={log._id} className="hover:bg-[var(--surface-elevated)] transition-colors">
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--text-secondary)]">
+                    {new Date(log.createdAt).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
+                    <span className="block text-[var(--foreground)]">{formatActor(log)}</span>
+                    <span className="text-xs text-[var(--text-muted)] capitalize">{log.actorType}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--foreground)] capitalize">{log.action}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">{formatResource(log)}</td>
+                  <td className="hidden lg:table-cell max-w-xs truncate px-4 py-3 text-xs font-mono text-[var(--text-muted)]" title={formatMetadata(log.metadata)}>
+                    {formatMetadata(log.metadata)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
-                {logs.map((log) => (
-                  <tr key={log._id} className="hover:bg-[var(--surface-elevated)] transition-colors">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--text-secondary)]">
-                      {new Date(log.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
-                      <span className="block text-[var(--foreground)]">{formatActor(log)}</span>
-                      <span className="text-xs text-[var(--text-muted)] capitalize">{log.actorType}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[var(--foreground)] capitalize">{log.action}</td>
-                    <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">{formatResource(log)}</td>
-                    <td className="max-w-xs truncate px-4 py-3 text-xs font-mono text-[var(--text-muted)]" title={formatMetadata(log.metadata)}>
-                      {formatMetadata(log.metadata)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : !forbidden && !error ? (
         <div className="empty-state">

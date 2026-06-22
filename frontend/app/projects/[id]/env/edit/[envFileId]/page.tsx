@@ -89,7 +89,7 @@ export default function EditEnvPage() {
         <h1 className="text-3xl font-bold text-[var(--foreground)]">Edit Environment File</h1>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
                 Editing {formatEnvLabel(environment)} ({environment})
-                {versionParam ? ` — version ${versionParam}` : ''}
+                {versionParam ? `, version ${versionParam}` : ''}
               </p>
             </div>
 

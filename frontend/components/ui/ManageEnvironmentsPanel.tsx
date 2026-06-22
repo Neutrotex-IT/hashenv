@@ -197,7 +197,7 @@ export function ManageEnvironmentsPanel({
         <form onSubmit={handleAdd} className="content-section">
           <h3 className="text-sm font-medium text-[var(--foreground)] mb-2">Add environment</h3>
           <p className="text-xs text-[var(--text-muted)] mb-3">
-            Lowercase slug, 2–32 characters (e.g. qa, preview, uat).
+            Lowercase slug, 2-32 characters (e.g. qa, preview, uat).
           </p>
           <div className="flex gap-2">
             <input
