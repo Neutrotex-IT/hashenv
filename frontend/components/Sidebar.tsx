@@ -353,7 +353,7 @@ export function Sidebar({
 
       <aside
         style={{ width: sidebarWidth }}
-        className={`fixed left-0 top-0 z-[var(--z-sidebar)] h-full border-r border-[var(--border)] transition-[width] duration-[250ms] ease-out ${
+        className={`fixed left-0 top-0 z-[var(--z-sidebar)] h-full border-r border-[var(--border)] motion-panel ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >

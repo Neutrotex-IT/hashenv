@@ -31,7 +31,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-2 py-1.5 transition-colors hover:bg-[var(--surface-hover)]"
+        className="flex items-center gap-2.5 rounded-[var(--radius-md)] px-2 py-1.5 motion-colors hover:bg-[var(--surface-hover)]"
         aria-expanded={open}
         aria-haspopup="menu"
       >
@@ -40,7 +40,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
           {user.name}
         </span>
         <svg
-          className={`h-4 w-4 text-[var(--text-muted)] transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-[var(--text-muted)] motion-transform ${open ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -50,7 +50,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
       </button>
 
       {open && (
-        <div role="menu" className="dropdown-menu absolute right-0 top-full z-[var(--z-dropdown)] mt-2 w-[280px]">
+        <div role="menu" className="dropdown-menu dropdown-menu--align-end absolute right-0 top-full z-[var(--z-dropdown)] mt-2 w-[280px]">
           <div className="dropdown-header">
             <div className="flex items-center gap-3">
               <Avatar name={user.name} size="lg" />

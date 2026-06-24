@@ -27,7 +27,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
         />
 
         <div
-          className={`flex min-h-screen flex-col transition-[margin] duration-[250ms] ease-out ${sidebarOffsetClass(collapsed)}`}
+          className={`flex min-h-screen flex-col motion-panel ${sidebarOffsetClass(collapsed)}`}
         >
           <TopBar onLogout={logout} onMenuOpen={() => setMobileOpen(true)} />
 

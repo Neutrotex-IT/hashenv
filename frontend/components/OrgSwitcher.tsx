@@ -32,7 +32,7 @@ export function OrgSwitcher() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-3 py-2 transition-colors hover:border-[var(--text-muted)]"
+        className="flex w-full items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-hover)] px-3 py-2 motion-colors hover:border-[var(--text-muted)]"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
@@ -49,7 +49,7 @@ export function OrgSwitcher() {
           {currentOrg.name}
         </span>
         <svg
-          className={`h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 text-[var(--text-muted)] motion-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
