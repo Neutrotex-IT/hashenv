@@ -66,8 +66,63 @@ export function SkeletonRow({ className = '' }: { className?: string }) {
   return <SkeletonCard className={className} />;
 }
 
-export function SkeletonButton({ className = '' }: { className?: string }) {
-  return <Skeleton variant="rectangular" height={36} width={120} className={className} />;
+export function SkeletonButton({ className = '', height = 36, width = 120 }: { className?: string; height?: number; width?: number }) {
+  return <Skeleton variant="rectangular" height={height} width={width} className={className} />;
+}
+
+export function SkeletonDataTable({
+  columns,
+  rows = 3,
+  className = '',
+}: {
+  columns: Array<{ key: string; width?: number; align?: 'left' | 'right' }>;
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <table className={`min-w-full divide-y divide-[var(--border)] ${className}`}>
+      <thead className="bg-[var(--surface-elevated)]">
+        <tr>
+          {columns.map((column) => (
+            <th
+              key={column.key}
+              className={`px-6 py-3 ${
+                column.align === 'right' ? 'text-right' : 'text-left'
+              }`}
+            >
+              <Skeleton
+                variant="text"
+                width={column.width ?? 64}
+                height={12}
+                className={column.align === 'right' ? 'ml-auto' : undefined}
+              />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-[var(--border)] bg-[var(--surface)]">
+        {Array.from({ length: rows }).map((_, rowIndex) => (
+          <tr key={rowIndex}>
+            {columns.map((column) => (
+              <td
+                key={column.key}
+                className={`whitespace-nowrap px-6 py-4 ${
+                  column.align === 'right' ? 'text-right' : 'text-left'
+                }`}
+              >
+                <Skeleton
+                  variant="text"
+                  width={column.width ?? 96}
+                  height={16}
+                  className={column.align === 'right' ? 'ml-auto' : undefined}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export function SkeletonAvatar({ size = 40, className = '' }: { size?: number; className?: string }) {

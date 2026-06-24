@@ -9,7 +9,7 @@ import { projectsAPI, envAPI, secretsAPI, accountsAPI, ProjectPermissionsRespons
 import { Button } from '@/components/ui/Button';
 import { UploadEnvButton } from '@/components/ui/UploadEnvButton';
 import { canReadProject, canWriteProject } from '@/lib/permissions';
-import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
+import { SkeletonCard, Skeleton, SkeletonDataTable } from '@/components/ui/Skeleton';
 import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { EnvCompareModal } from '@/components/ui/EnvCompareModal';
@@ -128,6 +128,7 @@ export default function ProjectDetailPage() {
   const [compareInitialFrom, setCompareInitialFrom] = useState<number | undefined>();
   const [compareInitialTo, setCompareInitialTo] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
+  const [envVersionsLoading, setEnvVersionsLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretFormOpen, setSecretFormOpen] = useState(false);
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
@@ -254,7 +255,8 @@ export default function ProjectDetailPage() {
     if (!project) {
       return;
     }
-    
+
+    setEnvVersionsLoading(true);
     try {
       const data = await envAPI.listVersions(projectId, selectedEnv);
       setEnvVersions(data);
@@ -266,6 +268,8 @@ export default function ProjectDetailPage() {
       }
       // Don't set error for env versions as it's secondary data
       setEnvVersions([]);
+    } finally {
+      setEnvVersionsLoading(false);
     }
   };
 
@@ -718,7 +722,7 @@ export default function ProjectDetailPage() {
                   role="tab"
                   aria-selected={selectedTab === tab.id}
                   onClick={() => setSelectedTab(tab.id)}
-                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`rounded-md px-4 py-2 text-sm font-medium motion-colors ${
                     selectedTab === tab.id
                       ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                       : 'text-[var(--text-muted)] hover:text-[var(--foreground)]'
@@ -738,8 +742,13 @@ export default function ProjectDetailPage() {
                   {projectEnvironments.map((env) => (
                     <button
                       key={env.slug}
-                      onClick={() => setSelectedEnv(env.slug)}
-                      className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
+                      onClick={() => {
+                        if (env.slug !== selectedEnv) {
+                          setEnvVersionsLoading(true);
+                        }
+                        setSelectedEnv(env.slug);
+                      }}
+                      className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium motion-colors ${
                         selectedEnv === env.slug
                           ? 'border-[var(--accent)] text-[var(--accent)]'
                           : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:text-[var(--foreground)]'
@@ -763,63 +772,107 @@ export default function ProjectDetailPage() {
 
           {selectedTab === 'environments' && (
             <>
-              <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  {latestVersion && (
+              <div className="mb-6 flex min-h-10 items-center justify-between flex-wrap gap-4">
+                <div className="flex min-h-5 items-center">
+                  {envVersionsLoading ? (
+                    <Skeleton variant="text" width={240} height={14} />
+                  ) : latestVersion ? (
                     <p className="text-sm text-[var(--text-muted)]">
                       Latest version: <span className="font-medium text-[var(--foreground)]">{latestVersion.version}</span> (uploaded{' '}
                       {new Date(latestVersion.createdAt).toLocaleDateString()})
                     </p>
+                  ) : (
+                    <span className="text-sm text-transparent select-none" aria-hidden="true">
+                      Latest version: 0
+                    </span>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {latestVersion && canRead && (
+                <div className="flex min-h-10 flex-wrap items-center gap-2">
+                  {envVersionsLoading ? (
                     <>
-                      <Button
-                        variant="outline"
-                        size="md"
-                        onClick={() => handleViewEnv(latestVersion)}
-                      >
-                        View Latest
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="md"
-                        onClick={() => handleDownload(selectedEnv)}
-                      >
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Download Latest
-                    </Button>
+                      {canWrite && (
+                        <UploadEnvButton
+                          projectId={projectId}
+                          environment={selectedEnv}
+                          variant="secondary"
+                          size="lg"
+                          label="Upload New Version"
+                        />
+                      )}
+                      {canRead && (
+                        <Button variant="outline" size="md" asLink href={`/projects/${projectId}/activity`}>
+                          Activity
+                        </Button>
+                      )}
                     </>
-                  )}
-                  {canWrite && (
-                    <UploadEnvButton
-                      projectId={projectId}
-                      environment={selectedEnv}
-                      variant="secondary"
-                      size="lg"
-                      label="Upload New Version"
-                    />
-                  )}
-                  {canRead && filteredVersions.length >= 2 && (
-                    <Button variant="outline" size="md" onClick={() => openCompare()}>
-                      Compare
-                    </Button>
-                  )}
-                  {canRead && (
-                    <Button variant="outline" size="md" asLink href={`/projects/${projectId}/activity`}>
-                      Activity
-                    </Button>
+                  ) : (
+                    <>
+                      {latestVersion && canRead && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="md"
+                            onClick={() => handleViewEnv(latestVersion)}
+                          >
+                            View Latest
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="md"
+                            onClick={() => handleDownload(selectedEnv)}
+                          >
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download Latest
+                        </Button>
+                        </>
+                      )}
+                      {canWrite && (
+                        <UploadEnvButton
+                          projectId={projectId}
+                          environment={selectedEnv}
+                          variant="secondary"
+                          size="lg"
+                          label="Upload New Version"
+                        />
+                      )}
+                      {canRead && filteredVersions.length >= 2 && (
+                        <Button variant="outline" size="md" onClick={() => openCompare()}>
+                          Compare
+                        </Button>
+                      )}
+                      {canRead && (
+                        <Button variant="outline" size="md" asLink href={`/projects/${projectId}/activity`}>
+                          Activity
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
 
               {/* Versions List */}
-              {filteredVersions.length > 0 ? (
-            <div className="data-table-wrap">
-              <table className="min-w-full divide-y divide-[var(--border)]">
+              <div
+                key={`${selectedEnv}-${envVersionsLoading ? 'loading' : filteredVersions.length > 0 ? 'data' : 'empty'}`}
+                className={`data-table-wrap${
+                  envVersionsLoading ? ' is-loading' : filteredVersions.length === 0 ? ' is-settled-empty' : ''
+                }`}
+                aria-busy={envVersionsLoading}
+                aria-live="polite"
+              >
+              <div className="data-panel-swap">
+              {envVersionsLoading ? (
+            <SkeletonDataTable
+              columns={[
+                { key: 'version', width: 56 },
+                { key: 'uploadedBy', width: 112 },
+                { key: 'date', width: 144 },
+                { key: 'actions', width: 72, align: 'right' },
+              ]}
+            />
+          ) : filteredVersions.length > 0 ? (
+            <table className="min-w-full divide-y divide-[var(--border)]">
                 <thead className="bg-[var(--surface-elevated)]">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
@@ -927,7 +980,6 @@ export default function ProjectDetailPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
           ) : (
             <div className="empty-state">
               <svg className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -946,6 +998,8 @@ export default function ProjectDetailPage() {
               )}
             </div>
           )}
+              </div>
+              </div>
             </>
           )}
 

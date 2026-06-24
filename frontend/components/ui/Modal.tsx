@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'sheet';
@@ -27,6 +27,8 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   sheet: 'modal-panel-sheet',
 };
 
+const EXIT_MS = 160;
+
 export function Modal({
   open,
   onClose,
@@ -40,8 +42,29 @@ export function Modal({
   closeOnEscape = true,
   portal = false,
 }: ModalProps) {
+  const [mounted, setMounted] = useState(open);
+  const [closing, setClosing] = useState(false);
+
   useEffect(() => {
-    if (!open) return;
+    if (open) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+
+    if (!mounted) return;
+
+    setClosing(true);
+    const timer = window.setTimeout(() => {
+      setClosing(false);
+      setMounted(false);
+    }, EXIT_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [open, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -49,10 +72,10 @@ export function Modal({
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [open]);
+  }, [mounted]);
 
   useEffect(() => {
-    if (!open || !closeOnEscape) return;
+    if (!mounted || !closeOnEscape || closing) return;
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -60,12 +83,16 @@ export function Modal({
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [open, closeOnEscape, onClose]);
+  }, [mounted, closeOnEscape, closing, onClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const content = (
-    <div className="modal-overlay" style={{ zIndex }} role="presentation">
+    <div
+      className={`modal-overlay${closing ? ' is-closing' : ''}`}
+      style={{ zIndex }}
+      role="presentation"
+    >
       <button
         type="button"
         className="modal-backdrop"

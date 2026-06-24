@@ -40,6 +40,13 @@
   --z-modal-backdrop: 60;
   --z-modal: 70;
   --z-toast: 80;
+
+  /* Motion — strong ease-out for responsive UI feel */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-fast: 140ms;
+  --duration-ui: 200ms;
+  --duration-panel: 250ms;
 }
 
 @theme inline {
@@ -107,6 +114,76 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .motion-press:active {
+    transform: none !important;
+  }
+}
+
+/* Shared motion utilities */
+.motion-colors {
+  transition:
+    background-color var(--duration-ui) var(--ease-out),
+    border-color var(--duration-ui) var(--ease-out),
+    color var(--duration-ui) var(--ease-out),
+    opacity var(--duration-ui) var(--ease-out);
+}
+
+.motion-transform {
+  transition: transform var(--duration-ui) var(--ease-out);
+}
+
+.motion-panel {
+  transition:
+    width var(--duration-panel) var(--ease-out),
+    margin var(--duration-panel) var(--ease-out),
+    transform var(--duration-panel) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .motion-press:not(:disabled) {
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      background-color var(--duration-ui) var(--ease-out),
+      border-color var(--duration-ui) var(--ease-out),
+      color var(--duration-ui) var(--ease-out),
+      opacity var(--duration-ui) var(--ease-out);
+  }
+
+  .motion-press:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+
+/* Content panel crossfade — masks skeleton ↔ data swaps */
+.data-panel-swap {
+  animation: panel-content-in var(--duration-ui) var(--ease-out) both;
+}
+
+@keyframes panel-content-in {
+  from {
+    opacity: 0.55;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-panel-swap {
+    animation: panel-content-in-reduced 120ms var(--ease-out) both;
+  }
+
+  @keyframes panel-content-in-reduced {
+    from {
+      opacity: 0.7;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 /* Modal / dialog surfaces + dashboard project panels */
@@ -118,7 +195,7 @@ body {
 }
 
 .panel {
-  transition: border-color 180ms ease-out;
+  transition: border-color var(--duration-ui) var(--ease-out);
 }
 
 .panel:hover {
@@ -155,6 +232,19 @@ body {
   min-width: 34rem;
 }
 
+.data-table-wrap.is-settled-empty,
+.data-table-wrap.is-loading {
+  min-height: 15rem;
+}
+
+.data-table-wrap.is-settled-empty .empty-state {
+  display: flex;
+  min-height: 15rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .data-table-wrap--wide > table {
   min-width: 48rem;
 }
@@ -176,12 +266,24 @@ body {
   padding: 0;
 }
 
+.modal-overlay:not(.is-closing) {
+  animation: modal-overlay-in var(--duration-ui) var(--ease-out);
+}
+
 .modal-backdrop {
   position: absolute;
   inset: 0;
   border: none;
   background: rgba(0, 0, 0, 0.6);
   cursor: default;
+}
+
+.modal-overlay:not(.is-closing) .modal-backdrop {
+  animation: modal-fade-in var(--duration-ui) var(--ease-out);
+}
+
+.modal-overlay.is-closing .modal-backdrop {
+  animation: modal-fade-out 160ms var(--ease-out) forwards;
 }
 
 .modal-panel {
@@ -197,6 +299,63 @@ body {
   padding: 1.25rem;
 }
 
+.modal-overlay:not(.is-closing) .modal-panel {
+  animation: modal-panel-in-mobile var(--duration-ui) var(--ease-out);
+}
+
+.modal-overlay.is-closing .modal-panel {
+  animation: modal-panel-out-mobile 160ms var(--ease-out) forwards;
+}
+
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-panel-in-mobile {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-panel-out-mobile {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
 @media (min-width: 640px) {
   .modal-overlay {
     align-items: center;
@@ -208,6 +367,36 @@ body {
     border-bottom: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 1.5rem;
+  }
+
+  .modal-overlay:not(.is-closing) .modal-panel {
+    animation: modal-panel-in-desktop var(--duration-ui) var(--ease-out);
+  }
+
+  .modal-overlay.is-closing .modal-panel {
+    animation: modal-panel-out-desktop 160ms var(--ease-out) forwards;
+  }
+
+  @keyframes modal-panel-in-desktop {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes modal-panel-out-desktop {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.97);
+    }
   }
 }
 
@@ -304,6 +493,23 @@ body {
   border-radius: var(--radius-md);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  transform-origin: top center;
+  animation: dropdown-in var(--duration-ui) var(--ease-out);
+}
+
+.dropdown-menu--align-end {
+  transform-origin: top right;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .dropdown-header {
@@ -329,7 +535,7 @@ body {
   font-size: 0.875rem;
   color: var(--text-secondary);
   text-align: left;
-  transition: background-color 180ms ease-out, color 180ms ease-out;
+  transition: background-color var(--duration-ui) var(--ease-out), color var(--duration-ui) var(--ease-out);
 }
 
 .dropdown-item:hover {
@@ -446,4 +652,35 @@ body {
   height: 2px;
   background: var(--foreground);
   border-radius: 1px;
+}
+
+/* Toast stack */
+.toast-item {
+  animation: toast-in 220ms var(--ease-out);
+}
+
+.toast-item.is-exiting {
+  animation: toast-out 160ms var(--ease-out) forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
 }

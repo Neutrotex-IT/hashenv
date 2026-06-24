@@ -86,7 +86,7 @@ function VerifyEmailForm() {
               <p className="text-[var(--text-muted)] mb-6">{message}</p>
               <Link
                 href={inviteToken ? `/login?invite=${encodeURIComponent(inviteToken)}` : '/login'}
-                className="inline-block rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] transition-all font-[var(--font-inter)]"
+                className="inline-block rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] motion-press font-[var(--font-inter)]"
               >
                 Go to Login
               </Link>
@@ -105,7 +105,7 @@ function VerifyEmailForm() {
               <div className="space-y-3">
                 <Link
                   href="/login"
-                  className="block rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] transition-all font-[var(--font-inter)]"
+                  className="block rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--accent-hover)] motion-press font-[var(--font-inter)]"
                 >
                   Go to Login
                 </Link>
