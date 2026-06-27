@@ -24,6 +24,7 @@ All documentation lives in **[docs/](./docs/)**:
 
 - **[Setup and usage](./docs/SETUP-AND-USAGE.md)** — day-to-day guide
 - **[Production checklist](./docs/PRODUCTION-CHECKLIST.md)** — deploy to production
+- **[Dokploy deployment](./docs/DOKPLOY-DEPLOY.md)** — Docker + Dokploy guide
 - **[CLI](./docs/CLI.md)** — `hashenv pull` / `hashenv run`
 - **[Docs index](./docs/README.md)** — full list
 

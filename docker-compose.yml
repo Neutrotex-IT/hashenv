@@ -1,0 +1,68 @@
+# HashEnv — local Docker Compose (development / smoke testing)
+#
+# Not used on Dokploy — deploy backend and frontend as separate Application services.
+# See docs/DOKPLOY-DEPLOY.md for production deployment.
+#
+# Usage:
+#   cp backend/env.example backend/.env   # edit MONGODB_URI, secrets, etc.
+#   docker compose up --build
+#
+# App:  http://localhost:3000
+# API:  http://localhost:3001/api/health
+
+name: hashenv
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001/api
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s

@@ -4,6 +4,7 @@
 |----------|---------|
 | [SETUP-AND-USAGE.md](./SETUP-AND-USAGE.md) | Local setup, features, API tokens, encryption overview |
 | [PRODUCTION-CHECKLIST.md](./PRODUCTION-CHECKLIST.md) | Production env vars, deployment, security checklist |
+| [DOKPLOY-DEPLOY.md](./DOKPLOY-DEPLOY.md) | Deploy backend + frontend on Dokploy (Docker, MongoDB Atlas) |
 | [CLI.md](./CLI.md) | Command-line tool (`pull`, `run`, secrets, env upload) |
 | [ROOT-KEY-ROTATION.md](./ROOT-KEY-ROTATION.md) | Root encryption key rotation procedure |
 | [SECURITY-IMPROVEMENTS.md](./SECURITY-IMPROVEMENTS.md) | Security gap analysis vs industry practice |
