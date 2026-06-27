@@ -10,15 +10,21 @@ This guide deploys **backend** and **frontend** from a **single Git monorepo** a
 - [Domains](https://docs.dokploy.com/docs/core/domains)
 - [Installation](https://docs.dokploy.com/docs/core/installation)
 
-### Example production URLs
-
-Replace `yourdomain.com` with your domain:
+### Production URLs (Neutrotex)
 
 | Service | Public URL | Container port |
 |---------|------------|----------------|
-| Frontend | `https://app.yourdomain.com` | `3000` |
-| Backend API | `https://api.yourdomain.com` | `3001` |
+| Frontend | `https://hashenv.neutrotex.com` | `3000` |
+| Backend API | `https://hashenv-api.neutrotex.com` | `3001` |
 | Database | **MongoDB Atlas** (external) | — |
+
+**Neutrotex env values (copy into Dokploy):**
+
+| Variable | Value | Service | Type |
+|----------|-------|---------|------|
+| `FRONTEND_URL` | `https://hashenv.neutrotex.com` | Backend | Runtime |
+| `NEXT_PUBLIC_API_URL` | `https://hashenv-api.neutrotex.com/api` | Frontend | **Both** |
+| `CORS_ORIGINS` | `https://hashenv.neutrotex.com` | Backend | Runtime (optional — or use `FRONTEND_URL`) |
 
 ---
 
@@ -30,8 +36,8 @@ Internet
    ▼
 Traefik (Dokploy, ports 80/443)
    │
-   ├── app.yourdomain.com  → frontend  (container :3000)
-   └── api.yourdomain.com  → backend   (container :3001)
+   ├── hashenv.neutrotex.com  → frontend  (container :3000)
+   └── hashenv-api.neutrotex.com  → backend   (container :3001)
                                   │
                                   ▼
                          MongoDB Atlas (cloud)
@@ -68,19 +74,29 @@ Create records pointing app subdomains to your **Dokploy VPS IP**:
 
 | Host | Points to | Notes |
 |------|-----------|-------|
-| `app.yourdomain.com` | VPS IP | Main frontend (canonical) |
-| `api.yourdomain.com` | VPS IP | Backend API |
+| `hashenv.neutrotex.com` | VPS IP | Main frontend (canonical) |
+| `hashenv-api.neutrotex.com` | VPS IP | Backend API |
 
-If using a wildcard such as `*.yourdomain.com` → VPS IP, that covers **one** label only (`app.yourdomain.com`, `api.yourdomain.com`, etc.). It does **not** cover `www.app.yourdomain.com` — see [www vs non-www](#www-vs-non-www-redirect) below.
+If using a wildcard such as `*.neutrotex.com` → VPS IP, that covers **one** label only (`hashenv.neutrotex.com`, `hashenv-api.neutrotex.com`, etc.). It does **not** cover `www.hashenv.neutrotex.com` — see [www vs non-www](#www-vs-non-www-redirect) below.
+
+**Example split DNS (Neutrotex):**
+
+| Record | Target | Purpose |
+|--------|--------|---------|
+| `neutrotex.com` | Vercel | Marketing / company site |
+| `www.neutrotex.com` | Vercel | Marketing www |
+| `*.neutrotex.com` | App VPS | App subdomains (`hashenv`, `hashenv-api`, …) |
+| `www.hashenv.neutrotex.com` | App VPS (explicit) | Required if you want www on the app — **not** covered by `*.neutrotex.com` |
 
 Verify with:
 
 ```bash
-dig app.yourdomain.com +short
-dig api.yourdomain.com +short
+dig hashenv.neutrotex.com +short
+dig hashenv-api.neutrotex.com +short
+dig www.hashenv.neutrotex.com +short   # if www support enabled
 ```
 
-Both should return your app server IP.
+Both primary domains should return your app server IP.
 
 ### Repository (single monorepo, two deployable apps)
 
@@ -270,9 +286,9 @@ Add all variables below in **Environment** only (runtime). See [Environment vari
 | `MONGODB_URI` | Runtime | **Yes** | Atlas URI, e.g. `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/hashenv?retryWrites=true&w=majority` |
 | `JWT_SECRET` | Runtime | **Yes** | Long random string — min 32 chars (`openssl rand -hex 32`) |
 | `ROOT_ENCRYPTION_KEY` | Runtime | **Yes** | Base64-encoded 32-byte key — **losing this key loses all encrypted secrets** |
-| `FRONTEND_URL` | Runtime | **Yes** | `https://app.yourdomain.com` — used for CORS and email links |
+| `FRONTEND_URL` | Runtime | **Yes** | `https://hashenv.neutrotex.com` — used for CORS and email links |
 | `BREVO_API_KEY` | Runtime | **Yes** (if email enabled) | From [Brevo API keys](https://app.brevo.com/settings/keys/api) |
-| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email enabled) | Verified sender in Brevo, e.g. `noreply@yourdomain.com` |
+| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email enabled) | Verified sender in Brevo, e.g. `noreply@neutrotex.com` |
 | `NODE_ENV` | Runtime | **Yes** | `production` |
 | `PORT` | Runtime | Optional | `3001` (default) |
 | `CORS_ORIGINS` | Runtime | Optional | Comma-separated list if you need multiple origins instead of `FRONTEND_URL` alone |
@@ -294,13 +310,13 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 **CORS example** (single canonical frontend):
 
 ```env
-FRONTEND_URL=https://app.yourdomain.com
+FRONTEND_URL=https://hashenv.neutrotex.com
 ```
 
 Or with explicit multi-origin list:
 
 ```env
-CORS_ORIGINS=https://app.yourdomain.com,https://www.app.yourdomain.com
+CORS_ORIGINS=https://hashenv.neutrotex.com,https://www.hashenv.neutrotex.com
 ```
 
 ### 3.4 Domains tab
@@ -309,13 +325,13 @@ Click **Create Domain**:
 
 | Field | Value |
 |-------|-------|
-| **Host** | `api.yourdomain.com` |
+| **Host** | `hashenv-api.neutrotex.com` |
 | **Path** | `/` |
 | **Container Port** | `3001` |
 | **HTTPS** | ON |
 | **Certificate** | `letsencrypt` |
 
-> **Important:** Container Port is for Traefik routing only. Users access `https://api.yourdomain.com` without `:3001` in the URL. Do **not** confuse this with **Advanced → Ports** (which exposes host ports publicly).
+> **Important:** Container Port is for Traefik routing only. Users access `https://hashenv-api.neutrotex.com` without `:3001` in the URL. Do **not** confuse this with **Advanced → Ports** (which exposes host ports publicly).
 
 ### 3.5 Advanced tab (optional)
 
@@ -328,8 +344,8 @@ Click **Create Domain**:
 Click **Deploy**. Wait until logs show the server listening on port `3001`. Verify:
 
 ```text
-https://api.yourdomain.com/health
-https://api.yourdomain.com/api/health
+https://hashenv-api.neutrotex.com/health
+https://hashenv-api.neutrotex.com/api/health
 ```
 
 Both should return a healthy JSON response.
@@ -368,7 +384,7 @@ Set variables in **both** Dokploy sections where the **Type** column says **Both
 
 | Variable | Type | Required | Value |
 |----------|------|----------|-------|
-| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | `https://api.yourdomain.com/api` |
+| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | `https://hashenv-api.neutrotex.com/api` |
 | `NODE_ENV` | Runtime | Optional | `production` (already set in Dockerfile) |
 | `PORT` | Runtime | Optional | `3000` (already set in Dockerfile) |
 | `HOSTNAME` | Runtime | Optional | `0.0.0.0` (already set in Dockerfile) |
@@ -379,7 +395,7 @@ Set variables in **both** Dokploy sections where the **Type** column says **Both
 
 | Variable | Type | Required | Value |
 |----------|------|----------|-------|
-| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | `https://api.yourdomain.com/api` |
+| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | `https://hashenv-api.neutrotex.com/api` |
 
 > `NEXT_PUBLIC_*` values are **inlined at `next build`**. Changing them requires updating **Build Time Arguments** and a **full redeploy/rebuild** — updating runtime env alone will not fix the browser bundle or Content-Security-Policy `connect-src`.
 
@@ -389,7 +405,7 @@ Set variables in **both** Dokploy sections where the **Type** column says **Both
 
 | Field | Value |
 |-------|-------|
-| **Host** | `app.yourdomain.com` |
+| **Host** | `hashenv.neutrotex.com` |
 | **Path** | `/` |
 | **Container Port** | `3000` |
 | **HTTPS** | ON |
@@ -399,17 +415,17 @@ Set variables in **both** Dokploy sections where the **Type** column says **Both
 
 | Field | Value |
 |-------|-------|
-| **Host** | `www.app.yourdomain.com` |
+| **Host** | `www.hashenv.neutrotex.com` |
 | **Path** | `/` |
 | **Container Port** | `3000` |
 | **HTTPS** | ON |
 | **Certificate** | `letsencrypt` |
 
-Traefik must know about the `www` host before a redirect can run. Without this domain entry (and DNS), `www.app.yourdomain.com` returns **404 page not found**.
+Traefik must know about the `www` host before a redirect can run. Without this domain entry (and DNS), `www.hashenv.neutrotex.com` returns **404 page not found**.
 
 ### 4.5 www → non-www redirect (recommended)
 
-On the **frontend** application: **Advanced** → **Redirects** → use the **Redirect to non-www** preset (canonical = `app.yourdomain.com`):
+On the **frontend** application: **Advanced** → **Redirects** → use the **Redirect to non-www** preset (canonical = `hashenv.neutrotex.com`):
 
 | Field | Value |
 |-------|-------|
@@ -420,14 +436,14 @@ On the **frontend** application: **Advanced** → **Redirects** → use the **Re
 
 After adding domains or redirects, **redeploy** the frontend application.
 
-The API subdomain (`api.yourdomain.com`) does not need a `www` variant.
+The API subdomain (`hashenv-api.neutrotex.com`) does not need a `www` variant.
 
 ### 4.6 Deploy
 
 Deploy **after** the backend is healthy. Verify:
 
-- `https://app.yourdomain.com` loads
-- Browser network tab shows API calls to `https://api.yourdomain.com/api/...` (not `localhost`)
+- `https://hashenv.neutrotex.com` loads
+- Browser network tab shows API calls to `https://hashenv-api.neutrotex.com/api/...` (not `localhost`)
 - Registration / login / email verification work (if Brevo is configured)
 
 ---
@@ -471,10 +487,10 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 | `MONGODB_URI` | Runtime | **Yes** | Environment | `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/hashenv?retryWrites=true&w=majority` |
 | `JWT_SECRET` | Runtime | **Yes** | Environment | Min 32 chars — `openssl rand -hex 32` |
 | `ROOT_ENCRYPTION_KEY` | Runtime | **Yes** | Environment | Base64 32-byte key — **backup securely; losing it loses all encrypted data** |
-| `FRONTEND_URL` | Runtime | **Yes** | Environment | `https://app.yourdomain.com` — CORS (single origin) and email links |
+| `FRONTEND_URL` | Runtime | **Yes** | Environment | `https://hashenv.neutrotex.com` — CORS (single origin) and email links |
 | `NODE_ENV` | Runtime | **Yes** | Environment | `production` |
 | `BREVO_API_KEY` | Runtime | **Yes** (if email) | Environment | [Brevo API key](https://app.brevo.com/settings/keys/api) |
-| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email) | Environment | Verified sender, e.g. `noreply@yourdomain.com` |
+| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email) | Environment | Verified sender, e.g. `noreply@neutrotex.com` |
 | `CORS_ORIGINS` | Runtime | Optional | Environment | Comma-separated origins — use instead of `FRONTEND_URL` when you need multiple |
 | `BREVO_SENDER_NAME` | Runtime | Optional | Environment | Email display name, e.g. `HashEnv` |
 | `BREVO_FROM_EMAIL` | Runtime | Optional | Environment | Alias for `BREVO_SENDER_EMAIL` |
@@ -488,7 +504,7 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 
 | Variable | Type | Required | Dokploy tab | Example / notes |
 |----------|------|----------|-------------|-----------------|
-| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | **Build Time Arguments** + **Environment** | `https://api.yourdomain.com/api` — **must include `/api` suffix** |
+| `NEXT_PUBLIC_API_URL` | **Both** | **Yes** | **Build Time Arguments** + **Environment** | `https://hashenv-api.neutrotex.com/api` — **must include `/api` suffix** |
 | `NODE_ENV` | Runtime | Optional | Environment | Already `production` in Dockerfile — override only if needed |
 | `PORT` | Runtime | Optional | Environment | Already `3000` in Dockerfile |
 | `HOSTNAME` | Runtime | Optional | Environment | Already `0.0.0.0` in Dockerfile — required for Traefik if overriding |
@@ -547,28 +563,28 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/hashenv?retryWrites=true&w=majority
 JWT_SECRET=
 ROOT_ENCRYPTION_KEY=
-FRONTEND_URL=https://app.yourdomain.com
+FRONTEND_URL=https://hashenv.neutrotex.com
 NODE_ENV=production
 PORT=3001
 BREVO_API_KEY=
-BREVO_SENDER_EMAIL=noreply@yourdomain.com
+BREVO_SENDER_EMAIL=noreply@neutrotex.com
 BREVO_SENDER_NAME=HashEnv
 # Optional — use instead of FRONTEND_URL when you need multiple origins:
-# CORS_ORIGINS=https://app.yourdomain.com,https://www.app.yourdomain.com
+# CORS_ORIGINS=https://hashenv.neutrotex.com,https://www.hashenv.neutrotex.com
 # Optional — not needed on Dokploy:
-# BACKEND_URL=https://api.yourdomain.com
+# BACKEND_URL=https://hashenv-api.neutrotex.com
 ```
 
 ### Frontend — build time (`hashenv-frontend` → Build Time Arguments)
 
 ```env
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api
+NEXT_PUBLIC_API_URL=https://hashenv-api.neutrotex.com/api
 ```
 
 ### Frontend — runtime (`hashenv-frontend` → Environment)
 
 ```env
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api
+NEXT_PUBLIC_API_URL=https://hashenv-api.neutrotex.com/api
 NODE_ENV=production
 ```
 
@@ -584,37 +600,39 @@ Pick **one** canonical frontend URL. Redirect the other with a permanent (301) r
 
 | Canonical | Dokploy preset | Users end up at |
 |-----------|----------------|-----------------|
-| `app.yourdomain.com` | **Redirect to non-www** | Apex |
-| `www.app.yourdomain.com` | Redirect to www | www |
+| `hashenv.neutrotex.com` | **Redirect to non-www** | Apex |
+| `www.hashenv.neutrotex.com` | Redirect to www | www |
 
 Set `FRONTEND_URL` on the backend to the **canonical** URL (the one users land on after redirect).
 
-### DNS: wildcard `*.yourdomain.com` is not enough for www
+### DNS: wildcard `*.neutrotex.com` is not enough for www
 
-A wildcard `*.yourdomain.com` matches only **one** subdomain level:
+A wildcard `*.neutrotex.com` matches only **one** subdomain level:
 
-| Host | Matched by `*.yourdomain.com`? |
+| Host | Matched by `*.neutrotex.com`? |
 |------|-------------------------------|
-| `app.yourdomain.com` | Yes |
-| `api.yourdomain.com` | Yes |
-| `www.app.yourdomain.com` | **No** — two labels (`www` + `app`) |
+| `hashenv.neutrotex.com` | Yes |
+| `hashenv-api.neutrotex.com` | Yes |
+| `www.hashenv.neutrotex.com` | **No** — two labels (`www` + `hashenv`) |
 
-Add an **explicit** record for `www.app` if you want www support:
+Add an **explicit** record for `www.hashenv` if you want www support:
 
 ```text
-www.app.yourdomain.com  →  A  →  <app VPS IP>
+www.hashenv.neutrotex.com  →  A  →  <app VPS IP>
 ```
 
 or:
 
 ```text
-www.app.yourdomain.com  →  CNAME  →  app.yourdomain.com
+www.hashenv.neutrotex.com  →  CNAME  →  hashenv.neutrotex.com
 ```
+
+`www.neutrotex.com` pointing to Vercel does **not** affect `www.hashenv.neutrotex.com` — they are different hostnames.
 
 ### Dokploy setup checklist (www support)
 
-1. DNS: explicit `www.app.yourdomain.com` → app VPS IP.
-2. **Domains:** add `www.app.yourdomain.com` on the frontend app (port `3000`, HTTPS).
+1. DNS: explicit `www.hashenv.neutrotex.com` → app VPS IP.
+2. **Domains:** add `www.hashenv.neutrotex.com` on the frontend app (port `3000`, HTTPS).
 3. **Advanced → Redirects:** preset **Redirect to non-www**, Permanent ON.
 4. **Redeploy** frontend after domain/redirect changes.
 5. Update backend `CORS_ORIGINS` if both hostnames serve traffic without redirect.
@@ -628,16 +646,16 @@ www.app.yourdomain.com  →  CNAME  →  app.yourdomain.com
 **With www → non-www redirect (recommended)** — only canonical frontend:
 
 ```env
-FRONTEND_URL=https://app.yourdomain.com
+FRONTEND_URL=https://hashenv.neutrotex.com
 ```
 
 **If both www and non-www serve the app without redirect** — use `CORS_ORIGINS`:
 
 ```env
-CORS_ORIGINS=https://app.yourdomain.com,https://www.app.yourdomain.com
+CORS_ORIGINS=https://hashenv.neutrotex.com,https://www.hashenv.neutrotex.com
 ```
 
-The API subdomain (`api.yourdomain.com`) does not need to be in CORS — browsers call it cross-origin from the frontend, and CORS is configured on the backend to allow the **frontend origin**, not the API's own origin.
+The API subdomain (`hashenv-api.neutrotex.com`) does not need to be in CORS — browsers call it cross-origin from the frontend, and CORS is configured on the backend to allow the **frontend origin**, not the API's own origin.
 
 ---
 
@@ -672,8 +690,8 @@ The API subdomain (`api.yourdomain.com`) does not need to be in CORS — browser
 2. Create **one** Project + environment.
 3. Configure **MongoDB Atlas** (whitelist VPS IP, copy connection string).
 4. Generate and securely store `JWT_SECRET` and `ROOT_ENCRYPTION_KEY`.
-5. Create Application **`hashenv-backend`** → Build Path `backend` → domain `api.yourdomain.com` → deploy → confirm health endpoints.
-6. Create Application **`hashenv-frontend`** → Build Path `frontend` → build args → domain `app.yourdomain.com` (+ optional www + redirect) → deploy.
+5. Create Application **`hashenv-backend`** → Build Path `backend` → domain `hashenv-api.neutrotex.com` → deploy → confirm health endpoints.
+6. Create Application **`hashenv-frontend`** → Build Path `frontend` → build args → domain `hashenv.neutrotex.com` (+ optional www + redirect) → deploy.
 7. Set `FRONTEND_URL` / `CORS_ORIGINS` on backend to match the canonical frontend URL; redeploy backend if needed.
 8. Test auth flows and Brevo transactional email (register, verify, password reset).
 
@@ -723,10 +741,10 @@ This uses `docker-compose.yml` — not deployed on Dokploy.
 - `NEXT_PUBLIC_API_URL` was not set in **Build Time Arguments** → fix value (must include `/api` suffix) and **redeploy** (full rebuild).
 - CSP `connect-src` in `next.config.ts` is derived from `NEXT_PUBLIC_API_URL` at build time.
 
-### `www.app.yourdomain.com` returns 404
+### `www.hashenv.neutrotex.com` returns 404
 
 1. **DNS:** wildcard does not cover `www.app.*`. Add an explicit A or CNAME record.
-2. **Dokploy Domains:** no entry for `www.app.yourdomain.com` on the frontend app.
+2. **Dokploy Domains:** no entry for `www.hashenv.neutrotex.com` on the frontend app.
 3. **Redirect without redeploy:** after adding domain or redirect rules, **redeploy** the frontend.
 
 ### 502 / domain not routing
@@ -774,11 +792,11 @@ This uses `docker-compose.yml` — not deployed on Dokploy.
 
 ## Post-deploy checklist
 
-- [ ] `https://api.yourdomain.com/health` returns healthy
-- [ ] `https://api.yourdomain.com/api/health` returns healthy
-- [ ] `https://app.yourdomain.com` loads
-- [ ] `https://www.app.yourdomain.com` 301-redirects to canonical URL (if www enabled)
-- [ ] Browser network tab shows API calls to `https://api.yourdomain.com/api/...` (not `localhost`)
+- [ ] `https://hashenv-api.neutrotex.com/health` returns healthy
+- [ ] `https://hashenv-api.neutrotex.com/api/health` returns healthy
+- [ ] `https://hashenv.neutrotex.com` loads
+- [ ] `https://www.hashenv.neutrotex.com` 301-redirects to canonical URL (if www enabled)
+- [ ] Browser network tab shows API calls to `https://hashenv-api.neutrotex.com/api/...` (not `localhost`)
 - [ ] Register, login, email verification, and password reset work
 - [ ] `ROOT_ENCRYPTION_KEY` backed up securely offline
 - [ ] MongoDB Atlas network access restricted to VPS IP (not `0.0.0.0/0`)
@@ -806,11 +824,11 @@ Use `backend/env.example` for additional backend variable names. **Never commit 
 MONGODB_URI=mongodb+srv://...
 JWT_SECRET=<openssl rand -hex 32>
 ROOT_ENCRYPTION_KEY=<node -e "crypto.randomBytes(32).toString('base64')">
-FRONTEND_URL=https://app.yourdomain.com
+FRONTEND_URL=https://hashenv.neutrotex.com
 BREVO_API_KEY=...
-BREVO_SENDER_EMAIL=noreply@yourdomain.com
+BREVO_SENDER_EMAIL=noreply@neutrotex.com
 NODE_ENV=production
 
 # Frontend → hashenv-frontend → Build Time Arguments AND Environment (both)
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api
+NEXT_PUBLIC_API_URL=https://hashenv-api.neutrotex.com/api
 ```
