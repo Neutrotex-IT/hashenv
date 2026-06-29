@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
+import { getApiErrorMessageSync } from '@/lib/apiErrors';
+import { PASSWORD_REQUIREMENTS, validatePassword } from '@/lib/validation';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -31,8 +33,9 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (password.length < 8) {
-      toastError('Password must be at least 8 characters');
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      toastError(passwordError);
       return;
     }
 
@@ -49,8 +52,8 @@ function ResetPasswordForm() {
       setTimeout(() => {
         router.push('/login');
       }, 2000);
-    } catch (err: any) {
-      toastError(err.response?.data?.error || 'Password reset failed. The link may be invalid or expired.');
+    } catch (err: unknown) {
+      toastError(getApiErrorMessageSync(err, 'Password reset failed. The link may be invalid or expired.'));
     } finally {
       setLoading(false);
     }
@@ -123,8 +126,11 @@ function ResetPasswordForm() {
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  placeholder="Enter new password (min 8 characters)"
+                  placeholder="Enter new password"
                 />
+                <p className="mt-1 text-xs text-[var(--text-muted)] font-[var(--font-inter)]">
+                  {PASSWORD_REQUIREMENTS}
+                </p>
               </div>
 
               <div>

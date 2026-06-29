@@ -7,7 +7,7 @@ import RefreshToken, { generateRefreshToken, hashRefreshToken } from '../models/
 import { hashPassword, comparePassword, generateAccessToken, authenticate, REFRESH_TOKEN_EXPIRES_DAYS } from '../lib/auth';
 import { AuthRequest } from '../lib/auth';
 import { authRateLimiter } from '../middleware/security';
-import { validateEmail, validatePassword } from '../middleware/validation';
+import { validateEmail, validatePassword, formatValidationErrors } from '../middleware/validation';
 import { generateVerificationToken, sendVerificationEmail, sendPasswordResetEmail } from '../lib/email';
 import { createOrgEncryptionKey } from '../crypto';
 import { auditSession } from '../lib/audit';
@@ -60,7 +60,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        res.status(400).json(formatValidationErrors(errors));
         return;
       }
       
@@ -159,7 +159,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        res.status(400).json(formatValidationErrors(errors));
         return;
       }
       
@@ -293,7 +293,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        res.status(400).json(formatValidationErrors(errors));
         return;
       }
       
@@ -348,7 +348,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        res.status(400).json(formatValidationErrors(errors));
         return;
       }
       
@@ -401,7 +401,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        res.status(400).json(formatValidationErrors(errors));
         return;
       }
       

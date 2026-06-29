@@ -169,7 +169,14 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   
   // Handle validation errors
   if (err.name === 'ValidationError') {
-    return res.status(400).json({ error: 'Invalid input data' });
+    const fieldErrors = err.errors
+      ? Object.values(err.errors).map((fieldError: { message?: string }) => fieldError.message).filter(Boolean)
+      : [];
+    const message = fieldErrors[0] || 'Invalid input data';
+    return res.status(400).json({
+      error: message,
+      errors: fieldErrors.map((msg) => ({ msg })),
+    });
   }
   
   // Handle MongoDB errors

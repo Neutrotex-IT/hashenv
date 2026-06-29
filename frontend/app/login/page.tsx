@@ -7,6 +7,14 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 import { authAPI } from '@/lib/api';
+import { getApiErrorMessageSync } from '@/lib/apiErrors';
+import {
+  PASSWORD_REQUIREMENTS,
+  validateEmail,
+  validatePassword,
+  validateRegistrationName,
+  validateRegistrationUsername,
+} from '@/lib/validation';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -43,9 +51,42 @@ function LoginForm() {
 
     try {
       if (isLogin) {
+        if (!password) {
+          toastError('Password is required');
+          setError('Password is required');
+          return;
+        }
         await login(email, password);
         router.push(inviteToken ? `/accept-invite?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
       } else {
+        const nameError = validateRegistrationName(name);
+        if (nameError) {
+          toastError(nameError);
+          setError(nameError);
+          return;
+        }
+
+        const usernameError = validateRegistrationUsername(username);
+        if (usernameError) {
+          toastError(usernameError);
+          setError(usernameError);
+          return;
+        }
+
+        const emailError = validateEmail(email);
+        if (emailError) {
+          toastError(emailError);
+          setError(emailError);
+          return;
+        }
+
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+          toastError(passwordError);
+          setError(passwordError);
+          return;
+        }
+
         await register(name, username, email, password, inviteToken || undefined);
         toastSuccess(
           inviteToken
@@ -58,13 +99,14 @@ function LoginForm() {
         setUsername('');
         setPassword('');
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error || 'An error occurred';
+    } catch (err: unknown) {
+      const errorMessage = getApiErrorMessageSync(err, 'An error occurred');
       toastError(errorMessage);
       setError(errorMessage);
       
       // Show resend verification option if email not verified
-      if (err.response?.data?.emailVerified === false || errorMessage.includes('Email not verified')) {
+      const responseData = (err as { response?: { data?: { emailVerified?: boolean } } }).response?.data;
+      if (responseData?.emailVerified === false || errorMessage.includes('Email not verified')) {
         setShowResendVerification(true);
       }
     } finally {
@@ -85,8 +127,8 @@ function LoginForm() {
       await authAPI.resendVerification(email);
       toastSuccess('Verification email sent! Please check your inbox.');
       setShowResendVerification(false);
-    } catch (err: any) {
-      toastError(err.response?.data?.error || 'Failed to resend verification email');
+    } catch (err: unknown) {
+      toastError(getApiErrorMessageSync(err, 'Failed to resend verification email'));
     } finally {
       setLoading(false);
     }
@@ -301,9 +343,14 @@ function LoginForm() {
                   onChange={setPassword}
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
                   required
-                  minLength={8}
-                  placeholder={isLogin ? 'Enter your password' : 'Create a password (min 8 characters)'}
+                  minLength={isLogin ? undefined : 8}
+                  placeholder={isLogin ? 'Enter your password' : 'Create a password'}
                 />
+                {!isLogin && (
+                  <p className="mt-1 text-xs text-[var(--text-muted)] font-[var(--font-geist-sans)]">
+                    {PASSWORD_REQUIREMENTS}
+                  </p>
+                )}
               </div>
 
               <div className="pt-2">

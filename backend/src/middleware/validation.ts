@@ -1,4 +1,4 @@
-import { body, param, query, ValidationChain } from 'express-validator';
+import { body, param, query, ValidationChain, Result } from 'express-validator';
 import { isValidObjectId } from './security';
 import { isValidEnvSlug, normalizeEnvSlug } from '../lib/environments';
 
@@ -8,6 +8,18 @@ import { isValidEnvSlug, normalizeEnvSlug } from '../lib/environments';
 
 // Re-export isValidObjectId for use in routes
 export { isValidObjectId };
+
+/**
+ * Format express-validator results into a consistent API error response.
+ */
+export function formatValidationErrors(result: Result) {
+  const errors = result.array();
+  const messages = errors.map((entry) => entry.msg).filter(Boolean);
+  return {
+    error: messages[0] || 'Invalid input data',
+    errors,
+  };
+}
 
 /**
  * Validate MongoDB ObjectId parameter

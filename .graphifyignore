@@ -1,0 +1,24 @@
+# Non-code files (need LLM if included)
+*.md
+*.mdx
+*.txt
+*.html
+*.rst
+*.yaml
+*.yml
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.pdf
+*.svg
+*.ico
+
+# Noise
+node_modules/
+dist/
+build/
+.next/
+coverage/
+graphify-out/
