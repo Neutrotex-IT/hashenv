@@ -170,7 +170,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   // Handle validation errors
   if (err.name === 'ValidationError') {
     const fieldErrors = err.errors
-      ? Object.values(err.errors).map((fieldError: { message?: string }) => fieldError.message).filter(Boolean)
+      ? Object.values(err.errors as Record<string, { message?: string }>)
+          .map((fieldError) => fieldError.message)
+          .filter(Boolean)
       : [];
     const message = fieldErrors[0] || 'Invalid input data';
     return res.status(400).json({
