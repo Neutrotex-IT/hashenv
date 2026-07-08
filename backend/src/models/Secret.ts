@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ISecret extends Document {
   projectId: mongoose.Types.ObjectId;
+  componentId: mongoose.Types.ObjectId;
   name: string;
   encryptedData: Buffer;
   iv: Buffer;
@@ -17,6 +18,13 @@ const SecretSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Project',
       required: true,
+      index: true,
+    },
+    componentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Component',
+      required: true,
+      index: true,
     },
     name: {
       type: String,
@@ -47,8 +55,7 @@ const SecretSchema: Schema = new Schema(
   }
 );
 
-// Compound index for efficient queries: project + name (unique within project)
-SecretSchema.index({ projectId: 1, name: 1 }, { unique: true });
+SecretSchema.index({ componentId: 1, name: 1 }, { unique: true });
 SecretSchema.index({ projectId: 1 });
 
 export default mongoose.model<ISecret>('Secret', SecretSchema);

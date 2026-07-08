@@ -94,10 +94,29 @@ export function getApiErrorMessageSync(error: unknown, fallback: string): string
 }
 
 export async function assertBlobDownloadResponse(
-  response: { data: Blob; headers: Record<string, unknown> },
+  response: { data: Blob; headers: Record<string, unknown>; status?: number },
   fallback: string
 ): Promise<void> {
-  const contentType = String(response.headers['content-type'] ?? '');
+  // Successful downloads set Content-Disposition: attachment even when
+  // Content-Type is application/json (e.g. secrets.json / Flutter secrets).
+  const disposition = String(
+    response.headers['content-disposition'] ?? response.headers['Content-Disposition'] ?? ''
+  ).toLowerCase();
+  if (disposition.includes('attachment')) {
+    return;
+  }
+
+  // Axios only invokes this on resolved responses. A 2xx body with
+  // application/json is a real secrets file, not an error envelope — do not
+  // treat Content-Type alone as failure (that broke JSON / flutter_secrets).
+  const status = response.status ?? 200;
+  if (status < 400) {
+    return;
+  }
+
+  const contentType = String(
+    response.headers['content-type'] ?? response.headers['Content-Type'] ?? ''
+  );
   if (!contentType.includes('application/json')) {
     return;
   }

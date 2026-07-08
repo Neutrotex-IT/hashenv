@@ -1,6 +1,6 @@
 import { initializeKeyStore } from './key-store';
 import InstanceKey from '../models/InstanceKey';
-import EnvFile from '../models/EnvFile';
+import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
 import AssociatedAccount from '../models/AssociatedAccount';
 
@@ -27,12 +27,12 @@ export async function bootstrapEncryption(): Promise<void> {
     const instanceKeyDoc = await InstanceKey.findOne();
     encryptionStatus.hasInstanceKey = !!instanceKeyDoc;
     
-    const [envCount, secretCount, accountCount] = await Promise.all([
-      EnvFile.countDocuments(),
+    const [secretFileCount, secretCount, accountCount] = await Promise.all([
+      SecretFile.countDocuments(),
       Secret.countDocuments(),
       AssociatedAccount.countDocuments(),
     ]);
-    encryptionStatus.hasEncryptedData = (envCount + secretCount + accountCount) > 0;
+    encryptionStatus.hasEncryptedData = (secretFileCount + secretCount + accountCount) > 0;
     
     if (!instanceKeyDoc && encryptionStatus.hasEncryptedData) {
       throw new Error(

@@ -87,6 +87,44 @@ export async function auditEnv(
   });
 }
 
+export async function auditSecretFile(
+  projectId: string,
+  actorId: string,
+  action: 'upload' | 'download' | 'edit' | 'delete' | 'view' | 'rollback',
+  secretFileId?: string,
+  metadata?: Record<string, any>,
+  req?: Request
+): Promise<void> {
+  await audit({
+    projectId,
+    resourceType: 'secret_file',
+    resourceId: secretFileId,
+    action,
+    actorId,
+    metadata,
+    req,
+  });
+}
+
+export async function auditComponent(
+  projectId: string,
+  actorId: string,
+  action: 'create' | 'update' | 'delete',
+  componentId?: string,
+  metadata?: Record<string, any>,
+  req?: Request
+): Promise<void> {
+  await audit({
+    projectId,
+    resourceType: 'component',
+    resourceId: componentId,
+    action,
+    actorId,
+    metadata,
+    req,
+  });
+}
+
 export async function auditSecret(
   projectId: string,
   actorId: string,

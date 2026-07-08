@@ -2,10 +2,12 @@ import { generateKey, wrapKey, unwrapKey, deriveKeyFromSecret } from './primitiv
 import InstanceKey from '../models/InstanceKey';
 import OrganizationEncryptionKey from '../models/OrganizationEncryptionKey';
 import ProjectEncryptionKey from '../models/ProjectEncryptionKey';
+import ComponentEncryptionKey from '../models/ComponentEncryptionKey';
 
 let instanceKeyCache: Buffer | null = null;
 const orgKeyCache = new Map<string, Buffer>();
 const projectKeyCache = new Map<string, Buffer>();
+const componentKeyCache = new Map<string, Buffer>();
 
 function getRootKey(): Buffer {
   const rootSecret = process.env.ROOT_ENCRYPTION_KEY;
@@ -129,10 +131,56 @@ export async function deleteProjectEncryptionKey(projectId: string): Promise<voi
   projectKeyCache.delete(projectId);
 }
 
+export async function createComponentEncryptionKey(
+  componentId: string,
+  projectId: string,
+  organizationId: string
+): Promise<void> {
+  const projectKey = await getProjectEncryptionKey(projectId, organizationId);
+  const componentKey = generateKey();
+  const wrapped = wrapKey(componentKey, projectKey);
+
+  await ComponentEncryptionKey.create({
+    componentId,
+    wrappedKey: wrapped.ciphertext,
+    nonce: wrapped.nonce,
+    authTag: wrapped.authTag,
+  });
+
+  componentKeyCache.set(componentId, componentKey);
+}
+
+export async function getComponentEncryptionKey(
+  componentId: string,
+  projectId: string,
+  organizationId: string
+): Promise<Buffer> {
+  const cached = componentKeyCache.get(componentId);
+  if (cached) return cached;
+
+  const projectKey = await getProjectEncryptionKey(projectId, organizationId);
+  const keyDoc = await ComponentEncryptionKey.findOne({ componentId });
+
+  if (!keyDoc) {
+    throw new Error(`Component encryption key not found: ${componentId}`);
+  }
+
+  const componentKey = unwrapKey(keyDoc.wrappedKey, projectKey, keyDoc.nonce, keyDoc.authTag);
+  componentKeyCache.set(componentId, componentKey);
+
+  return componentKey;
+}
+
+export async function deleteComponentEncryptionKey(componentId: string): Promise<void> {
+  await ComponentEncryptionKey.deleteOne({ componentId });
+  componentKeyCache.delete(componentId);
+}
+
 export function clearKeyCache(): void {
   instanceKeyCache = null;
   orgKeyCache.clear();
   projectKeyCache.clear();
+  componentKeyCache.clear();
 }
 
 export async function reWrapInstanceKey(newRootSecret: string): Promise<number> {

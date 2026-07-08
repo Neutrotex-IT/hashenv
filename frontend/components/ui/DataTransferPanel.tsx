@@ -19,7 +19,7 @@ interface DataTransferPanelProps {
 function formatImportSummary(result: DataTransferImportResult, scope: 'project' | 'organization'): string {
   const { summary } = result;
   const parts = [
-    `${summary.envFilesImported} env file(s)`,
+    `${summary.secretFilesImported} secrets file(s)`,
     `${summary.secretsCreated + summary.secretsUpdated} secret(s) imported`,
     `${summary.accountsCreated + summary.accountsUpdated} account(s) imported`,
   ];
@@ -170,7 +170,7 @@ export function DataTransferPanel({
       <div className="content-section">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Export / Import</h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Download all environment files, secrets, and associated accounts as JSON, or import the same
+          Download all components, secrets files, secrets, and associated accounts as JSON, or import the same
           format to restore data in bulk.
         </p>
 

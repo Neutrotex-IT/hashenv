@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import Project, { IProject } from '../models/Project';
+import Component, { IComponent } from '../models/Component';
 import Organization, { IOrganization } from '../models/Organization';
 import OrgMember, { OrgRole } from '../models/OrgMember';
 import { AuthRequest } from './auth';
@@ -18,6 +19,7 @@ export interface AuthRequestWithOrg extends AuthRequest {
   orgRole?: OrgRole;
   orgPermissions?: OrgPermission[];
   project?: IProject;
+  component?: IComponent;
 }
 
 /**
@@ -368,4 +370,87 @@ export function requireProjectInvitePermission() {
  */
 export function requireProjectOwnership() {
   return requireProjectMembershipManagement();
+}
+
+async function loadComponentContext(
+  req: AuthRequestWithOrg,
+  projectId: string,
+  componentId: string
+): Promise<{ ok: true; component: IComponent } | { ok: false; status: number; error: string }> {
+  const loaded = await loadProjectContext(req, projectId);
+  if (!loaded.ok) {
+    return loaded;
+  }
+
+  if (!/^[0-9a-fA-F]{24}$/.test(componentId)) {
+    return { ok: false, status: 400, error: 'Invalid component ID format' };
+  }
+
+  const component = await Component.findOne({ _id: componentId, projectId: loaded.project._id });
+  if (!component) {
+    return { ok: false, status: 404, error: 'Component not found' };
+  }
+
+  req.component = component;
+  return { ok: true, component };
+}
+
+export async function resolveComponentInProject(
+  projectId: string,
+  componentRef: string
+): Promise<IComponent | null> {
+  if (/^[0-9a-fA-F]{24}$/.test(componentRef)) {
+    return Component.findOne({ _id: componentRef, projectId });
+  }
+  return Component.findOne({ projectId, slug: componentRef.toLowerCase() });
+}
+
+/**
+ * Middleware to verify a component belongs to the project and user has project access.
+ */
+export function requireComponentAccess(requiredPermission: Permission = 'read') {
+  return async (
+    req: AuthRequestWithOrg,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const projectId = req.params.projectId || req.params.id;
+      const componentId = req.params.componentId;
+
+      if (!projectId || !componentId) {
+        res.status(400).json({ error: 'Project ID and component ID are required' });
+        return;
+      }
+
+      const loadedProject = await loadProjectContext(req, projectId);
+      if (!loadedProject.ok) {
+        res.status(loadedProject.status).json({ error: loadedProject.error });
+        return;
+      }
+
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        loadedProject.project,
+        req.orgRole ?? null
+      );
+
+      const capability = requiredPermission === 'write' ? 'project:write' : 'project:read';
+      if (!hasProjectCapability(attributes, capability)) {
+        res.status(403).json({ error: `Access denied: ${requiredPermission} permission required` });
+        return;
+      }
+
+      const loadedComponent = await loadComponentContext(req, projectId, componentId);
+      if (!loadedComponent.ok) {
+        res.status(loadedComponent.status).json({ error: loadedComponent.error });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Component authorization error:', error instanceof Error ? error.message : 'Authorization error');
+      res.status(500).json({ error: 'Authorization error' });
+    }
+  };
 }

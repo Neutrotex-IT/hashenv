@@ -132,12 +132,22 @@ export default api;
 async function fetchAndDownloadBlob(
   url: string,
   filename: string,
-  fallbackError: string
+  fallbackError: string,
+  mimeType?: string
 ): Promise<void> {
   try {
     const response = await api.get(url, { responseType: 'blob' });
     await assertBlobDownloadResponse(response, fallbackError);
-    downloadTextFile(await response.data.text(), filename);
+    const contentType = String(
+      response.headers['content-type'] ?? response.headers['Content-Type'] ?? ''
+    )
+      .split(';')[0]
+      .trim();
+    downloadTextFile(
+      await response.data.text(),
+      filename,
+      mimeType || contentType || 'text/plain'
+    );
   } catch (error) {
     throw new Error(await getApiErrorMessage(error, fallbackError));
   }
@@ -491,102 +501,196 @@ export const projectsAPI = {
   },
 };
 
-// Env Files API
-export const envAPI = {
-  upload: async (projectId: string, file: File, environment: string) => {
+// Components API
+export interface ProjectComponent {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdBy: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const componentsAPI = {
+  list: async (projectId: string): Promise<ProjectComponent[]> => {
+    const response = await api.get(`/projects/${projectId}/components`);
+    return response.data;
+  },
+  get: async (projectId: string, componentId: string): Promise<ProjectComponent> => {
+    const response = await api.get(`/projects/${projectId}/components/${componentId}`);
+    return response.data;
+  },
+  create: async (projectId: string, data: { name: string; description?: string }) => {
+    const response = await api.post(`/projects/${projectId}/components`, data);
+    return response.data;
+  },
+  update: async (projectId: string, componentId: string, data: { name?: string; description?: string }) => {
+    const response = await api.patch(`/projects/${projectId}/components/${componentId}`, data);
+    return response.data;
+  },
+  delete: async (projectId: string, componentId: string) => {
+    const response = await api.delete(`/projects/${projectId}/components/${componentId}`);
+    return response.data;
+  },
+};
+
+export interface SecretFileVersion {
+  _id: string;
+  projectId: string;
+  componentId: string;
+  environment: string;
+  fileName: string;
+  fileType: string;
+  version: number;
+  uploadedBy: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
+}
+
+export const secretFilesAPI = {
+  upload: async (
+    projectId: string,
+    componentId: string,
+    file: File,
+    environment: string,
+    fileName?: string,
+    fileType?: string
+  ) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('environment', environment);
-    
-    const response = await api.post(`/projects/${projectId}/env`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    if (fileName) formData.append('fileName', fileName);
+    if (fileType) formData.append('fileType', fileType);
+
+    const response = await api.post(
+      `/projects/${projectId}/components/${componentId}/secret-files`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data;
   },
-  uploadText: async (projectId: string, content: string, environment: string) => {
-    const response = await api.post(`/projects/${projectId}/env`, {
+  uploadText: async (
+    projectId: string,
+    componentId: string,
+    content: string,
+    environment: string,
+    fileName: string,
+    fileType?: string
+  ) => {
+    const response = await api.post(`/projects/${projectId}/components/${componentId}/secret-files`, {
       content,
       environment,
+      fileName,
+      fileType,
     });
     return response.data;
   },
-  download: async (projectId: string, environment: string, version?: number) => {
-    const params = new URLSearchParams({ environment });
-    if (version) {
-      params.append('version', version.toString());
-    }
+  download: async (
+    projectId: string,
+    componentId: string,
+    environment: string,
+    fileName: string,
+    version?: number
+  ) => {
+    const params = new URLSearchParams({ environment, file: fileName });
+    if (version) params.append('version', version.toString());
 
     await fetchAndDownloadBlob(
-      `/projects/${projectId}/env?${params.toString()}`,
-      '.env',
-      'Failed to download environment file'
+      `/projects/${projectId}/components/${componentId}/secret-files?${params.toString()}`,
+      fileName,
+      'Failed to download secrets file'
     );
   },
   edit: async (
     projectId: string,
-    envFileId: string,
+    componentId: string,
+    secretFileId: string,
     content: string,
     options?: { saveAsNewVersion?: boolean }
   ) => {
     const saveAsNewVersion = options?.saveAsNewVersion === true;
-    const url = `/projects/${projectId}/env/${envFileId}${
+    const url = `/projects/${projectId}/components/${componentId}/secret-files/${secretFileId}${
       saveAsNewVersion ? '?saveAsNewVersion=true' : ''
     }`;
-    const response = await api.put(url, {
-      content,
-      saveAsNewVersion,
-    });
+    const response = await api.put(url, { content, saveAsNewVersion });
     return response.data;
   },
-  delete: async (projectId: string, envFileId: string) => {
-    const response = await api.delete(`/projects/${projectId}/env/${envFileId}`);
+  delete: async (projectId: string, componentId: string, secretFileId: string) => {
+    const response = await api.delete(
+      `/projects/${projectId}/components/${componentId}/secret-files/${secretFileId}`
+    );
     return response.data;
   },
-  listVersions: async (projectId: string, environment?: string) => {
+  listVersions: async (projectId: string, componentId: string, environment?: string, file?: string) => {
     const params = new URLSearchParams();
-    if (environment) {
-      params.set('environment', environment);
-    }
+    if (environment) params.set('environment', environment);
+    if (file) params.set('file', file);
     const query = params.toString();
-    const response = await api.get(`/projects/${projectId}/env/versions${query ? `?${query}` : ''}`);
+    const response = await api.get(
+      `/projects/${projectId}/components/${componentId}/secret-files/versions${query ? `?${query}` : ''}`
+    );
+    return response.data as SecretFileVersion[];
+  },
+  getFileContent: async (projectId: string, componentId: string, secretFileId: string) => {
+    const response = await api.get(
+      `/projects/${projectId}/components/${componentId}/secret-files/${secretFileId}/content`
+    );
+    return response.data as { content: string; fileName: string; fileType: string };
+  },
+  getLogs: async (projectId: string, componentId: string, environment?: string, file?: string) => {
+    const params = new URLSearchParams();
+    if (environment) params.set('environment', environment);
+    if (file) params.set('file', file);
+    const query = params.toString();
+    const response = await api.get(
+      `/projects/${projectId}/components/${componentId}/secret-files/logs${query ? `?${query}` : ''}`
+    );
     return response.data;
   },
-  getFileContent: async (projectId: string, envFileId: string) => {
-    const response = await api.get(`/projects/${projectId}/env/${envFileId}/content`);
+  rollback: async (
+    projectId: string,
+    componentId: string,
+    environment: string,
+    fileName: string,
+    version: number
+  ) => {
+    const response = await api.post(
+      `/projects/${projectId}/components/${componentId}/secret-files/rollback`,
+      { environment, fileName, version }
+    );
     return response.data;
   },
-  getLogs: async (projectId: string, environment?: string) => {
-    const params = environment ? new URLSearchParams({ environment }) : '';
-    const response = await api.get(`/projects/${projectId}/env/logs${params ? `?${params}` : ''}`);
-    return response.data;
-  },
-  rollback: async (projectId: string, environment: string, version: number) => {
-    const response = await api.post(`/projects/${projectId}/env/rollback`, { environment, version });
-    return response.data;
-  },
-  diff: async (projectId: string, environment: string, from: number, to: number) => {
+  diff: async (
+    projectId: string,
+    componentId: string,
+    environment: string,
+    fileName: string,
+    from: number,
+    to: number
+  ) => {
     const params = new URLSearchParams({
       environment,
+      file: fileName,
       from: String(from),
       to: String(to),
     });
-    const response = await api.get(`/projects/${projectId}/env/diff?${params}`);
+    const response = await api.get(
+      `/projects/${projectId}/components/${componentId}/secret-files/diff?${params}`
+    );
     return response.data as {
       added: Array<{ key: string; newValue?: string }>;
       removed: Array<{ key: string; oldValue?: string }>;
       changed: Array<{ key: string; oldValue: string; newValue: string }>;
       unchanged: Array<{ key: string; oldValue: string; newValue: string }>;
     };
-  },
-  downloadLogs: async (projectId: string, environment?: string) => {
-    const params = environment ? new URLSearchParams({ environment }) : '';
-    await fetchAndDownloadBlob(
-      `/projects/${projectId}/env/logs/download${params ? `?${params}` : ''}`,
-      `hashenv-logs-${Date.now()}.txt`,
-      'Failed to download activity logs'
-    );
   },
 };
 
@@ -617,26 +721,38 @@ export const environmentsAPI = {
   },
 };
 
-// Secrets API
+// Secrets API (component-scoped)
 export const secretsAPI = {
-  list: async (projectId: string) => {
-    const response = await api.get(`/projects/${projectId}/secrets`);
+  list: async (projectId: string, componentId: string) => {
+    const response = await api.get(`/projects/${projectId}/components/${componentId}/secrets`);
     return response.data;
   },
-  get: async (projectId: string, secretId: string) => {
-    const response = await api.get(`/projects/${projectId}/secrets/${secretId}/content`);
+  get: async (projectId: string, componentId: string, secretId: string) => {
+    const response = await api.get(
+      `/projects/${projectId}/components/${componentId}/secrets/${secretId}/content`
+    );
     return response.data;
   },
-  create: async (projectId: string, data: { name: string; content: string }) => {
-    const response = await api.post(`/projects/${projectId}/secrets`, data);
+  create: async (projectId: string, componentId: string, data: { name: string; content: string }) => {
+    const response = await api.post(`/projects/${projectId}/components/${componentId}/secrets`, data);
     return response.data;
   },
-  update: async (projectId: string, secretId: string, data: { name?: string; content?: string }) => {
-    const response = await api.put(`/projects/${projectId}/secrets/${secretId}`, data);
+  update: async (
+    projectId: string,
+    componentId: string,
+    secretId: string,
+    data: { name?: string; content?: string }
+  ) => {
+    const response = await api.put(
+      `/projects/${projectId}/components/${componentId}/secrets/${secretId}`,
+      data
+    );
     return response.data;
   },
-  delete: async (projectId: string, secretId: string) => {
-    const response = await api.delete(`/projects/${projectId}/secrets/${secretId}`);
+  delete: async (projectId: string, componentId: string, secretId: string) => {
+    const response = await api.delete(
+      `/projects/${projectId}/components/${componentId}/secrets/${secretId}`
+    );
     return response.data;
   },
 };
@@ -739,7 +855,7 @@ export const apiTokensAPI = {
 };
 
 export interface DataTransferSummary {
-  envFilesImported: number;
+  secretFilesImported: number;
   secretsCreated: number;
   secretsUpdated: number;
   secretsSkipped: number;
@@ -747,6 +863,7 @@ export interface DataTransferSummary {
   accountsUpdated: number;
   accountsSkipped: number;
   environmentsAdded: number;
+  componentsCreated: number;
   projectsCreated: number;
   projectsUpdated: number;
   projectsSkipped: number;
