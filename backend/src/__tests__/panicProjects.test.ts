@@ -47,7 +47,7 @@ describe('getPanicEligibleProjectsForOrg', () => {
     vi.mocked(Project.find).mockResolvedValue([ownedProject, grantedProject, deniedProject] as never);
     vi.mocked(getUserOrgRole).mockResolvedValue('member');
     vi.mocked(getProjectMemberAttributes).mockImplementation(async (_userId, project) => {
-      if (project._id === 'p1') {
+      if (project._id.toString() === 'p1') {
         return {
           accessLevel: 'write',
           permissions: [],
@@ -55,7 +55,7 @@ describe('getPanicEligibleProjectsForOrg', () => {
           isOrgElevated: false,
         };
       }
-      if (project._id === 'p2') {
+      if (project._id.toString() === 'p2') {
         return {
           accessLevel: 'write',
           permissions: ['project:panic'],

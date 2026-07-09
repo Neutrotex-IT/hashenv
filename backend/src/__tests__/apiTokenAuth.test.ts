@@ -28,7 +28,7 @@ describe('requireApiScope', () => {
     const res = mockResponse();
     const next = vi.fn();
 
-    requireApiScope('env:read')(req, res, next);
+    requireApiScope('read')(req, res, next);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({ error: 'API token required' });
