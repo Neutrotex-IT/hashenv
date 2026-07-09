@@ -1,6 +1,17 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type ResourceType = 'env' | 'secret' | 'account' | 'project' | 'org' | 'member' | 'session' | 'api_token' | 'panic';
+export type ResourceType =
+  | 'env'
+  | 'secret'
+  | 'secret_file'
+  | 'component'
+  | 'account'
+  | 'project'
+  | 'org'
+  | 'member'
+  | 'session'
+  | 'api_token'
+  | 'panic';
 export type ActorType = 'user' | 'api_token';
 
 export interface IAuditLog extends Document {
@@ -30,7 +41,19 @@ const AuditLogSchema: Schema = new Schema(
     },
     resourceType: {
       type: String,
-      enum: ['env', 'secret', 'account', 'project', 'org', 'member', 'session', 'api_token', 'panic'],
+      enum: [
+        'env',
+        'secret',
+        'secret_file',
+        'component',
+        'account',
+        'project',
+        'org',
+        'member',
+        'session',
+        'api_token',
+        'panic',
+      ],
       required: true,
     },
     resourceId: {

@@ -25,4 +25,28 @@ describe('env diff', () => {
       { key: 'B', oldValue: '2', newValue: '2' },
     ]);
   });
+
+  it('ignores comments and blank lines', () => {
+    const oldContent = '# header\n\nFOO=1';
+    const newContent = '# updated\nFOO=1\nBAR=2';
+
+    const result = diffEnvContent(oldContent, newContent);
+
+    expect(result.added).toEqual([{ key: 'BAR', newValue: '2' }]);
+    expect(result.removed).toHaveLength(0);
+    expect(result.changed).toHaveLength(0);
+    expect(result.unchanged).toEqual([{ key: 'FOO', oldValue: '1', newValue: '1' }]);
+  });
+
+  it('treats all-new content as additions', () => {
+    const result = diffEnvContent('', 'API_KEY=abc\nDEBUG=true');
+
+    expect(result.added).toEqual([
+      { key: 'API_KEY', newValue: 'abc' },
+      { key: 'DEBUG', newValue: 'true' },
+    ]);
+    expect(result.removed).toHaveLength(0);
+    expect(result.changed).toHaveLength(0);
+    expect(result.unchanged).toHaveLength(0);
+  });
 });

@@ -1,23 +1,26 @@
 #!/usr/bin/env node
 /**
- * HashEnv CLI — pull env files and run commands with injected secrets.
+ * HashEnv CLI — pull secrets files and run commands with injected secrets.
  *
  * Environment variables:
- *   HASHENV_API_URL   Base URL (default: http://localhost:3001/api/v1)
- *   HASHENV_TOKEN     API token (henv_...)
- *   HASHENV_PROJECT   Project ID
+ *   HASHENV_API_URL      Base URL (default: http://localhost:3001/api/v1)
+ *   HASHENV_TOKEN        API token (henv_...)
+ *   HASHENV_PROJECT      Project ID
+ *   HASHENV_COMPONENT    Component slug or ID
  */
 
 const { parseArgs } = require('node:util');
+const path = require('node:path');
 
 function getConfig() {
   const apiUrl = (process.env.HASHENV_API_URL || 'http://localhost:3001/api/v1').replace(/\/$/, '');
   const token = process.env.HASHENV_TOKEN;
   const projectId = process.env.HASHENV_PROJECT;
-  return { apiUrl, token, projectId };
+  const component = process.env.HASHENV_COMPONENT;
+  return { apiUrl, token, projectId, component };
 }
 
-function requireConfig(config) {
+function requireConfig(config, options = { requireComponent: false }) {
   if (!config.token) {
     console.error('Error: HASHENV_TOKEN is required');
     process.exit(1);
@@ -26,10 +29,14 @@ function requireConfig(config) {
     console.error('Error: HASHENV_PROJECT is required');
     process.exit(1);
   }
+  if (options.requireComponent && !config.component) {
+    console.error('Error: HASHENV_COMPONENT is required');
+    process.exit(1);
+  }
 }
 
-async function apiRequest(config, method, path, body) {
-  const url = `${config.apiUrl}${path}`;
+async function apiRequest(config, method, pathSuffix, body) {
+  const url = `${config.apiUrl}${pathSuffix}`;
   const headers = {
     Authorization: `Bearer ${config.token}`,
   };
@@ -54,6 +61,13 @@ async function apiRequest(config, method, path, body) {
     throw new Error(`API ${response.status}: ${message}`);
   }
 
+  // File downloads (including JSON secret files) use Content-Disposition: attachment.
+  // Keep those as raw text; only parse JSON API envelopes.
+  const disposition = response.headers.get('content-disposition') || '';
+  if (disposition.toLowerCase().includes('attachment')) {
+    return text;
+  }
+
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json') && text) {
     return JSON.parse(text);
@@ -65,20 +79,21 @@ function printHelp() {
   console.log(`HashEnv CLI
 
 Usage:
-  hashenv pull [--env <slug>] [--output <file>]
-  hashenv run [--env <slug>] -- <command> [args...]
+  hashenv pull [--env <slug>] [--file <name>] [--output <file>]
+  hashenv run [--env <slug>] [--file <name>] -- <command> [args...]
   hashenv secret get <name>
   hashenv secret set <name> [--value <text> | --stdin]
-  hashenv env put [--env <slug>] [--file <path> | --stdin]
+  hashenv secrets put [--env <slug>] [--file <path> | --stdin]
 
 Environment:
-  HASHENV_API_URL    API base URL (default: http://localhost:3001/api/v1)
-  HASHENV_TOKEN      Project API token
-  HASHENV_PROJECT    Project ID
+  HASHENV_API_URL       API base URL (default: http://localhost:3001/api/v1)
+  HASHENV_TOKEN         Project API token
+  HASHENV_PROJECT       Project ID
+  HASHENV_COMPONENT     Component slug or ID
 
 Examples:
-  HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 hashenv pull --env dev -o .env
-  HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 hashenv run --env dev -- npm start
+  HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website hashenv pull --env dev --file .env -o .env
+  HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website hashenv run --env dev --file .env -- npm start
 `);
 }
 
@@ -90,32 +105,47 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function componentBase(config) {
+  return `/projects/${config.projectId}/components/${encodeURIComponent(config.component)}`;
+}
+
 async function cmdPull(config, args) {
+  requireConfig(config, { requireComponent: true });
+
   const { values } = parseArgs({
     args,
     options: {
       env: { type: 'string', default: 'dev' },
+      file: { type: 'string', default: '.env' },
       output: { type: 'string', short: 'o' },
     },
     allowPositionals: false,
   });
 
+  const params = new URLSearchParams({
+    environment: values.env,
+    file: values.file,
+  });
+
   const content = await apiRequest(
     config,
     'GET',
-    `/projects/${config.projectId}/env?environment=${encodeURIComponent(values.env)}`
+    `${componentBase(config)}/secret-files?${params.toString()}`
   );
 
-  if (values.output) {
+  const outputPath = values.output || values.file;
+  if (values.output || !process.stdout.isTTY) {
     const fs = require('node:fs');
-    fs.writeFileSync(values.output, content, 'utf8');
-    console.error(`Wrote ${values.output}`);
+    fs.writeFileSync(outputPath, content, 'utf8');
+    console.error(`Wrote ${outputPath}`);
   } else {
     process.stdout.write(content);
   }
 }
 
 async function cmdRun(config, args) {
+  requireConfig(config, { requireComponent: true });
+
   const sep = args.indexOf('--');
   const runArgs = sep >= 0 ? args.slice(sep + 1) : [];
   const flagArgs = sep >= 0 ? args.slice(0, sep) : args;
@@ -129,14 +159,20 @@ async function cmdRun(config, args) {
     args: flagArgs,
     options: {
       env: { type: 'string', default: 'dev' },
+      file: { type: 'string', default: '.env' },
     },
     allowPositionals: false,
+  });
+
+  const params = new URLSearchParams({
+    environment: values.env,
+    file: values.file,
   });
 
   const content = await apiRequest(
     config,
     'GET',
-    `/projects/${config.projectId}/env?environment=${encodeURIComponent(values.env)}`
+    `${componentBase(config)}/secret-files?${params.toString()}`
   );
 
   const env = { ...process.env };
@@ -169,15 +205,18 @@ async function cmdRun(config, args) {
 }
 
 async function cmdSecretGet(config, name) {
+  requireConfig(config, { requireComponent: true });
   const data = await apiRequest(
     config,
     'GET',
-    `/projects/${config.projectId}/secrets/${encodeURIComponent(name)}`
+    `${componentBase(config)}/secrets/${encodeURIComponent(name)}`
   );
   process.stdout.write(data.content);
 }
 
 async function cmdSecretSet(config, name, args) {
+  requireConfig(config, { requireComponent: true });
+
   const { values } = parseArgs({
     args,
     options: {
@@ -196,7 +235,7 @@ async function cmdSecretSet(config, name, args) {
     await apiRequest(
       config,
       'PUT',
-      `/projects/${config.projectId}/secrets/${encodeURIComponent(name)}`,
+      `${componentBase(config)}/secrets/${encodeURIComponent(name)}`,
       { content }
     );
     console.error(`Updated secret: ${name}`);
@@ -205,7 +244,7 @@ async function cmdSecretSet(config, name, args) {
       await apiRequest(
         config,
         'POST',
-        `/projects/${config.projectId}/secrets`,
+        `${componentBase(config)}/secrets`,
         { name, content }
       );
       console.error(`Created secret: ${name}`);
@@ -215,7 +254,9 @@ async function cmdSecretSet(config, name, args) {
   }
 }
 
-async function cmdEnvPut(config, args) {
+async function cmdSecretsPut(config, args) {
+  requireConfig(config, { requireComponent: true });
+
   const { values } = parseArgs({
     args,
     options: {
@@ -227,20 +268,27 @@ async function cmdEnvPut(config, args) {
   });
 
   let content;
+  let fileName;
   if (values.file) {
     const fs = require('node:fs');
     content = fs.readFileSync(values.file, 'utf8');
+    fileName = path.basename(values.file);
   } else {
     content = await readStdin();
+    fileName = '.env';
   }
 
   const result = await apiRequest(
     config,
     'PUT',
-    `/projects/${config.projectId}/env`,
-    { environment: values.env, content }
+    `${componentBase(config)}/secret-files`,
+    {
+      environment: values.env,
+      fileName,
+      content,
+    }
   );
-  console.error(`Uploaded ${values.env} v${result.version}`);
+  console.error(`Uploaded ${fileName} for ${values.env} v${result.version}`);
 }
 
 async function main() {
@@ -273,12 +321,12 @@ async function main() {
       }
       break;
     }
-    case 'env': {
+    case 'secrets': {
       const [sub, ...subArgs] = rest;
       if (sub === 'put') {
-        await cmdEnvPut(config, subArgs);
+        await cmdSecretsPut(config, subArgs);
       } else {
-        console.error('Usage: hashenv env put [--env <slug>] [--file <path>]');
+        console.error('Usage: hashenv secrets put [--env <slug>] [--file <path>]');
         process.exit(1);
       }
       break;

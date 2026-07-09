@@ -1,22 +1,34 @@
-import EnvFile from '../models/EnvFile';
+import Component from '../models/Component';
+import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
 import AssociatedAccount, { ACCOUNT_PROVIDERS } from '../models/AssociatedAccount';
 import Organization from '../models/Organization';
 import Project, { IProject } from '../models/Project';
-import { decryptProjectData, encryptProjectData, createProjectEncryptionKey } from '../crypto';
+import {
+  decryptProjectData,
+  encryptProjectData,
+  createProjectEncryptionKey,
+  createComponentEncryptionKey,
+  decryptComponentData,
+  encryptComponentData,
+} from '../crypto';
 import {
   getProjectEnvironments,
   MAX_ENVIRONMENTS_PER_PROJECT,
   isValidEnvSlug,
   normalizeEnvSlug,
 } from './environments';
-import { auditEnv, auditSecret, auditAccount } from './audit';
+import { auditSecretFile, auditSecret, auditAccount } from './audit';
+import { slugFromComponentName } from './components';
+import { contentTypeForSecretFile, inferSecretFileType, isAllowedSecretFileName, sanitizeSecretFileName } from './secretFiles';
 import type { Request } from 'express';
 
-export const DATA_TRANSFER_FORMAT_VERSION = '1.0';
+export const DATA_TRANSFER_FORMAT_VERSION = '2.0';
 
-export interface ExportedEnvFile {
+export interface ExportedSecretFile {
   environment: string;
+  fileName: string;
+  fileType: string;
   version: number;
   content: string;
 }
@@ -24,6 +36,14 @@ export interface ExportedEnvFile {
 export interface ExportedSecret {
   name: string;
   content: string;
+}
+
+export interface ExportedComponent {
+  name: string;
+  slug: string;
+  description?: string;
+  secretFiles: ExportedSecretFile[];
+  secrets: ExportedSecret[];
 }
 
 export interface ExportedAccount {
@@ -43,9 +63,12 @@ export interface ExportedAccount {
 export interface ExportedProject {
   name: string;
   environments: string[];
-  envFiles: ExportedEnvFile[];
-  secrets: ExportedSecret[];
+  components: ExportedComponent[];
   associatedAccounts: ExportedAccount[];
+  /** @deprecated legacy v1.0 field */
+  envFiles?: Array<{ environment: string; version: number; content: string }>;
+  /** @deprecated legacy v1.0 field */
+  secrets?: ExportedSecret[];
 }
 
 export interface HashEnvExport {
@@ -59,7 +82,7 @@ export interface HashEnvExport {
 }
 
 export interface ImportSummary {
-  envFilesImported: number;
+  secretFilesImported: number;
   secretsCreated: number;
   secretsUpdated: number;
   secretsSkipped: number;
@@ -67,6 +90,7 @@ export interface ImportSummary {
   accountsUpdated: number;
   accountsSkipped: number;
   environmentsAdded: number;
+  componentsCreated: number;
   projectsCreated: number;
   projectsUpdated: number;
   projectsSkipped: number;
@@ -101,49 +125,66 @@ async function encryptAccountCredentials(projectId: string, password: string, no
 export async function exportProjectData(project: IProject): Promise<ExportedProject> {
   const projectId = project._id.toString();
   const environments = getProjectEnvironments(project);
+  const components = await Component.find({ projectId }).sort({ name: 1 });
+  const exportedComponents: ExportedComponent[] = [];
 
-  const allEnvFiles = await EnvFile.find({ projectId }).sort({ version: -1 });
-  const latestByEnv = new Map<string, (typeof allEnvFiles)[number]>();
-  for (const envFile of allEnvFiles) {
-    const env = envFile.environment;
-    if (!latestByEnv.has(env)) {
-      latestByEnv.set(env, envFile);
+  for (const component of components) {
+    const allSecretFiles = await SecretFile.find({ componentId: component._id }).sort({ version: -1 });
+    const latestByKey = new Map<string, (typeof allSecretFiles)[number]>();
+    for (const secretFile of allSecretFiles) {
+      const key = `${secretFile.environment}::${secretFile.fileName}`;
+      if (!latestByKey.has(key)) {
+        latestByKey.set(key, secretFile);
+      }
     }
-  }
 
-  const envFiles: ExportedEnvFile[] = [];
-  for (const [environment, envFile] of latestByEnv) {
-    try {
-      const content = await decryptProjectData(
-        projectId,
-        envFile.encryptedData,
-        envFile.iv,
-        envFile.authTag
-      );
-      envFiles.push({
-        environment,
-        version: envFile.version,
-        content,
-      });
-    } catch (error) {
-      console.error(`Export: failed to decrypt env ${project.name}/${environment}:`, error);
+    const secretFiles: ExportedSecretFile[] = [];
+    for (const secretFile of latestByKey.values()) {
+      try {
+        const content = await decryptComponentData(
+          component._id.toString(),
+          secretFile.encryptedData,
+          secretFile.iv,
+          secretFile.authTag
+        );
+        secretFiles.push({
+          environment: secretFile.environment,
+          fileName: secretFile.fileName,
+          fileType: secretFile.fileType,
+          version: secretFile.version,
+          content,
+        });
+      } catch (error) {
+        console.error(`Export: failed to decrypt secret file ${component.name}/${secretFile.fileName}:`, error);
+      }
     }
-  }
 
-  const secrets = await Secret.find({ projectId });
-  const exportedSecrets: ExportedSecret[] = [];
-  for (const secret of secrets) {
-    try {
-      const content = await decryptProjectData(
-        projectId,
-        secret.encryptedData,
-        secret.iv,
-        secret.authTag
-      );
-      exportedSecrets.push({ name: secret.name, content });
-    } catch (error) {
-      console.error(`Export: failed to decrypt secret ${project.name}/${secret.name}:`, error);
+    const componentSecrets = await Secret.find({ componentId: component._id });
+    const exportedSecrets: ExportedSecret[] = [];
+    for (const secret of componentSecrets) {
+      try {
+        const content = await decryptComponentData(
+          component._id.toString(),
+          secret.encryptedData,
+          secret.iv,
+          secret.authTag
+        );
+        exportedSecrets.push({ name: secret.name, content });
+      } catch (error) {
+        console.error(`Export: failed to decrypt secret ${component.name}/${secret.name}:`, error);
+      }
     }
+
+    secretFiles.sort((a, b) => a.environment.localeCompare(b.environment) || a.fileName.localeCompare(b.fileName));
+    exportedSecrets.sort((a, b) => a.name.localeCompare(b.name));
+
+    exportedComponents.push({
+      name: component.name,
+      slug: component.slug,
+      description: component.description,
+      secretFiles,
+      secrets: exportedSecrets,
+    });
   }
 
   const accounts = await AssociatedAccount.find({ projectId });
@@ -171,15 +212,12 @@ export async function exportProjectData(project: IProject): Promise<ExportedProj
     }
   }
 
-  envFiles.sort((a, b) => a.environment.localeCompare(b.environment));
-  exportedSecrets.sort((a, b) => a.name.localeCompare(b.name));
   exportedAccounts.sort((a, b) => a.label.localeCompare(b.label));
 
   return {
     name: project.name,
     environments,
-    envFiles,
-    secrets: exportedSecrets,
+    components: exportedComponents,
     associatedAccounts: exportedAccounts,
   };
 }
@@ -196,9 +234,7 @@ export async function buildProjectExport(
     exportedAt: new Date().toISOString(),
     exportedBy,
     scope: 'project',
-    organization: org
-      ? { name: org.name, slug: org.slug, type: org.type }
-      : undefined,
+    organization: org ? { name: org.name, slug: org.slug, type: org.type } : undefined,
     project: exportedProject,
   };
 }
@@ -230,11 +266,12 @@ export async function buildOrganizationExport(
 }
 
 export function countExportedProjectItems(project: ExportedProject): number {
-  return (
-    (project.envFiles?.length ?? 0) +
-    (project.secrets?.length ?? 0) +
-    (project.associatedAccounts?.length ?? 0)
+  const componentItems = (project.components ?? []).reduce(
+    (sum, component) => sum + (component.secretFiles?.length ?? 0) + (component.secrets?.length ?? 0),
+    0
   );
+  const legacyItems = (project.envFiles?.length ?? 0) + (project.secrets?.length ?? 0);
+  return componentItems + legacyItems + (project.associatedAccounts?.length ?? 0);
 }
 
 export function countExportableItems(payload: HashEnvExport): number {
@@ -267,7 +304,7 @@ export async function buildPanicBackupExport(
 
 function emptySummary(): ImportSummary {
   return {
-    envFilesImported: 0,
+    secretFilesImported: 0,
     secretsCreated: 0,
     secretsUpdated: 0,
     secretsSkipped: 0,
@@ -275,6 +312,7 @@ function emptySummary(): ImportSummary {
     accountsUpdated: 0,
     accountsSkipped: 0,
     environmentsAdded: 0,
+    componentsCreated: 0,
     projectsCreated: 0,
     projectsUpdated: 0,
     projectsSkipped: 0,
@@ -287,7 +325,7 @@ export function parseImportPayload(raw: unknown): HashEnvExport {
   }
 
   const payload = raw as HashEnvExport;
-  if (payload.formatVersion !== DATA_TRANSFER_FORMAT_VERSION) {
+  if (!['1.0', '2.0'].includes(payload.formatVersion)) {
     throw new Error(`Unsupported format version: ${payload.formatVersion ?? 'missing'}`);
   }
 
@@ -300,7 +338,6 @@ export function parseImportPayload(raw: unknown): HashEnvExport {
       throw new Error('Invalid import file: missing projects array');
     }
   } else if (payload.project) {
-    // Allow legacy/minimal files with project only
     payload.scope = 'project';
   } else if (payload.projects?.length) {
     payload.scope = 'organization';
@@ -339,44 +376,90 @@ async function ensureProjectEnvironment(
   return true;
 }
 
-async function importEnvFile(
+async function ensureComponent(
   project: IProject,
   userId: string,
-  envFile: ExportedEnvFile,
+  componentData: Pick<ExportedComponent, 'name' | 'slug' | 'description'>,
+  summary: ImportSummary
+): Promise<Component> {
+  const projectId = project._id.toString();
+  const slug = componentData.slug || slugFromComponentName(componentData.name);
+  let component = await Component.findOne({ projectId, slug });
+
+  if (!component) {
+    component = await Component.create({
+      projectId,
+      name: componentData.name,
+      slug,
+      description: componentData.description,
+      createdBy: userId,
+    });
+    await createComponentEncryptionKey(component._id.toString(), projectId, project.organizationId.toString());
+    summary.componentsCreated += 1;
+  }
+
+  return component;
+}
+
+async function importSecretFileRecord(
+  project: IProject,
+  component: Component,
+  userId: string,
+  secretFile: ExportedSecretFile,
   summary: ImportSummary,
   warnings: string[],
   req?: Request
 ): Promise<void> {
   const projectId = project._id.toString();
-  const allowed = await ensureProjectEnvironment(project, envFile.environment, summary, warnings);
+  const allowed = await ensureProjectEnvironment(project, secretFile.environment, summary, warnings);
   if (!allowed) return;
 
-  const environment = normalizeEnvSlug(envFile.environment);
-  if (!envFile.content || envFile.content.length > 50 * 1024) {
-    warnings.push(`Skipped env "${environment}": content empty or exceeds 50KB`);
+  const environment = normalizeEnvSlug(secretFile.environment);
+  const fileName = sanitizeSecretFileName(secretFile.fileName || '.env');
+  if (!isAllowedSecretFileName(fileName)) {
+    warnings.push(`Skipped secrets file "${secretFile.fileName}": invalid file name or extension`);
+    return;
+  }
+  if (!secretFile.content || secretFile.content.length > 50 * 1024) {
+    warnings.push(`Skipped secrets file "${fileName}" (${environment}): content empty or exceeds 50KB`);
     return;
   }
 
-  const latestEnvFile = await EnvFile.findOne({ projectId, environment }).sort({ version: -1 }).limit(1);
-  const nextVersion = latestEnvFile ? latestEnvFile.version + 1 : 1;
-  const { encryptedData, iv, authTag } = await encryptProjectData(projectId, envFile.content);
+  const fileType = (secretFile.fileType as any) || inferSecretFileType(fileName);
+  const latest = await SecretFile.findOne({ componentId: component._id, environment, fileName })
+    .sort({ version: -1 })
+    .limit(1);
+  const nextVersion = latest ? latest.version + 1 : 1;
+  const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), secretFile.content);
 
-  const created = await EnvFile.create({
+  const created = await SecretFile.create({
     projectId,
+    componentId: component._id,
     environment,
+    fileName,
+    fileType,
     encryptedData,
     iv,
     authTag,
+    contentType: contentTypeForSecretFile(fileName, fileType),
     version: nextVersion,
     uploadedBy: userId,
   });
 
-  await auditEnv(projectId, userId, 'upload', created._id.toString(), { environment, version: nextVersion, source: 'import' }, req);
-  summary.envFilesImported += 1;
+  await auditSecretFile(
+    projectId,
+    userId,
+    'upload',
+    created._id.toString(),
+    { componentId: component._id.toString(), environment, fileName, version: nextVersion, source: 'import' },
+    req
+  );
+  summary.secretFilesImported += 1;
 }
 
-async function importSecret(
+async function importSecretRecord(
   project: IProject,
+  component: Component,
   userId: string,
   secret: ExportedSecret,
   overwrite: boolean,
@@ -395,8 +478,8 @@ async function importSecret(
     return;
   }
 
-  const existing = await Secret.findOne({ projectId, name });
-  const { encryptedData, iv, authTag } = await encryptProjectData(projectId, secret.content || '');
+  const existing = await Secret.findOne({ componentId: component._id, name });
+  const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), secret.content || '');
 
   if (existing) {
     if (!overwrite) {
@@ -408,20 +491,35 @@ async function importSecret(
     existing.iv = iv;
     existing.authTag = authTag;
     await existing.save();
-    await auditSecret(projectId, userId, 'update', existing._id.toString(), { secretName: name, source: 'import' }, req);
+    await auditSecret(
+      projectId,
+      userId,
+      'update',
+      existing._id.toString(),
+      { secretName: name, componentId: component._id.toString(), source: 'import' },
+      req
+    );
     summary.secretsUpdated += 1;
     return;
   }
 
   const created = await Secret.create({
     projectId,
+    componentId: component._id,
     name,
     encryptedData,
     iv,
     authTag,
     createdBy: userId,
   });
-  await auditSecret(projectId, userId, 'create', created._id.toString(), { secretName: name, source: 'import' }, req);
+  await auditSecret(
+    projectId,
+    userId,
+    'create',
+    created._id.toString(),
+    { secretName: name, componentId: component._id.toString(), source: 'import' },
+    req
+  );
   summary.secretsCreated += 1;
 }
 
@@ -508,6 +606,27 @@ async function importAccount(
   summary.accountsCreated += 1;
 }
 
+function normalizeLegacyProject(exportedProject: ExportedProject): ExportedComponent[] {
+  if (exportedProject.components?.length) {
+    return exportedProject.components;
+  }
+
+  const legacyComponent: ExportedComponent = {
+    name: 'Default',
+    slug: 'default',
+    secretFiles: (exportedProject.envFiles || []).map((envFile) => ({
+      environment: envFile.environment,
+      fileName: '.env',
+      fileType: 'env',
+      version: envFile.version,
+      content: envFile.content,
+    })),
+    secrets: exportedProject.secrets || [],
+  };
+
+  return legacyComponent.secretFiles.length || legacyComponent.secrets.length ? [legacyComponent] : [];
+}
+
 export async function importProjectPayload(
   project: IProject,
   userId: string,
@@ -522,12 +641,17 @@ export async function importProjectPayload(
     await ensureProjectEnvironment(project, envSlug, summary, warnings);
   }
 
-  for (const envFile of exportedProject.envFiles || []) {
-    await importEnvFile(project, userId, envFile, summary, warnings, options.req);
-  }
+  const components = normalizeLegacyProject(exportedProject);
+  for (const componentData of components) {
+    const component = await ensureComponent(project, userId, componentData, summary);
 
-  for (const secret of exportedProject.secrets || []) {
-    await importSecret(project, userId, secret, overwrite, summary, warnings, options.req);
+    for (const secretFile of componentData.secretFiles || []) {
+      await importSecretFileRecord(project, component, userId, secretFile, summary, warnings, options.req);
+    }
+
+    for (const secret of componentData.secrets || []) {
+      await importSecretRecord(project, component, userId, secret, overwrite, summary, warnings, options.req);
+    }
   }
 
   for (const account of exportedProject.associatedAccounts || []) {
@@ -599,7 +723,7 @@ export async function importOrganizationPayload(
       req: context.req,
     });
 
-    summary.envFilesImported += projectResult.summary.envFilesImported;
+    summary.secretFilesImported += projectResult.summary.secretFilesImported;
     summary.secretsCreated += projectResult.summary.secretsCreated;
     summary.secretsUpdated += projectResult.summary.secretsUpdated;
     summary.secretsSkipped += projectResult.summary.secretsSkipped;
@@ -607,6 +731,7 @@ export async function importOrganizationPayload(
     summary.accountsUpdated += projectResult.summary.accountsUpdated;
     summary.accountsSkipped += projectResult.summary.accountsSkipped;
     summary.environmentsAdded += projectResult.summary.environmentsAdded;
+    summary.componentsCreated += projectResult.summary.componentsCreated;
     warnings.push(...projectResult.warnings);
   }
 

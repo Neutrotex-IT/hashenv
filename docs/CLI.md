@@ -1,6 +1,6 @@
 # HashEnv CLI
 
-Command-line tool for pulling environment files and running commands with HashEnv secrets via API tokens.
+Command-line tool for pulling secrets files and running commands with HashEnv secrets via API tokens.
 
 ## Install
 
@@ -14,7 +14,7 @@ npm link
 Or run directly:
 
 ```bash
-node cli/bin/hashenv.js pull --env dev
+node cli/bin/hashenv.js pull --component website --file .env --env dev
 ```
 
 ## Configuration
@@ -23,40 +23,47 @@ node cli/bin/hashenv.js pull --env dev
 |----------|-------------|
 | `HASHENV_TOKEN` | Project API token (`henv_...`) with `read` and/or `write` scope |
 | `HASHENV_PROJECT` | Project ID |
+| `HASHENV_COMPONENT` | Component slug or ID (required for secrets files and component-scoped secrets) |
 | `HASHENV_API_URL` | API base URL (default: `http://localhost:3001/api/v1`) |
 
 ## Commands
 
-### Pull environment file
+### Pull secrets file
 
 ```bash
-HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 hashenv pull --env dev --output .env
+HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website \
+  hashenv pull --env dev --file .env --output .env
 ```
 
-### Run a command with env injected
+### Run a command with secrets file injected as env vars
 
 ```bash
-HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 hashenv run --env dev -- npm start
+HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website \
+  hashenv run --env dev --file .env -- npm start
 ```
 
-### Secrets (write scope required for set)
+### Component-scoped secrets (key-value)
 
 ```bash
-hashenv secret get MY_SECRET
-echo "value" | hashenv secret set MY_SECRET --stdin
+HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website \
+  hashenv secret get MY_SECRET
+
+echo "value" | HASHENV_COMPONENT=website hashenv secret set MY_SECRET --stdin
 ```
 
-### Upload environment file
+### Upload secrets file
 
 ```bash
-hashenv env put --env dev --file .env
-cat .env | hashenv env put --env staging --stdin
+HASHENV_TOKEN=henv_xxx HASHENV_PROJECT=abc123 HASHENV_COMPONENT=website \
+  hashenv secrets put --env dev --file .env
+
+cat secrets.json | HASHENV_COMPONENT=app hashenv secrets put --env prod --file secrets.json --stdin
 ```
 
 ## API endpoints used
 
-- `GET /api/v1/projects/:id/env?environment=`
-- `PUT /api/v1/projects/:id/env`
-- `GET /api/v1/projects/:id/secrets/:name`
-- `POST /api/v1/projects/:id/secrets`
-- `PUT /api/v1/projects/:id/secrets/:name`
+- `GET /api/v1/projects/:id/components/:component/secret-files?environment=&file=`
+- `PUT /api/v1/projects/:id/components/:component/secret-files`
+- `GET /api/v1/projects/:id/components/:component/secrets/:name`
+- `POST /api/v1/projects/:id/components/:component/secrets`
+- `PUT /api/v1/projects/:id/components/:component/secrets/:name`

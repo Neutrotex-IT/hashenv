@@ -83,7 +83,7 @@ export function getProjectNav(
   const items: NavLink[] = [];
 
   if (!permissionsLoaded || canReadProject(effective)) {
-    items.push({ name: 'Secrets', href: `/projects/${projectId}`, exact: true });
+    items.push({ name: 'Components', href: `/projects/${projectId}`, exact: true });
   }
 
   items.push({ name: 'Environments', href: `/projects/${projectId}/environments` });

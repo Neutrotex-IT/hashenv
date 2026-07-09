@@ -5,6 +5,8 @@ import {
   getEffectiveOrgPermissions,
   getProjectCapabilitiesFromAccess,
   OrgPermission,
+  sanitizeOrgPermissions,
+  sanitizeProjectPermissions,
 } from '../lib/permissions';
 
 describe('getEffectiveOrgPermissions', () => {
@@ -108,5 +110,35 @@ describe('canManageOrgMember', () => {
   it('never allows managing the owner role', () => {
     expect(canManageOrgMember({ role: 'owner', permissions: [] }, 'owner')).toBe(false);
     expect(canManageOrgMember({ role: 'admin', permissions: [] }, 'owner')).toBe(false);
+  });
+});
+
+describe('permission sanitization', () => {
+  it('filters unknown org permissions and deduplicates values', () => {
+    const sanitized = sanitizeOrgPermissions([
+      'org:invite',
+      'org:invite',
+      'org:not_real',
+      42,
+      'org:audit',
+    ]);
+
+    expect(sanitized).toEqual(['org:invite', 'org:audit']);
+  });
+
+  it('returns an empty array for non-array org permission input', () => {
+    expect(sanitizeOrgPermissions(null)).toEqual([]);
+    expect(sanitizeOrgPermissions('org:invite')).toEqual([]);
+  });
+
+  it('filters unknown project permissions and deduplicates values', () => {
+    const sanitized = sanitizeProjectPermissions([
+      'project:panic',
+      'project:panic',
+      'project:fake',
+      'project:export',
+    ]);
+
+    expect(sanitized).toEqual(['project:panic', 'project:export']);
   });
 });

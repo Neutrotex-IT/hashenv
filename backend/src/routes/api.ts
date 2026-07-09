@@ -1,6 +1,5 @@
 /**
  * Public API routes accessible via API tokens
- * These routes are meant for programmatic access (CI/CD, scripts, etc.)
  */
 import express, { Response } from 'express';
 import {
@@ -9,40 +8,67 @@ import {
   requireApiTokenProject,
   ApiTokenRequest,
 } from '../lib/apiTokenAuth';
-import EnvFile from '../models/EnvFile';
+import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
 import Project from '../models/Project';
-import { encryptProjectData, decryptProjectData } from '../crypto';
+import { encryptComponentData, decryptComponentData } from '../crypto';
 import { audit } from '../lib/audit';
 import { assertEnvAllowed } from '../lib/environments';
+import { resolveComponentInProject } from '../lib/authorization';
+import {
+  buildContentDisposition,
+  contentTypeForSecretFile,
+  inferSecretFileType,
+  isAllowedSecretFileName,
+  sanitizeSecretFileName,
+} from '../lib/secretFiles';
 
 const router = express.Router();
+const MAX_CONTENT_BYTES = 50 * 1024;
+const SECRET_NAME_PATTERN = /^[a-zA-Z0-9\s\-_]+$/;
 
-const MAX_ENV_CONTENT_BYTES = 50 * 1024;
+async function getComponentForApi(projectId: string, componentRef: string) {
+  const component = await resolveComponentInProject(projectId, componentRef);
+  if (!component) {
+    return null;
+  }
+  return component;
+}
 
-/**
- * Get environment file content
- * GET /api/v1/projects/:projectId/env
- * Query: environment (required)
- */
 router.get(
-  '/projects/:projectId/env',
+  '/projects/:projectId/components/:componentRef/secret-files',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('read'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId } = req.params;
-      const { environment } = req.query;
+      const { projectId, componentRef } = req.params;
+      const { environment, file, version } = req.query;
 
       if (!environment || typeof environment !== 'string') {
         res.status(400).json({ error: 'Environment query parameter is required' });
+        return;
+      }
+      if (!file || typeof file !== 'string') {
+        res.status(400).json({ error: 'File query parameter is required' });
+        return;
+      }
+
+      const fileName = sanitizeSecretFileName(file);
+      if (!isAllowedSecretFileName(fileName)) {
+        res.status(400).json({ error: 'Invalid secrets file name or extension' });
         return;
       }
 
       const project = await Project.findById(projectId);
       if (!project) {
         res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
         return;
       }
 
@@ -54,58 +80,81 @@ router.get(
         return;
       }
 
-      const envFile = await EnvFile.findOne({ projectId, environment: envSlug }).sort({ version: -1 });
+      const versionNum = version ? parseInt(String(version), 10) : undefined;
+      const secretFile = versionNum
+        ? await SecretFile.findOne({
+            projectId,
+            componentId: component._id,
+            environment: envSlug,
+            fileName,
+            version: versionNum,
+          })
+        : await SecretFile.findOne({ projectId, componentId: component._id, environment: envSlug, fileName })
+            .sort({ version: -1 })
+            .limit(1);
 
-      if (!envFile) {
-        res.status(404).json({ error: `No environment file has been uploaded for "${envSlug}"` });
+      if (!secretFile) {
+        res.status(404).json({ error: `No secrets file "${fileName}" found for "${envSlug}"` });
         return;
       }
 
-      const plaintextData = await decryptProjectData(
-        projectId,
-        envFile.encryptedData,
-        envFile.iv,
-        envFile.authTag
+      const plaintextData = await decryptComponentData(
+        component._id.toString(),
+        secretFile.encryptedData,
+        secretFile.iv,
+        secretFile.authTag
       );
 
       await audit({
         projectId,
-        resourceType: 'env',
-        resourceId: envFile._id.toString(),
+        resourceType: 'secret_file',
+        resourceId: secretFile._id.toString(),
         action: 'download',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { environment: envSlug, version: envFile.version },
+        metadata: {
+          componentId: component._id.toString(),
+          componentName: component.name,
+          environment: envSlug,
+          fileName,
+          version: secretFile.version,
+        },
         req,
       });
 
-      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Type', secretFile.contentType || contentTypeForSecretFile(fileName, secretFile.fileType));
+      res.setHeader('Content-Disposition', buildContentDisposition(secretFile.fileName));
       res.send(plaintextData);
     } catch (error) {
-      console.error('API get env error:', error instanceof Error ? error.message : 'Unknown');
-      res.status(500).json({ error: 'Failed to get environment file' });
+      console.error('API get secret file error:', error instanceof Error ? error.message : 'Unknown');
+      res.status(500).json({ error: 'Failed to get secrets file' });
     }
   }
 );
 
-/**
- * List environment files
- * GET /api/v1/projects/:projectId/env/list
- */
 router.get(
-  '/projects/:projectId/env/list',
+  '/projects/:projectId/components/:componentRef/secret-files/list',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('read'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const envFiles = await EnvFile.aggregate([
-        { $match: { projectId: req.project!._id } },
+      const { projectId, componentRef } = req.params;
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
+        return;
+      }
+
+      const secretFiles = await SecretFile.aggregate([
+        { $match: { projectId: req.project!._id, componentId: component._id } },
         { $sort: { version: -1 } },
         {
           $group: {
-            _id: '$environment',
+            _id: { environment: '$environment', fileName: '$fileName' },
             environment: { $first: '$environment' },
+            fileName: { $first: '$fileName' },
+            fileType: { $first: '$fileType' },
             version: { $first: '$version' },
             updatedAt: { $first: '$createdAt' },
           },
@@ -113,37 +162,48 @@ router.get(
         { $project: { _id: 0 } },
       ]);
 
-      res.json(envFiles);
+      res.json(secretFiles);
     } catch (error) {
-      console.error('API list env error:', error instanceof Error ? error.message : 'Unknown');
-      res.status(500).json({ error: 'Failed to list environment files' });
+      console.error('API list secret files error:', error instanceof Error ? error.message : 'Unknown');
+      res.status(500).json({ error: 'Failed to list secrets files' });
     }
   }
 );
 
-/**
- * Upload/update environment file
- * PUT /api/v1/projects/:projectId/env
- * Body: { environment: string, content: string }
- */
 router.put(
-  '/projects/:projectId/env',
+  '/projects/:projectId/components/:componentRef/secret-files',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('write'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId } = req.params;
-      const { environment, content } = req.body;
+      const { projectId, componentRef } = req.params;
+      const { environment, fileName, fileType, content } = req.body;
 
       if (!environment || typeof environment !== 'string') {
         res.status(400).json({ error: 'Environment is required' });
+        return;
+      }
+      if (!fileName || typeof fileName !== 'string') {
+        res.status(400).json({ error: 'File name is required' });
+        return;
+      }
+
+      const normalizedFileName = sanitizeSecretFileName(fileName);
+      if (!isAllowedSecretFileName(normalizedFileName)) {
+        res.status(400).json({ error: 'Invalid secrets file name or extension' });
         return;
       }
 
       const project = await Project.findById(projectId);
       if (!project) {
         res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
         return;
       }
 
@@ -160,75 +220,90 @@ router.put(
         return;
       }
 
-      if (content.length > MAX_ENV_CONTENT_BYTES) {
+      if (content.length > MAX_CONTENT_BYTES) {
         res.status(400).json({ error: 'Content size must be less than 50KB' });
         return;
       }
 
-      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+      const resolvedFileType = fileType || inferSecretFileType(normalizedFileName);
+      const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), content);
 
-      const latestEnv = await EnvFile.findOne({ projectId, environment: envSlug }).sort({ version: -1 });
-
-      const newVersion = (latestEnv?.version || 0) + 1;
-
-      const envFile = await EnvFile.create({
+      const latest = await SecretFile.findOne({
         projectId,
+        componentId: component._id,
         environment: envSlug,
+        fileName: normalizedFileName,
+      }).sort({ version: -1 });
+
+      const newVersion = (latest?.version || 0) + 1;
+
+      const secretFile = await SecretFile.create({
+        projectId,
+        componentId: component._id,
+        environment: envSlug,
+        fileName: normalizedFileName,
+        fileType: resolvedFileType,
         encryptedData,
         iv,
         authTag,
+        contentType: contentTypeForSecretFile(normalizedFileName, resolvedFileType),
         version: newVersion,
         uploadedBy: req.apiToken!.createdBy,
       });
 
       await audit({
         projectId,
-        resourceType: 'env',
-        resourceId: envFile._id.toString(),
+        resourceType: 'secret_file',
+        resourceId: secretFile._id.toString(),
         action: 'upload',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { environment: envSlug, version: newVersion },
+        metadata: {
+          componentId: component._id.toString(),
+          componentName: component.name,
+          environment: envSlug,
+          fileName: normalizedFileName,
+          version: newVersion,
+        },
         req,
       });
 
       res.json({
-        environment: envFile.environment,
-        version: envFile.version,
-        createdAt: envFile.createdAt,
+        environment: secretFile.environment,
+        fileName: secretFile.fileName,
+        fileType: secretFile.fileType,
+        version: secretFile.version,
+        createdAt: secretFile.createdAt,
       });
     } catch (error) {
-      console.error('API upload env error:', error instanceof Error ? error.message : 'Unknown');
-      res.status(500).json({ error: 'Failed to upload environment file' });
+      console.error('API upload secret file error:', error instanceof Error ? error.message : 'Unknown');
+      res.status(500).json({ error: 'Failed to upload secrets file' });
     }
   }
 );
 
-/**
- * Get secret content
- * GET /api/v1/projects/:projectId/secrets/:secretName
- */
 router.get(
-  '/projects/:projectId/secrets/:secretName',
+  '/projects/:projectId/components/:componentRef/secrets/:secretName',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('read'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId, secretName } = req.params;
+      const { projectId, componentRef, secretName } = req.params;
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
+        return;
+      }
 
-      const secret = await Secret.findOne({
-        projectId,
-        name: secretName,
-      });
-
+      const secret = await Secret.findOne({ componentId: component._id, name: secretName });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
       }
 
-      const decryptedContent = await decryptProjectData(
-        projectId,
+      const decryptedContent = await decryptComponentData(
+        component._id.toString(),
         secret.encryptedData,
         secret.iv,
         secret.authTag
@@ -241,14 +316,11 @@ router.get(
         action: 'read',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { secretName },
+        metadata: { secretName, componentId: component._id.toString(), componentName: component.name },
         req,
       });
 
-      res.json({
-        name: secret.name,
-        content: decryptedContent,
-      });
+      res.json({ name: secret.name, content: decryptedContent });
     } catch (error) {
       console.error('API get secret error:', error instanceof Error ? error.message : 'Unknown');
       res.status(500).json({ error: 'Failed to get secret' });
@@ -256,20 +328,21 @@ router.get(
   }
 );
 
-/**
- * List secrets (names only, not content)
- * GET /api/v1/projects/:projectId/secrets
- */
 router.get(
-  '/projects/:projectId/secrets',
+  '/projects/:projectId/components/:componentRef/secrets',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('read'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId } = req.params;
+      const { projectId, componentRef } = req.params;
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
+        return;
+      }
 
-      const secrets = await Secret.find({ projectId })
+      const secrets = await Secret.find({ componentId: component._id })
         .select('name createdAt updatedAt')
         .sort({ name: 1 });
 
@@ -281,22 +354,14 @@ router.get(
   }
 );
 
-const SECRET_NAME_PATTERN = /^[a-zA-Z0-9\s\-_]+$/;
-const MAX_SECRET_BYTES = 50 * 1024;
-
-/**
- * Create a secret
- * POST /api/v1/projects/:projectId/secrets
- * Body: { name: string, content: string }
- */
 router.post(
-  '/projects/:projectId/secrets',
+  '/projects/:projectId/components/:componentRef/secrets',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('write'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId } = req.params;
+      const { projectId, componentRef } = req.params;
       const { name, content } = req.body;
 
       if (!name || typeof name !== 'string' || !name.trim()) {
@@ -310,27 +375,29 @@ router.post(
         return;
       }
 
-      if (content !== undefined && typeof content !== 'string') {
-        res.status(400).json({ error: 'Content must be a string' });
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
         return;
       }
 
       const plaintext = content ?? '';
-      if (plaintext.length > MAX_SECRET_BYTES) {
-        res.status(400).json({ error: 'Content size must be less than 50KB' });
+      if (typeof plaintext !== 'string' || plaintext.length > MAX_CONTENT_BYTES) {
+        res.status(400).json({ error: 'Content must be a string under 50KB' });
         return;
       }
 
-      const existing = await Secret.findOne({ projectId, name: trimmedName });
+      const existing = await Secret.findOne({ componentId: component._id, name: trimmedName });
       if (existing) {
-        res.status(400).json({ error: 'A secret with this name already exists in this project' });
+        res.status(400).json({ error: 'A secret with this name already exists in this component' });
         return;
       }
 
-      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintext);
+      const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), plaintext);
 
       const secret = await Secret.create({
         projectId,
+        componentId: component._id,
         name: trimmedName,
         encryptedData,
         iv,
@@ -345,14 +412,11 @@ router.post(
         action: 'create',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { secretName: trimmedName },
+        metadata: { secretName: trimmedName, componentId: component._id.toString(), componentName: component.name },
         req,
       });
 
-      res.status(201).json({
-        name: secret.name,
-        createdAt: secret.createdAt,
-      });
+      res.status(201).json({ name: secret.name, createdAt: secret.createdAt });
     } catch (error) {
       console.error('API create secret error:', error instanceof Error ? error.message : 'Unknown');
       res.status(500).json({ error: 'Failed to create secret' });
@@ -360,38 +424,39 @@ router.post(
   }
 );
 
-/**
- * Update a secret
- * PUT /api/v1/projects/:projectId/secrets/:secretName
- * Body: { content: string }
- */
 router.put(
-  '/projects/:projectId/secrets/:secretName',
+  '/projects/:projectId/components/:componentRef/secrets/:secretName',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('write'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId, secretName } = req.params;
+      const { projectId, componentRef, secretName } = req.params;
       const { content } = req.body;
+
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
+        return;
+      }
 
       if (content === undefined || typeof content !== 'string') {
         res.status(400).json({ error: 'Content is required' });
         return;
       }
 
-      if (content.length > MAX_SECRET_BYTES) {
+      if (content.length > MAX_CONTENT_BYTES) {
         res.status(400).json({ error: 'Content size must be less than 50KB' });
         return;
       }
 
-      const secret = await Secret.findOne({ projectId, name: secretName });
+      const secret = await Secret.findOne({ componentId: component._id, name: secretName });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
       }
 
-      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+      const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), content);
       secret.encryptedData = encryptedData;
       secret.iv = iv;
       secret.authTag = authTag;
@@ -404,14 +469,11 @@ router.put(
         action: 'update',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { secretName },
+        metadata: { secretName, componentId: component._id.toString(), componentName: component.name },
         req,
       });
 
-      res.json({
-        name: secret.name,
-        updatedAt: secret.updatedAt,
-      });
+      res.json({ name: secret.name, updatedAt: secret.updatedAt });
     } catch (error) {
       console.error('API update secret error:', error instanceof Error ? error.message : 'Unknown');
       res.status(500).json({ error: 'Failed to update secret' });
@@ -419,20 +481,21 @@ router.put(
   }
 );
 
-/**
- * Delete a secret
- * DELETE /api/v1/projects/:projectId/secrets/:secretName
- */
 router.delete(
-  '/projects/:projectId/secrets/:secretName',
+  '/projects/:projectId/components/:componentRef/secrets/:secretName',
   authenticateApiToken,
   requireApiTokenProject,
   requireApiScope('write'),
   async (req: ApiTokenRequest, res: Response): Promise<void> => {
     try {
-      const { projectId, secretName } = req.params;
+      const { projectId, componentRef, secretName } = req.params;
+      const component = await getComponentForApi(projectId, componentRef);
+      if (!component) {
+        res.status(404).json({ error: 'Component not found' });
+        return;
+      }
 
-      const secret = await Secret.findOneAndDelete({ projectId, name: secretName });
+      const secret = await Secret.findOneAndDelete({ componentId: component._id, name: secretName });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
@@ -445,7 +508,7 @@ router.delete(
         action: 'delete',
         actorType: 'api_token',
         actorId: req.apiToken!.tokenId,
-        metadata: { secretName },
+        metadata: { secretName, componentId: component._id.toString(), componentName: component.name },
         req,
       });
 

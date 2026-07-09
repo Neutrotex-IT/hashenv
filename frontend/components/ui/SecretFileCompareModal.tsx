@@ -1,33 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { envAPI } from '@/lib/api';
+import { secretFilesAPI } from '@/lib/api';
 import { countDiffChanges, EnvDiffLine, mapServerDiffToLines } from '@/lib/envDiff';
 import { Button } from './Button';
 import { Modal } from './Modal';
 
-interface EnvVersionOption {
+interface SecretFileVersionOption {
   _id: string;
   version: number;
 }
 
-interface EnvCompareModalProps {
+interface SecretFileCompareModalProps {
   projectId: string;
+  componentId: string;
   environment: string;
-  versions: EnvVersionOption[];
+  fileName: string;
+  versions: SecretFileVersionOption[];
   initialFromVersion?: number;
   initialToVersion?: number;
   onClose: () => void;
 }
 
-export function EnvCompareModal({
+export function SecretFileCompareModal({
   projectId,
+  componentId,
   environment,
+  fileName,
   versions,
   initialFromVersion,
   initialToVersion,
   onClose,
-}: EnvCompareModalProps) {
+}: SecretFileCompareModalProps) {
   const sorted = [...versions].sort((a, b) => a.version - b.version);
   const [fromVersion, setFromVersion] = useState(
     initialFromVersion ?? (sorted.length > 1 ? sorted[sorted.length - 2].version : sorted[0]?.version ?? 1)
@@ -40,11 +44,8 @@ export function EnvCompareModal({
   const [error, setError] = useState('');
   const [hideUnchanged, setHideUnchanged] = useState(true);
 
-  const fromFile = versions.find((v) => v.version === fromVersion);
-  const toFile = versions.find((v) => v.version === toVersion);
-
   useEffect(() => {
-    if (!fromFile || !toFile || fromVersion === toVersion) {
+    if (fromVersion === toVersion) {
       setDiffLines([]);
       return;
     }
@@ -54,7 +55,14 @@ export function EnvCompareModal({
       setLoading(true);
       setError('');
       try {
-        const serverDiff = await envAPI.diff(projectId, environment, fromVersion, toVersion);
+        const serverDiff = await secretFilesAPI.diff(
+          projectId,
+          componentId,
+          environment,
+          fileName,
+          fromVersion,
+          toVersion
+        );
         if (!cancelled) {
           setDiffLines(mapServerDiffToLines(serverDiff));
         }
@@ -73,7 +81,7 @@ export function EnvCompareModal({
     return () => {
       cancelled = true;
     };
-  }, [projectId, environment, fromFile?._id, toFile?._id, fromVersion, toVersion]);
+  }, [projectId, componentId, environment, fileName, fromVersion, toVersion]);
 
   const counts = countDiffChanges(diffLines);
   const visibleLines = hideUnchanged ? diffLines.filter((l) => l.type !== 'unchanged') : diffLines;
@@ -83,14 +91,11 @@ export function EnvCompareModal({
       <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-6">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">Compare versions</h2>
-          <p className="text-sm text-[var(--text-muted)]">{environment} environment</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            {fileName} · {environment}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 text-[var(--text-muted)] hover:text-[var(--foreground)]"
-          aria-label="Close"
-        >
+        <button type="button" onClick={onClose} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--foreground)]" aria-label="Close">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -98,40 +103,32 @@ export function EnvCompareModal({
       </div>
 
       <div className="border-b border-[var(--border)] px-4 py-4 sm:px-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="min-w-0 flex-1 sm:flex-none">
+        <div>
           <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">From version</label>
           <select
             value={fromVersion}
             onChange={(e) => setFromVersion(Number(e.target.value))}
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
+            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
           >
             {sorted.map((v) => (
-              <option key={v._id} value={v.version}>
-                v{v.version}
-              </option>
+              <option key={v._id} value={v.version}>v{v.version}</option>
             ))}
           </select>
         </div>
-        <div className="min-w-0 flex-1 sm:flex-none">
+        <div>
           <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">To version</label>
           <select
             value={toVersion}
             onChange={(e) => setToVersion(Number(e.target.value))}
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
+            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
           >
             {sorted.map((v) => (
-              <option key={v._id} value={v.version}>
-                v{v.version}
-              </option>
+              <option key={v._id} value={v.version}>v{v.version}</option>
             ))}
           </select>
         </div>
         <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)] sm:pb-2">
-          <input
-            type="checkbox"
-            checked={hideUnchanged}
-            onChange={(e) => setHideUnchanged(e.target.checked)}
-          />
+          <input type="checkbox" checked={hideUnchanged} onChange={(e) => setHideUnchanged(e.target.checked)} />
           Hide unchanged
         </label>
       </div>
@@ -169,26 +166,10 @@ export function EnvCompareModal({
                             : 'text-[var(--text-muted)]'
                     }`}
                   >
-                    {line.type === 'removed' && (
-                      <span>
-                        - {line.key}={line.oldValue}
-                      </span>
-                    )}
-                    {line.type === 'added' && (
-                      <span>
-                        + {line.key}={line.newValue}
-                      </span>
-                    )}
-                    {line.type === 'changed' && (
-                      <span>
-                        ~ {line.key}: {line.oldValue} → {line.newValue}
-                      </span>
-                    )}
-                    {line.type === 'unchanged' && (
-                      <span>
-                        {line.key}={line.newValue}
-                      </span>
-                    )}
+                    {line.type === 'removed' && <span>- {line.key}={line.oldValue}</span>}
+                    {line.type === 'added' && <span>+ {line.key}={line.newValue}</span>}
+                    {line.type === 'changed' && <span>~ {line.key}: {line.oldValue} → {line.newValue}</span>}
+                    {line.type === 'unchanged' && <span>{line.key}={line.newValue}</span>}
                   </div>
                 ))}
               </div>
@@ -198,9 +179,7 @@ export function EnvCompareModal({
       </div>
 
       <div className="border-t border-[var(--border)] px-4 py-4 sm:px-6 flex justify-end">
-        <Button variant="outline" size="md" onClick={onClose}>
-          Close
-        </Button>
+        <Button variant="outline" size="md" onClick={onClose}>Close</Button>
       </div>
     </Modal>
   );

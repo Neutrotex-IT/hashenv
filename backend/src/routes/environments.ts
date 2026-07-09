@@ -1,7 +1,7 @@
 import express, { Response } from 'express';
 import mongoose from 'mongoose';
 import { body, query, validationResult } from 'express-validator';
-import EnvFile from '../models/EnvFile';
+import SecretFile from '../models/SecretFile';
 import { authenticate, AuthRequest } from '../lib/auth';
 import {
   requireProjectAccess,
@@ -35,7 +35,7 @@ router.get(
       const project = (req as AuthRequestWithOrg).project!;
       const slugs = getProjectEnvironments(project);
 
-      const envMeta = await EnvFile.aggregate([
+      const envMeta = await SecretFile.aggregate([
         { $match: { projectId: project._id } },
         { $sort: { version: -1 } },
         {
@@ -178,7 +178,7 @@ router.patch(
         project.environments = environments.map((s) => (s === oldSlug ? newSlug : s));
         await project.save({ session });
 
-        await EnvFile.updateMany(
+        await SecretFile.updateMany(
           { projectId: project._id, environment: oldSlug },
           { $set: { environment: newSlug } },
           { session }
@@ -196,7 +196,7 @@ router.patch(
         req
       );
 
-      const latest = await EnvFile.findOne({ projectId: project._id, environment: newSlug })
+      const latest = await SecretFile.findOne({ projectId: project._id, environment: newSlug })
         .sort({ version: -1 })
         .select('version createdAt');
 
@@ -249,7 +249,7 @@ router.delete(
         return;
       }
 
-      const fileCount = await EnvFile.countDocuments({ projectId: project._id, environment: slug });
+      const fileCount = await SecretFile.countDocuments({ projectId: project._id, environment: slug });
 
       if (fileCount > 0 && !force) {
         await session.abortTransaction();
@@ -261,7 +261,7 @@ router.delete(
       }
 
       if (fileCount > 0) {
-        await EnvFile.deleteMany({ projectId: project._id, environment: slug }, { session });
+        await SecretFile.deleteMany({ projectId: project._id, environment: slug }, { session });
       }
 
       project.environments = environments.filter((s) => s !== slug);

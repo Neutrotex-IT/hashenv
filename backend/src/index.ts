@@ -10,7 +10,8 @@ import inviteRoutes from './routes/invites';
 import organizationRoutes from './routes/organizations';
 import projectRoutes from './routes/projects';
 import environmentRoutes from './routes/environments';
-import envRoutes from './routes/env';
+import componentRoutes from './routes/components';
+import secretFilesRoutes from './routes/secretFiles';
 import secretsRoutes from './routes/secrets';
 import associatedAccountsRoutes from './routes/associatedAccounts';
 import settingsRoutes from './routes/settings';
@@ -88,8 +89,13 @@ const corsOptions: cors.CorsOptions = {
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  // Expose rate limit headers for API clients
-  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+  // Expose rate limit + download headers for API clients
+  exposedHeaders: [
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Content-Disposition',
+  ],
   // Security: Max age for preflight requests (24 hours)
   maxAge: 86400,
   // Security: Validate origin in production
@@ -136,7 +142,8 @@ app.use('/api/invites', inviteRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects', environmentRoutes);
-app.use('/api/projects', envRoutes);
+app.use('/api/projects', componentRoutes);
+app.use('/api/projects', secretFilesRoutes);
 app.use('/api/projects', secretsRoutes);
 app.use('/api/projects', associatedAccountsRoutes);
 app.use('/api/projects', apiTokenRoutes);

@@ -1,6 +1,7 @@
 import { body, param, query, ValidationChain, Result } from 'express-validator';
 import { isValidObjectId } from './security';
 import { isValidEnvSlug, normalizeEnvSlug } from '../lib/environments';
+import { isAllowedSecretFileName, SECRET_FILE_TYPES } from '../lib/secretFiles';
 
 /**
  * Enhanced input validation middleware
@@ -56,6 +57,7 @@ export const validateProjectId = (): ValidationChain => {
 
 /**
  * Validate env file ID parameter
+ * @deprecated Use validateSecretFileId for secret files
  */
 export const validateEnvFileId = (): ValidationChain => {
   return param('envFileId').custom((value) => {
@@ -64,6 +66,70 @@ export const validateEnvFileId = (): ValidationChain => {
     }
     return true;
   });
+};
+
+export const validateSecretFileId = (): ValidationChain => {
+  return param('secretFileId').custom((value) => {
+    if (!isValidObjectId(value)) {
+      throw new Error('Invalid secrets file ID format');
+    }
+    return true;
+  });
+};
+
+export const validateComponentId = (): ValidationChain => {
+  return param('componentId').custom((value) => {
+    if (!isValidObjectId(value)) {
+      throw new Error('Invalid component ID format');
+    }
+    return true;
+  });
+};
+
+export const validateComponentName = (): ValidationChain => {
+  return body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Component name is required')
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Component name must be between 1 and 100 characters')
+    .matches(/^[a-zA-Z0-9\s\-_]+$/)
+    .withMessage('Component name can only contain letters, numbers, spaces, hyphens, and underscores');
+};
+
+export const validateSecretFileName = (): ValidationChain => {
+  return body('fileName')
+    .trim()
+    .notEmpty()
+    .withMessage('File name is required')
+    .isLength({ max: 255 })
+    .withMessage('File name must be less than 255 characters')
+    .custom((value) => {
+      if (!isAllowedSecretFileName(value)) {
+        throw new Error('Invalid secrets file name or extension');
+      }
+      return true;
+    });
+};
+
+export const validateSecretFileType = (): ValidationChain => {
+  return body('fileType')
+    .optional()
+    .isIn([...SECRET_FILE_TYPES])
+    .withMessage('Invalid secrets file type');
+};
+
+export const validateSecretFileNameQuery = (): ValidationChain => {
+  return query('file')
+    .trim()
+    .notEmpty()
+    .withMessage('File name query parameter is required')
+    .custom((value) => {
+      if (!isAllowedSecretFileName(value)) {
+        throw new Error('Invalid secrets file name or extension');
+      }
+      return true;
+    });
 };
 
 /**

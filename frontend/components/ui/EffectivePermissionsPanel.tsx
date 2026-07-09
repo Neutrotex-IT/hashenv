@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { formatOrgPermission, formatProjectPermission, OrgPermission, ProjectPermission } from '@/lib/permissions';
 
 const PROJECT_ACCESS_LABELS: Record<string, string> = {
-  'project:read': 'View env files, secrets, and accounts',
-  'project:write': 'Upload and edit env files, secrets, and accounts',
+  'project:read': 'View components, secrets files, secrets, and accounts',
+  'project:write': 'Upload and edit secrets files, secrets, and accounts',
 };
 
 const MISSING_HINTS: Record<string, string> = {
@@ -14,7 +14,7 @@ const MISSING_HINTS: Record<string, string> = {
   'project:invite': 'You cannot invite members to this project',
   'project:manage_members': 'You cannot edit or remove project members',
   'project:manage_tokens': 'You cannot create or revoke API tokens',
-  'project:export': 'You cannot export project environment data',
+  'project:export': 'You cannot export project data',
   'org:invite': 'You cannot invite people to this organization',
   'org:manage_members': 'You cannot edit or remove organization members',
   'org:revoke_invites': 'You cannot revoke pending organization invites',

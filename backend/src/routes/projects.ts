@@ -92,9 +92,10 @@ import {
   parseImportPayload,
   importProjectPayload,
 } from '../lib/dataTransfer';
-import EnvFile from '../models/EnvFile';
+import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
 import AssociatedAccount from '../models/AssociatedAccount';
+import { deleteProjectComponents } from '../lib/components';
 import { ProjectApiToken } from '../models/ProjectApiToken';
 import AuditLog from '../models/AuditLog';
 
@@ -236,7 +237,7 @@ router.get(
     query('environment').optional().isString().trim(),
     query('resourceType')
       .optional()
-      .isIn(['env', 'secret', 'account', 'project', 'api_token', 'member'])
+      .isIn(['env', 'secret', 'secret_file', 'component', 'account', 'project', 'api_token', 'member'])
       .withMessage('Invalid resource type'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
@@ -252,7 +253,16 @@ router.get(
       const environmentParam = req.query.environment as string | undefined;
       const resourceTypeParam = req.query.resourceType as string | undefined;
 
-      const activityTypes = ['env', 'secret', 'account', 'project', 'api_token', 'member'] as const;
+      const activityTypes = [
+        'env',
+        'secret',
+        'secret_file',
+        'component',
+        'account',
+        'project',
+        'api_token',
+        'member',
+      ] as const;
       const allowedTypes = resourceTypeParam ? [resourceTypeParam] : [...activityTypes];
 
       let logQuery: Record<string, unknown>;
@@ -266,13 +276,17 @@ router.get(
           return;
         }
 
-        const nonEnvTypes = allowedTypes.filter((t) => t !== 'env');
+        const envScopedTypes = new Set(['env', 'secret_file']);
+        const nonEnvScopedTypes = allowedTypes.filter((t) => !envScopedTypes.has(t));
         logQuery = {
           projectId,
           $or: [
-            ...(nonEnvTypes.length > 0 ? [{ resourceType: { $in: nonEnvTypes } }] : []),
+            ...(nonEnvScopedTypes.length > 0 ? [{ resourceType: { $in: nonEnvScopedTypes } }] : []),
             ...(allowedTypes.includes('env')
               ? [{ resourceType: 'env', 'metadata.environment': envSlug }]
+              : []),
+            ...(allowedTypes.includes('secret_file')
+              ? [{ resourceType: 'secret_file', 'metadata.environment': envSlug }]
               : []),
           ],
         };
@@ -986,8 +1000,10 @@ router.delete(
         return;
       }
 
+      await deleteProjectComponents(projectId);
+
       await Promise.all([
-        EnvFile.deleteMany({ projectId: project._id }),
+        SecretFile.deleteMany({ projectId: project._id }),
         Secret.deleteMany({ projectId: project._id }),
         AssociatedAccount.deleteMany({ projectId: project._id }),
         ProjectApiToken.deleteMany({ projectId: project._id }),
@@ -1032,7 +1048,7 @@ router.get(
 
       if (countExportableItems(payload) === 0) {
         res.status(404).json({
-          error: 'Nothing to export: this project has no environment files, secrets, or associated accounts',
+          error: 'Nothing to export: this project has no secrets files, secrets, or associated accounts',
         });
         return;
       }
@@ -1045,8 +1061,15 @@ router.get(
         action: 'export',
         actorId: req.user!.userId,
         metadata: {
-          envFileCount: payload.project?.envFiles.length ?? 0,
-          secretCount: payload.project?.secrets.length ?? 0,
+          componentCount: payload.project?.components.length ?? 0,
+          secretFileCount: (payload.project?.components ?? []).reduce(
+            (sum, component) => sum + (component.secretFiles?.length ?? 0),
+            0
+          ),
+          secretCount: (payload.project?.components ?? []).reduce(
+            (sum, component) => sum + (component.secrets?.length ?? 0),
+            0
+          ),
           accountCount: payload.project?.associatedAccounts.length ?? 0,
         },
         req,

@@ -1,10 +1,10 @@
 import UserSettings from '../models/UserSettings';
-import EnvFile from '../models/EnvFile';
+import SecretFile from '../models/SecretFile';
 import { getPanicEligibleProjects } from './panicProjects';
-import { auditEnv } from './audit';
+import { auditSecretFile } from './audit';
 
 /**
- * Delete environment files for users whose auto-flush interval has elapsed.
+ * Delete secrets files for users whose auto-flush interval has elapsed.
  * Runs on a schedule from index.ts.
  */
 export async function runAutoFlush(): Promise<void> {
@@ -36,18 +36,18 @@ export async function runAutoFlush(): Promise<void> {
 
     for (const project of projects) {
       const projectId = project._id.toString();
-      const envFiles = await EnvFile.find({ projectId });
+      const secretFiles = await SecretFile.find({ projectId });
 
-      if (envFiles.length === 0) {
+      if (secretFiles.length === 0) {
         continue;
       }
 
-      await EnvFile.deleteMany({ projectId: project._id });
-      flushedCount += envFiles.length;
+      await SecretFile.deleteMany({ projectId: project._id });
+      flushedCount += secretFiles.length;
 
-      await auditEnv(projectId, userId, 'delete', undefined, {
+      await auditSecretFile(projectId, userId, 'delete', undefined, {
         reason: 'auto_flush',
-        flushedCount: envFiles.length,
+        flushedCount: secretFiles.length,
         flushDurationHours: hours,
       });
     }
@@ -56,7 +56,7 @@ export async function runAutoFlush(): Promise<void> {
     await settings.save();
 
     if (flushedCount > 0) {
-      console.log(`[AutoFlush] User ${userId}: deleted ${flushedCount} env file(s) across ${projects.length} project(s)`);
+      console.log(`[AutoFlush] User ${userId}: deleted ${flushedCount} secrets file(s) across ${projects.length} project(s)`);
     }
   }
 }

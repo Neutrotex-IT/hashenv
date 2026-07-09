@@ -1,39 +1,32 @@
 import express, { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import Secret from '../models/Secret';
-import { encryptProjectData, decryptProjectData } from '../crypto';
+import { encryptComponentData, decryptComponentData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectAccess, requireProjectOwnership } from '../lib/authorization';
-import { validateProjectId, isValidObjectId } from '../middleware/validation';
+import { requireComponentAccess, AuthRequestWithOrg } from '../lib/authorization';
+import { validateProjectId, validateComponentId, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
 import { auditSecret } from '../lib/audit';
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
 
-/**
- * Create a new secret
- * POST /api/projects/:projectId/secrets
- * Requires: write permission
- * Body: { name: string, content: string }
- */
 router.post(
-  '/:projectId/secrets',
+  '/:projectId/components/:componentId/secrets',
   authenticate,
   validateProjectId(),
+  validateComponentId(),
   uploadRateLimiter,
-  requireProjectAccess('write'),
+  requireComponentAccess('write'),
   [
     body('name')
       .trim()
       .notEmpty()
       .withMessage('Secret name is required')
       .isLength({ min: 1, max: 100 })
-      .withMessage('Secret name must be between 1 and 100 characters')
       .matches(/^[a-zA-Z0-9\s\-_]+$/)
       .withMessage('Secret name can only contain letters, numbers, spaces, hyphens, and underscores'),
     body('content')
       .isString()
-      .withMessage('Content must be a string')
       .custom((value) => {
         if (value && value.length > 50 * 1024) {
           throw new Error('Content size must be less than 50KB');
@@ -55,27 +48,21 @@ router.post(
       }
 
       const projectId = req.params.projectId;
+      const component = (req as AuthRequestWithOrg).component!;
       const { name, content } = req.body;
 
-      if (!isValidObjectId(projectId)) {
-        res.status(400).json({ error: 'Invalid project ID format' });
-        return;
-      }
-
-      // Check if secret with same name already exists in this project
-      const existingSecret = await Secret.findOne({ projectId, name: name.trim() });
+      const existingSecret = await Secret.findOne({ componentId: component._id, name: name.trim() });
       if (existingSecret) {
-        res.status(400).json({ error: 'A secret with this name already exists in this project' });
+        res.status(400).json({ error: 'A secret with this name already exists in this component' });
         return;
       }
 
-      // Encrypt the secret content using project-specific key
       const plaintextData = content || '';
-      const { encryptedData, iv, authTag } = await encryptProjectData(projectId, plaintextData);
+      const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), plaintextData);
 
-      // Create the secret
       const secret = await Secret.create({
         projectId,
+        componentId: component._id,
         name: name.trim(),
         encryptedData,
         iv,
@@ -88,11 +75,10 @@ router.post(
         req.user.userId,
         'create',
         secret._id.toString(),
-        { secretName: secret.name },
+        { secretName: secret.name, componentId: component._id.toString(), componentName: component.name },
         req
       );
 
-      // Return secret metadata (without encrypted data)
       const populatedSecret = await Secret.findById(secret._id)
         .populate('createdBy', 'name email')
         .select('-encryptedData -iv -authTag');
@@ -101,93 +87,73 @@ router.post(
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error('Create secret error:', errMsg);
-      
-      // Handle duplicate key error
       if (errMsg.includes('duplicate key') || errMsg.includes('E11000')) {
-        res.status(400).json({ error: 'A secret with this name already exists in this project' });
+        res.status(400).json({ error: 'A secret with this name already exists in this component' });
         return;
       }
-      
       res.status(500).json({ error: 'Failed to create secret' });
     }
   }
 );
 
-/**
- * Get all secrets for a project
- * GET /api/projects/:projectId/secrets
- * Requires: read permission
- */
 router.get(
-  '/:projectId/secrets',
+  '/:projectId/components/:componentId/secrets',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('read'),
+  validateComponentId(),
+  requireComponentAccess('read'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const projectId = req.params.projectId;
-
-      if (!isValidObjectId(projectId)) {
-        res.status(400).json({ error: 'Invalid project ID format' });
-        return;
-      }
-
-      // Get all secrets for this project (without encrypted data)
-      const secrets = await Secret.find({ projectId })
+      const component = (req as AuthRequestWithOrg).component!;
+      const secrets = await Secret.find({ componentId: component._id })
         .populate('createdBy', 'name email')
         .select('-encryptedData -iv -authTag')
         .sort({ name: 1 });
 
       res.json(secrets);
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error('Get secrets error:', errMsg);
+      console.error('Get secrets error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to fetch secrets' });
     }
   }
 );
 
-/**
- * Get secret content (decrypted)
- * GET /api/projects/:projectId/secrets/:secretId/content
- * Requires: read permission
- */
 router.get(
-  '/:projectId/secrets/:secretId/content',
+  '/:projectId/components/:componentId/secrets/:secretId/content',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('read'),
+  validateComponentId(),
+  requireComponentAccess('read'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const projectId = req.params.projectId;
+      const component = (req as AuthRequestWithOrg).component!;
       const secretId = req.params.secretId;
 
-      if (!isValidObjectId(projectId) || !isValidObjectId(secretId)) {
+      if (!isValidObjectId(secretId)) {
         res.status(400).json({ error: 'Invalid ID format' });
         return;
       }
 
-      // Find the secret
-      const secret = await Secret.findOne({
-        _id: secretId,
-        projectId,
-      });
-
+      const secret = await Secret.findOne({ _id: secretId, componentId: component._id });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
       }
 
-      // Decrypt the secret content using project-specific key
-      const decryptedContent = await decryptProjectData(projectId, secret.encryptedData, secret.iv, secret.authTag);
+      const decryptedContent = await decryptComponentData(
+        component._id.toString(),
+        secret.encryptedData,
+        secret.iv,
+        secret.authTag
+      );
 
       if (req.user) {
         await auditSecret(
-          projectId,
+          req.params.projectId,
           req.user.userId,
           'read',
           secret._id.toString(),
-          { secretName: secret.name },
+          { secretName: secret.name, componentId: component._id.toString(), componentName: component.name },
           req
         );
       }
@@ -200,38 +166,28 @@ router.get(
         updatedAt: secret.updatedAt,
       });
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error('Get secret content error:', errMsg);
+      console.error('Get secret content error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to get secret content' });
     }
   }
 );
 
-/**
- * Update a secret
- * PUT /api/projects/:projectId/secrets/:secretId
- * Requires: write permission
- * Body: { name?: string, content?: string }
- */
 router.put(
-  '/:projectId/secrets/:secretId',
+  '/:projectId/components/:componentId/secrets/:secretId',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('write'),
+  validateComponentId(),
+  requireComponentAccess('write'),
   [
     body('name')
       .optional()
       .trim()
       .notEmpty()
-      .withMessage('Secret name cannot be empty')
       .isLength({ min: 1, max: 100 })
-      .withMessage('Secret name must be between 1 and 100 characters')
-      .matches(/^[a-zA-Z0-9\s\-_]+$/)
-      .withMessage('Secret name can only contain letters, numbers, spaces, hyphens, and underscores'),
+      .matches(/^[a-zA-Z0-9\s\-_]+$/),
     body('content')
       .optional()
       .isString()
-      .withMessage('Content must be a string')
       .custom((value) => {
         if (value && value.length > 50 * 1024) {
           throw new Error('Content size must be less than 50KB');
@@ -253,43 +209,31 @@ router.put(
       }
 
       const projectId = req.params.projectId;
+      const component = (req as AuthRequestWithOrg).component!;
       const secretId = req.params.secretId;
       const { name, content } = req.body;
 
-      if (!isValidObjectId(projectId) || !isValidObjectId(secretId)) {
-        res.status(400).json({ error: 'Invalid ID format' });
-        return;
-      }
-
-      // Find the secret
-      const secret = await Secret.findOne({
-        _id: secretId,
-        projectId,
-      });
-
+      const secret = await Secret.findOne({ _id: secretId, componentId: component._id });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
       }
 
-      // Update name if provided
       if (name !== undefined && name.trim() !== secret.name) {
-        // Check if another secret with the new name exists
         const existingSecret = await Secret.findOne({
-          projectId,
+          componentId: component._id,
           name: name.trim(),
           _id: { $ne: secretId },
         });
         if (existingSecret) {
-          res.status(400).json({ error: 'A secret with this name already exists in this project' });
+          res.status(400).json({ error: 'A secret with this name already exists in this component' });
           return;
         }
         secret.name = name.trim();
       }
 
-      // Update content if provided (re-encrypt with project-specific key)
       if (content !== undefined) {
-        const { encryptedData, iv, authTag } = await encryptProjectData(projectId, content);
+        const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), content);
         secret.encryptedData = encryptedData;
         secret.iv = iv;
         secret.authTag = authTag;
@@ -302,57 +246,35 @@ router.put(
         req.user.userId,
         'update',
         secret._id.toString(),
-        { secretName: secret.name },
+        { secretName: secret.name, componentId: component._id.toString(), componentName: component.name },
         req
       );
 
-      // Return updated secret metadata
       const populatedSecret = await Secret.findById(secret._id)
         .populate('createdBy', 'name email')
         .select('-encryptedData -iv -authTag');
 
       res.json(populatedSecret);
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error('Update secret error:', errMsg);
-      
-      // Handle duplicate key error
-      if (errMsg.includes('duplicate key') || errMsg.includes('E11000')) {
-        res.status(400).json({ error: 'A secret with this name already exists in this project' });
-        return;
-      }
-      
+      console.error('Update secret error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to update secret' });
     }
   }
 );
 
-/**
- * Delete a secret
- * DELETE /api/projects/:projectId/secrets/:secretId
- * Requires: write permission
- */
 router.delete(
-  '/:projectId/secrets/:secretId',
+  '/:projectId/components/:componentId/secrets/:secretId',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('write'),
+  validateComponentId(),
+  requireComponentAccess('write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
+      const component = (req as AuthRequestWithOrg).component!;
       const secretId = req.params.secretId;
 
-      if (!isValidObjectId(projectId) || !isValidObjectId(secretId)) {
-        res.status(400).json({ error: 'Invalid ID format' });
-        return;
-      }
-
-      // Find and delete the secret
-      const secret = await Secret.findOneAndDelete({
-        _id: secretId,
-        projectId,
-      });
-
+      const secret = await Secret.findOneAndDelete({ _id: secretId, componentId: component._id });
       if (!secret) {
         res.status(404).json({ error: 'Secret not found' });
         return;
@@ -364,15 +286,14 @@ router.delete(
           req.user.userId,
           'delete',
           secret._id.toString(),
-          { secretName: secret.name },
+          { secretName: secret.name, componentId: component._id.toString(), componentName: component.name },
           req
         );
       }
 
       res.json({ message: 'Secret deleted successfully' });
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error('Delete secret error:', errMsg);
+      console.error('Delete secret error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to delete secret' });
     }
   }
