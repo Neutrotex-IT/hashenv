@@ -388,15 +388,15 @@ export default function ComponentDetailPage() {
     }
   };
 
-  const handleDownloadSecretAsEnv = async (secret: Secret) => {
+  const handleDownloadSecret = async (secret: Secret) => {
     try {
       const secretData = await secretsAPI.get(projectId, componentId, secret._id);
-      const envContent = `${secretData.name}=${secretData.content}`;
-      const blob = new Blob([envContent], { type: 'text/plain' });
+      const fileContent = `${secretData.name}=${secretData.content}`;
+      const blob = new Blob([fileContent], { type: 'text/plain' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', '.env');
+      link.setAttribute('download', 'secret.txt');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -509,8 +509,8 @@ export default function ComponentDetailPage() {
         <div role="tablist" aria-label="Component data" className="segmented-control">
           {(
             [
-              { id: 'secretFiles' as const, label: 'Secrets files' },
-              { id: 'secrets' as const, label: 'Secrets' },
+              { id: 'secretFiles' as const, label: 'Secret files' },
+              { id: 'secrets' as const, label: 'Other secrets' },
             ] as const
           ).map((tab) => (
             <button
@@ -878,8 +878,8 @@ export default function ComponentDetailPage() {
                         <div className="flex items-center justify-end gap-3">
                           {canRead && (
                             <>
-                              <button onClick={() => void handleDownloadSecretAsEnv(secret)} className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors">
-                                Download as .env
+                              <button onClick={() => void handleDownloadSecret(secret)} className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors">
+                                Download
                               </button>
                               <button onClick={() => void handleViewSecret(secret)} className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors">
                                 View

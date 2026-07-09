@@ -18,13 +18,11 @@ const SecretSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Project',
       required: true,
-      index: true,
     },
     componentId: {
       type: Schema.Types.ObjectId,
       ref: 'Component',
       required: true,
-      index: true,
     },
     name: {
       type: String,
