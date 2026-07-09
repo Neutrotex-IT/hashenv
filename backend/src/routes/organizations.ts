@@ -936,8 +936,8 @@ router.get(
       await auditOrg(orgId, req.user!.userId, 'update', {
         action: 'export',
         projectCount: readableProjects.length,
-        envFileCount: payload.projects?.reduce((sum, p) => sum + p.envFiles.length, 0) ?? 0,
-        secretCount: payload.projects?.reduce((sum, p) => sum + p.secrets.length, 0) ?? 0,
+        envFileCount: payload.projects?.reduce((sum, p) => sum + (p.envFiles?.length ?? 0), 0) ?? 0,
+        secretCount: payload.projects?.reduce((sum, p) => sum + (p.secrets?.length ?? 0), 0) ?? 0,
         accountCount: payload.projects?.reduce((sum, p) => sum + p.associatedAccounts.length, 0) ?? 0,
       }, req);
 

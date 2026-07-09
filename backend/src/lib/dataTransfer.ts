@@ -1,4 +1,4 @@
-import Component from '../models/Component';
+import Component, { IComponent } from '../models/Component';
 import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
 import AssociatedAccount, { ACCOUNT_PROVIDERS } from '../models/AssociatedAccount';
@@ -381,7 +381,7 @@ async function ensureComponent(
   userId: string,
   componentData: Pick<ExportedComponent, 'name' | 'slug' | 'description'>,
   summary: ImportSummary
-): Promise<Component> {
+): Promise<IComponent> {
   const projectId = project._id.toString();
   const slug = componentData.slug || slugFromComponentName(componentData.name);
   let component = await Component.findOne({ projectId, slug });
@@ -403,7 +403,7 @@ async function ensureComponent(
 
 async function importSecretFileRecord(
   project: IProject,
-  component: Component,
+  component: IComponent,
   userId: string,
   secretFile: ExportedSecretFile,
   summary: ImportSummary,
@@ -459,7 +459,7 @@ async function importSecretFileRecord(
 
 async function importSecretRecord(
   project: IProject,
-  component: Component,
+  component: IComponent,
   userId: string,
   secret: ExportedSecret,
   overwrite: boolean,
