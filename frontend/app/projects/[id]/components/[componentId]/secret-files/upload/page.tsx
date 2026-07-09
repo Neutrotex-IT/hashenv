@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { secretFilesAPI, componentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
+import { getLastEnvironment, setLastEnvironment } from '@/lib/lastEnvironment';
 import {
   defaultFileNameForType,
   formatSecretFileType,
@@ -54,13 +55,22 @@ export default function UploadSecretFilePage() {
   useEffect(() => {
     if (envParam && envOptions.includes(envParam)) {
       setEnvironment(envParam);
-    } else {
-      setEnvironment((current) => (envOptions.includes(current) ? current : envOptions[0] ?? 'dev'));
+      setLastEnvironment(projectId, componentId, envParam);
+      return;
     }
-  }, [envParam, envOptions]);
+
+    const saved = getLastEnvironment(projectId, componentId);
+    if (saved && envOptions.includes(saved)) {
+      setEnvironment(saved);
+      return;
+    }
+
+    setEnvironment(envOptions[0] ?? 'dev');
+  }, [envParam, envOptions, projectId, componentId]);
 
   const syncEnvironmentUrl = useCallback(
     (nextEnv: string) => {
+      setLastEnvironment(projectId, componentId, nextEnv);
       router.replace(
         `/projects/${projectId}/components/${componentId}/secret-files/upload?environment=${encodeURIComponent(nextEnv)}`
       );
@@ -169,6 +179,7 @@ export default function UploadSecretFilePage() {
           fileType
         );
       }
+      setLastEnvironment(projectId, componentId, environment);
       router.push(`${componentHref(projectId, componentId)}?environment=${encodeURIComponent(environment)}`);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };

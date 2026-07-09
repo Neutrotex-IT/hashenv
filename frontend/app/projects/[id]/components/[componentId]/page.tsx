@@ -21,6 +21,7 @@ import { Skeleton, SkeletonCard, SkeletonDataTable } from '@/components/ui/Skele
 import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
 import { formatEnvLabel } from '@/lib/environments';
+import { getLastEnvironment, setLastEnvironment } from '@/lib/lastEnvironment';
 import { formatSecretFileType } from '@/lib/secretFiles';
 import { useConfirm } from '@/contexts/ConfirmContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -90,6 +91,26 @@ export default function ComponentDetailPage() {
   const envSlugs = useMemo(
     () => (projectEnvironments.length > 0 ? projectEnvironments.map((e) => e.slug) : ['dev', 'staging', 'prod']),
     [projectEnvironments]
+  );
+
+  const rememberEnvironment = useCallback(
+    (environment: string) => {
+      if (envSlugs.includes(environment)) {
+        setLastEnvironment(projectId, componentId, environment);
+      }
+    },
+    [projectId, componentId, envSlugs]
+  );
+
+  const selectEnvironment = useCallback(
+    (slug: string) => {
+      if (slug !== selectedEnv) {
+        setVersionsLoading(true);
+      }
+      setSelectedEnv(slug);
+      rememberEnvironment(slug);
+    },
+    [selectedEnv, rememberEnvironment]
   );
 
   const effectivePermissions = permissionInfo?.effective ?? [];
@@ -196,11 +217,19 @@ export default function ComponentDetailPage() {
     const envParam = searchParams.get('environment');
     if (envParam && envSlugs.includes(envParam)) {
       setSelectedEnv(envParam);
+      rememberEnvironment(envParam);
       router.replace(`/projects/${projectId}/components/${componentId}`, { scroll: false });
       return;
     }
-    setSelectedEnv((current) => (envSlugs.includes(current) ? current : envSlugs[0] ?? 'dev'));
-  }, [searchParams, envSlugs, projectId, componentId, router]);
+
+    const saved = getLastEnvironment(projectId, componentId);
+    if (saved && envSlugs.includes(saved)) {
+      setSelectedEnv(saved);
+      return;
+    }
+
+    setSelectedEnv(envSlugs[0] ?? 'dev');
+  }, [searchParams, envSlugs, projectId, componentId, router, rememberEnvironment]);
 
   useEffect(() => {
     if (!component) return;
@@ -212,6 +241,7 @@ export default function ComponentDetailPage() {
   }, [component, selectedTab, loadVersions, loadSecrets]);
 
   const handleDownload = async (version: SecretFileVersion) => {
+    rememberEnvironment(version.environment);
     try {
       await secretFilesAPI.download(
         projectId,
@@ -226,6 +256,7 @@ export default function ComponentDetailPage() {
   };
 
   const handleViewFile = async (version: SecretFileVersion) => {
+    rememberEnvironment(version.environment);
     const title = `${version.fileName} v${version.version}`;
     setSensitiveModal({ title, fields: [], loading: true });
     try {
@@ -252,6 +283,7 @@ export default function ComponentDetailPage() {
       variant: 'danger',
     });
     if (!ok) return;
+    rememberEnvironment(version.environment);
     try {
       await secretFilesAPI.rollback(
         projectId,
@@ -276,6 +308,7 @@ export default function ComponentDetailPage() {
       variant: 'danger',
     });
     if (!ok) return;
+    rememberEnvironment(version.environment);
     try {
       await secretFilesAPI.delete(projectId, componentId, version._id);
       toastSuccess('Version deleted');
@@ -287,6 +320,7 @@ export default function ComponentDetailPage() {
   };
 
   const openCompare = (fileName: string, fromVersion?: number, toVersion?: number) => {
+    rememberEnvironment(selectedEnv);
     setCompareFileName(fileName);
     setCompareInitialFrom(fromVersion);
     setCompareInitialTo(toVersion);
@@ -538,10 +572,7 @@ export default function ComponentDetailPage() {
               {envSlugs.map((slug) => (
                 <button
                   key={slug}
-                  onClick={() => {
-                    if (slug !== selectedEnv) setVersionsLoading(true);
-                    setSelectedEnv(slug);
-                  }}
+                  onClick={() => selectEnvironment(slug)}
                   className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium motion-colors ${
                     selectedEnv === slug
                       ? 'border-[var(--accent)] text-[var(--accent)]'

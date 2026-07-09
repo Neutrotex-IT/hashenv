@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { secretFilesAPI, componentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
+import { setLastEnvironment } from '@/lib/lastEnvironment';
 import { Button } from '@/components/ui/Button';
 
 export default function EditSecretFilePage() {
@@ -28,7 +29,10 @@ export default function EditSecretFilePage() {
 
   useEffect(() => {
     componentsAPI.get(projectId, componentId).then((c) => setComponentName(c.name)).catch(() => {});
-  }, [projectId, componentId]);
+    if (environment) {
+      setLastEnvironment(projectId, componentId, environment);
+    }
+  }, [projectId, componentId, environment]);
 
   useEffect(() => {
     void loadFileContent();
@@ -64,6 +68,7 @@ export default function EditSecretFilePage() {
     setError('');
     try {
       await secretFilesAPI.edit(projectId, componentId, secretFileId, content, { saveAsNewVersion });
+      setLastEnvironment(projectId, componentId, environment);
       router.push(
         `/projects/${projectId}/components/${componentId}?environment=${encodeURIComponent(environment)}`
       );

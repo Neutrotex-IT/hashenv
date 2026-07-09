@@ -700,8 +700,8 @@
     "semantic_hash": "dc85ced95e05956ad4d9123a6fcac7f2"
   },
   "frontend/next-env.d.ts": {
-    "mtime": 1783580933.3386507,
-    "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
+    "mtime": 1783581532.7042053,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
     "semantic_hash": ""
   },
   "frontend/next.config.ts": {
@@ -775,18 +775,18 @@
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/page.tsx": {
-    "mtime": 1783576436.9271524,
-    "ast_hash": "69513acc715ca6b4473143eb98f2c767",
+    "mtime": 1783585402.4834409,
+    "ast_hash": "f6c68c0498b06a0d09a8685b22c864d2",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/secret-files/edit/[secretFileId]/page.tsx": {
-    "mtime": 1783518460.5926387,
-    "ast_hash": "93029a140a0ccdb875edb4597dcc7225",
+    "mtime": 1783585420.205141,
+    "ast_hash": "7d362c5f5d89dab6d10793fbcd11f19b",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/secret-files/upload/page.tsx": {
-    "mtime": 1783576398.2241173,
-    "ast_hash": "94559fc933d0abaac0558d2c72d7d8c5",
+    "mtime": 1783585436.0743454,
+    "ast_hash": "bdcad4d028049bc875838a866a202589",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/new/page.tsx": {
@@ -817,6 +817,11 @@
   "frontend/components/ui/SecretFileUploadDropArea.tsx": {
     "mtime": 1783576311.8027072,
     "ast_hash": "161c8aa54ab2819f6c177416020d1ca3",
+    "semantic_hash": ""
+  },
+  "frontend/lib/lastEnvironment.ts": {
+    "mtime": 1783585375.4894886,
+    "ast_hash": "eb4d0557f5053cf4808b4ab7cc803db1",
     "semantic_hash": ""
   }
 }
