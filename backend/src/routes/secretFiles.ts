@@ -22,11 +22,11 @@ import { uploadRateLimiter } from '../middleware/security';
 import { assertEnvAllowed, normalizeEnvSlug } from '../lib/environments';
 import { diffEnvContent } from '../lib/envDiff';
 import {
-  ALLOWED_SECRET_FILE_EXTENSIONS,
   MAX_SECRET_FILE_BYTES,
   buildContentDisposition,
   contentTypeForSecretFile,
   inferSecretFileType,
+  isAllowedFileUploadName,
   isAllowedSecretFileName,
   sanitizeSecretFileName,
 } from '../lib/secretFiles';
@@ -43,15 +43,11 @@ const upload = multer({
     fieldSize: 100 * 1024,
   },
   fileFilter: (_req, file, cb) => {
-    const filename = file.originalname.toLowerCase();
-    if (filename.includes('\0')) {
+    const filename = sanitizeSecretFileName(file.originalname);
+    if (!filename) {
       return cb(new Error('Invalid filename'));
     }
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return cb(new Error('Invalid filename'));
-    }
-    const extension = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : filename;
-    if (filename === '.env' || ALLOWED_SECRET_FILE_EXTENSIONS.has(extension)) {
+    if (isAllowedFileUploadName(filename)) {
       cb(null, true);
     } else {
       cb(new Error('Unsupported secrets file extension'));

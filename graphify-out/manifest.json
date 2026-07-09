@@ -745,8 +745,8 @@
     "semantic_hash": ""
   },
   "backend/src/lib/secretFiles.ts": {
-    "mtime": 1783518577.7263844,
-    "ast_hash": "44c05a295b88cad3d7f7909c002f79ba",
+    "mtime": 1783576285.053324,
+    "ast_hash": "63bfbccd4a9ddbc17e3cfa35673c0604",
     "semantic_hash": ""
   },
   "backend/src/models/Component.ts": {
@@ -770,13 +770,13 @@
     "semantic_hash": ""
   },
   "backend/src/routes/secretFiles.ts": {
-    "mtime": 1783518867.3527603,
-    "ast_hash": "293123aa938336b1e8a7779e67a81f6e",
+    "mtime": 1783576350.7758448,
+    "ast_hash": "d4d45dbe3b9daf84685b0a55bda484cf",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/page.tsx": {
-    "mtime": 1783522450.123634,
-    "ast_hash": "179fe1b79cf06432de867397abad9c70",
+    "mtime": 1783576436.9271524,
+    "ast_hash": "69513acc715ca6b4473143eb98f2c767",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/secret-files/edit/[secretFileId]/page.tsx": {
@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/[componentId]/secret-files/upload/page.tsx": {
-    "mtime": 1783518455.7928493,
-    "ast_hash": "f160fe3a1c95eaee13c4e00bb012b529",
+    "mtime": 1783576398.2241173,
+    "ast_hash": "94559fc933d0abaac0558d2c72d7d8c5",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/components/new/page.tsx": {
@@ -799,24 +799,24 @@
     "ast_hash": "e2c0f5d2eebc9d8f82f8ed907a320283",
     "semantic_hash": ""
   },
-  "frontend/components/ui/SecretFileDropZone.tsx": {
-    "mtime": 1783517913.5965564,
-    "ast_hash": "371f9c44a3205f7c6d4880e22390ff04",
-    "semantic_hash": ""
-  },
   "frontend/components/ui/UploadSecretFileButton.tsx": {
     "mtime": 1783517905.1255736,
     "ast_hash": "dac6af277e95f2a9e7d8a561ecfcc6a0",
     "semantic_hash": ""
   },
   "frontend/lib/secretFiles.ts": {
-    "mtime": 1783517900.456493,
-    "ast_hash": "568437266ea8b252f2a8b688f58250e6",
+    "mtime": 1783576299.5444522,
+    "ast_hash": "ff20b6c3fe589dd134b161a25994e50b",
     "semantic_hash": ""
   },
   "backend/src/__tests__/components.test.ts": {
-    "mtime": 1783518537.212374,
-    "ast_hash": "0a43c1262e53bda1995e5e7bee21acbb",
+    "mtime": 1783576513.6732807,
+    "ast_hash": "402acb6f368b29a090e2aa7e9dfa3f62",
+    "semantic_hash": ""
+  },
+  "frontend/components/ui/SecretFileUploadDropArea.tsx": {
+    "mtime": 1783576311.8027072,
+    "ast_hash": "161c8aa54ab2819f6c177416020d1ca3",
     "semantic_hash": ""
   }
 }

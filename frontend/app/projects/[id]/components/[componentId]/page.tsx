@@ -15,7 +15,6 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { UploadSecretFileButton } from '@/components/ui/UploadSecretFileButton';
-import { SecretFileDropZone } from '@/components/ui/SecretFileDropZone';
 import { SecretFileCompareModal } from '@/components/ui/SecretFileCompareModal';
 import { canReadProject, canWriteProject } from '@/lib/permissions';
 import { Skeleton, SkeletonCard, SkeletonDataTable } from '@/components/ui/Skeleton';
@@ -28,9 +27,6 @@ import { useToast } from '@/contexts/ToastContext';
 import { useProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
-
-const PENDING_UPLOAD_KEY = (projectId: string, componentId: string) =>
-  `hashenv-pending-upload-${projectId}-${componentId}`;
 
 interface Secret {
   _id: string;
@@ -200,10 +196,11 @@ export default function ComponentDetailPage() {
     const envParam = searchParams.get('environment');
     if (envParam && envSlugs.includes(envParam)) {
       setSelectedEnv(envParam);
-    } else if (envSlugs.length > 0 && !envSlugs.includes(selectedEnv)) {
-      setSelectedEnv(envSlugs[0]);
+      router.replace(`/projects/${projectId}/components/${componentId}`, { scroll: false });
+      return;
     }
-  }, [searchParams, envSlugs, selectedEnv]);
+    setSelectedEnv((current) => (envSlugs.includes(current) ? current : envSlugs[0] ?? 'dev'));
+  }, [searchParams, envSlugs, projectId, componentId, router]);
 
   useEffect(() => {
     if (!component) return;
@@ -213,28 +210,6 @@ export default function ComponentDetailPage() {
       void loadSecrets();
     }
   }, [component, selectedTab, loadVersions, loadSecrets]);
-
-  const handleFileDrop = useCallback(
-    (file: File, fileName: string, fileType: string) => {
-      const params = new URLSearchParams({
-        environment: selectedEnv,
-        fileName,
-        fileType,
-      });
-      const reader = new FileReader();
-      reader.onload = () => {
-        sessionStorage.setItem(
-          PENDING_UPLOAD_KEY(projectId, componentId),
-          JSON.stringify({ fileName, fileType, content: reader.result as string })
-        );
-        router.push(
-          `/projects/${projectId}/components/${componentId}/secret-files/upload?${params.toString()}`
-        );
-      };
-      reader.readAsText(file);
-    },
-    [projectId, componentId, selectedEnv, router]
-  );
 
   const handleDownload = async (version: SecretFileVersion) => {
     try {
@@ -498,7 +473,7 @@ export default function ComponentDetailPage() {
   const compareVersions = compareFileName ? versionsByFile.get(compareFileName) ?? [] : [];
 
   return (
-    <SecretFileDropZone enabled={canWrite && selectedTab === 'secretFiles'} onFileDrop={handleFileDrop}>
+    <>
       <PageHeader
         title={component.name}
         description={component.description || 'Secrets files and key-value secrets for this component.'}
@@ -1017,6 +992,6 @@ export default function ComponentDetailPage() {
           onClose={() => setSensitiveModal(null)}
         />
       )}
-    </SecretFileDropZone>
+    </>
   );
 }

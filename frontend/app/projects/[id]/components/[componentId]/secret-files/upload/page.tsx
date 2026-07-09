@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { secretFilesAPI, componentsAPI } from '@/lib/api';
 import { formatEnvLabel } from '@/lib/environments';
 import {
-  SECRET_FILE_TYPE_OPTIONS,
   defaultFileNameForType,
+  formatSecretFileType,
   inferSecretFileType,
-  isAllowedSecretFileName,
+  isAllowedFileUploadName,
+  isAllowedPasteFileName,
 } from '@/lib/secretFiles';
 import { Button } from '@/components/ui/Button';
+import { SecretFileUploadDropArea } from '@/components/ui/SecretFileUploadDropArea';
 import { useProjectEnvironments } from '@/hooks/queries/useProjectEnvironments';
 import { useProject } from '@/hooks/queries/useProject';
 
-const PENDING_UPLOAD_KEY = (projectId: string, componentId: string) =>
-  `hashenv-pending-upload-${projectId}-${componentId}`;
+const componentHref = (projectId: string, componentId: string) =>
+  `/projects/${projectId}/components/${componentId}`;
 
 export default function UploadSecretFilePage() {
   const params = useParams();
@@ -34,17 +36,16 @@ export default function UploadSecretFilePage() {
   );
 
   const envParam = searchParams.get('environment');
-  const fileNameParam = searchParams.get('fileName');
-  const fileTypeParam = searchParams.get('fileType');
 
   const [environment, setEnvironment] = useState('dev');
-  const [fileType, setFileType] = useState(fileTypeParam || 'env');
-  const [fileName, setFileName] = useState(fileNameParam || defaultFileNameForType(fileTypeParam || 'env', fileNameParam ?? undefined));
+  const [fileType, setFileType] = useState('env');
+  const [fileName, setFileName] = useState('.env');
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState('');
   const [uploadMethod, setUploadMethod] = useState<'file' | 'text'>('file');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   useEffect(() => {
     componentsAPI.get(projectId, componentId).then((c) => setComponentName(c.name)).catch(() => {});
@@ -58,57 +59,94 @@ export default function UploadSecretFilePage() {
     }
   }, [envParam, envOptions]);
 
-  useEffect(() => {
-    if (fileTypeParam) setFileType(fileTypeParam);
-    if (fileNameParam) setFileName(fileNameParam);
-  }, [fileTypeParam, fileNameParam]);
+  const syncEnvironmentUrl = useCallback(
+    (nextEnv: string) => {
+      router.replace(
+        `/projects/${projectId}/components/${componentId}/secret-files/upload?environment=${encodeURIComponent(nextEnv)}`
+      );
+    },
+    [router, projectId, componentId]
+  );
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem(PENDING_UPLOAD_KEY(projectId, componentId));
-    if (!raw) return;
-    try {
-      const pending = JSON.parse(raw) as { fileName?: string; fileType?: string; content?: string };
-      if (pending.fileName) setFileName(pending.fileName);
-      if (pending.fileType) setFileType(pending.fileType);
-      if (pending.content) {
-        setContent(pending.content);
-        setUploadMethod('text');
-      }
-      sessionStorage.removeItem(PENDING_UPLOAD_KEY(projectId, componentId));
-    } catch {
-      sessionStorage.removeItem(PENDING_UPLOAD_KEY(projectId, componentId));
-    }
-  }, [projectId, componentId]);
-
-  useEffect(() => {
-    if (!fileNameParam) {
-      setFileName(defaultFileNameForType(fileType));
-    }
-  }, [fileType, fileNameParam]);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-    if (selectedFile.size > 50 * 1024) {
-      setError('File size must be less than 50KB');
-      return;
-    }
-    if (!isAllowedSecretFileName(selectedFile.name)) {
-      setError('Unsupported secrets file type');
-      return;
-    }
+  const applyFileSelection = useCallback((selectedFile: File, selectedName: string, selectedType: string) => {
     setFile(selectedFile);
-    setFileName(selectedFile.name);
-    setFileType(inferSecretFileType(selectedFile.name));
+    setFileName(selectedName);
+    setFileType(selectedType);
+    setUploadMethod('file');
     setError('');
+    setInfo('');
+  }, []);
+
+  const handleFileSelect = useCallback(
+    ({ file: selectedFile, fileName: selectedName, fileType: selectedType }: {
+      file: File;
+      fileName: string;
+      fileType: string;
+    }) => {
+      applyFileSelection(selectedFile, selectedName, selectedType);
+    },
+    [applyFileSelection]
+  );
+
+  const handleUnsupportedFile = useCallback(
+    (selectedFile: File, message: string) => {
+      setUploadMethod('text');
+      setFile(null);
+      setError('');
+      setInfo(message);
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        if (text.length > 50 * 1024) {
+          setError('Content size must be less than 50KB');
+          return;
+        }
+        setContent(text);
+        const baseName = selectedFile.name.includes('.')
+          ? selectedFile.name.slice(0, selectedFile.name.lastIndexOf('.'))
+          : selectedFile.name;
+        setFileName(`${baseName}.txt`);
+        setFileType('custom');
+      };
+      reader.onerror = () => {
+        setError('Could not read file. Paste the content manually.');
+      };
+      reader.readAsText(selectedFile);
+    },
+    []
+  );
+
+  const handleFileNameChange = (value: string) => {
+    setFileName(value);
+    setFileType(inferSecretFileType(value));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const resolvedFileName = fileName.trim() || defaultFileNameForType(fileType);
+    const resolvedFileName = fileName.trim();
+
+    if (!resolvedFileName) {
+      setError('File name is required');
+      return;
+    }
+
+    const nameAllowed =
+      uploadMethod === 'file'
+        ? isAllowedFileUploadName(resolvedFileName)
+        : isAllowedPasteFileName(resolvedFileName);
+
+    if (!nameAllowed) {
+      setError(
+        uploadMethod === 'file'
+          ? 'Invalid file name for upload'
+          : 'Enter a valid file name with extension (e.g. secrets.txt, config.custom)'
+      );
+      return;
+    }
 
     if (uploadMethod === 'file' && !file) {
-      setError('Please select a file');
+      setError('Please select or drop a file');
       return;
     }
     if (uploadMethod === 'text' && !content.trim()) {
@@ -131,9 +169,7 @@ export default function UploadSecretFilePage() {
           fileType
         );
       }
-      router.push(
-        `/projects/${projectId}/components/${componentId}?environment=${encodeURIComponent(environment)}`
-      );
+      router.push(`${componentHref(projectId, componentId)}?environment=${encodeURIComponent(environment)}`);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       setError(axiosErr.response?.data?.error || 'Failed to upload secrets file');
@@ -146,7 +182,7 @@ export default function UploadSecretFilePage() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-6">
         <Link
-          href={`/projects/${projectId}/components/${componentId}?environment=${encodeURIComponent(environment)}`}
+          href={componentHref(projectId, componentId)}
           className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] inline-block mb-4"
         >
           ← Back to {componentName || 'Component'}
@@ -163,6 +199,12 @@ export default function UploadSecretFilePage() {
         </div>
       )}
 
+      {info && (
+        <div className="mb-6 rounded-[var(--radius-sm)] border border-[var(--warning)]/50 bg-[var(--warning)]/10 p-4">
+          <p className="text-sm text-[var(--warning)]">{info}</p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label htmlFor="environment" className="block text-sm font-medium text-[var(--foreground)] mb-2">
@@ -171,7 +213,11 @@ export default function UploadSecretFilePage() {
           <select
             id="environment"
             value={environment}
-            onChange={(e) => setEnvironment(e.target.value)}
+            onChange={(e) => {
+              const nextEnv = e.target.value;
+              setEnvironment(nextEnv);
+              syncEnvironmentUrl(nextEnv);
+            }}
             className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
           >
             {envOptions.map((slug) => (
@@ -180,39 +226,6 @@ export default function UploadSecretFilePage() {
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="fileType" className="block text-sm font-medium text-[var(--foreground)] mb-2">
-              File Type
-            </label>
-            <select
-              id="fileType"
-              value={fileType}
-              onChange={(e) => setFileType(e.target.value)}
-              className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            >
-              {SECRET_FILE_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="fileName" className="block text-sm font-medium text-[var(--foreground)] mb-2">
-              File Name
-            </label>
-            <input
-              id="fileName"
-              type="text"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] font-mono text-sm"
-              required
-            />
-          </div>
         </div>
 
         <div>
@@ -226,6 +239,7 @@ export default function UploadSecretFilePage() {
                 onChange={() => {
                   setUploadMethod('file');
                   setError('');
+                  setInfo('');
                 }}
                 className="mr-2"
               />
@@ -240,6 +254,11 @@ export default function UploadSecretFilePage() {
                   setUploadMethod('text');
                   setFile(null);
                   setError('');
+                  setInfo('');
+                  if (!fileName.trim()) {
+                    setFileName(defaultFileNameForType('custom'));
+                    setFileType('custom');
+                  }
                 }}
                 className="mr-2"
               />
@@ -248,22 +267,25 @@ export default function UploadSecretFilePage() {
           </div>
 
           {uploadMethod === 'file' ? (
-            <div>
-              <input
-                id="file"
-                type="file"
-                accept=".env,.json,.yaml,.yml,.properties,.secrets,.pem,.txt"
-                onChange={handleFileChange}
-                className="block w-full text-sm text-[var(--text-secondary)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[var(--accent-hover)] file:cursor-pointer"
+            <div className="space-y-4">
+              <SecretFileUploadDropArea
+                onFileSelect={handleFileSelect}
+                onUnsupportedFile={handleUnsupportedFile}
+                disabled={loading}
               />
               {file && (
-                <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Selected: <span className="font-medium text-[var(--foreground)]">{file.name}</span> ({(file.size / 1024).toFixed(2)} KB)
+                <p className="text-sm text-[var(--text-muted)]">
+                  Selected: <span className="font-medium text-[var(--foreground)]">{file.name}</span> (
+                  {(file.size / 1024).toFixed(2)} KB)
                 </p>
               )}
             </div>
           ) : (
-            <div>
+            <div className="space-y-4">
+              <p className="text-xs text-[var(--text-muted)]">
+                Use this for unsupported extensions or custom formats. Set the file name and extension below — it will be
+                preserved when downloading.
+              </p>
               <textarea
                 id="content"
                 value={content}
@@ -280,11 +302,47 @@ export default function UploadSecretFilePage() {
                 rows={12}
                 className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] font-mono text-sm placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] resize-y"
               />
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-[var(--text-muted)]">
                 {(content.length / 1024).toFixed(2)} KB / 50 KB maximum
               </p>
             </div>
           )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="fileName" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              File Name
+            </label>
+            <input
+              id="fileName"
+              type="text"
+              value={fileName}
+              onChange={(e) => handleFileNameChange(e.target.value)}
+              readOnly={uploadMethod === 'file' && Boolean(file)}
+              className={`block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] font-mono text-sm ${
+                uploadMethod === 'file' && file ? 'opacity-80' : ''
+              }`}
+              required
+            />
+            {uploadMethod === 'text' && (
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Include the extension (e.g. <code className="font-mono">app.config</code>,{' '}
+                <code className="font-mono">secrets.txt</code>)
+              </p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="fileType" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+              Detected Type
+            </label>
+            <div
+              id="fileType"
+              className="block w-full rounded-md border border-[var(--border)] bg-[var(--surface-hover)] px-3 py-2 text-sm text-[var(--text-secondary)]"
+            >
+              {formatSecretFileType(fileType)}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-md border border-[var(--warning)]/50 bg-[var(--warning)]/10 p-4">
@@ -294,12 +352,7 @@ export default function UploadSecretFilePage() {
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
-          <Button
-            variant="outline"
-            size="md"
-            asLink
-            href={`/projects/${projectId}/components/${componentId}?environment=${encodeURIComponent(environment)}`}
-          >
+          <Button variant="outline" size="md" asLink href={componentHref(projectId, componentId)}>
             Cancel
           </Button>
           <Button

@@ -37,7 +37,10 @@ describe('secret file helpers', () => {
 
   it('validates allowed secret file names', () => {
     expect(isAllowedSecretFileName('.env')).toBe(true);
+    expect(isAllowedSecretFileName('.env.local')).toBe(true);
     expect(isAllowedSecretFileName('secrets.json')).toBe(true);
+    expect(isAllowedSecretFileName('terraform.tfvars')).toBe(true);
+    expect(isAllowedSecretFileName('cert.pem')).toBe(true);
     expect(isAllowedSecretFileName('../.env')).toBe(false);
     expect(isAllowedSecretFileName('archive.zip')).toBe(false);
   });
