@@ -2,6 +2,8 @@
 # *.md
 # !README.md
 
+.cursor/mcp.json
+
 *.env
 *.env.local
 *.env.development.local
@@ -13,3 +15,5 @@
 *.env.development.local
 *.env.test.local
 *.env.production.local
+
+graphify-out/cache/
