@@ -255,6 +255,21 @@ export interface ProjectPermissionsResponse {
   };
   effective: string[];
   grantable: string[];
+  accessibleComponents?: Array<{ id: string; name: string; slug: string }>;
+  accessibleAccounts?: Array<{ id: string; label: string; provider: string }>;
+  grantableComponents?: Array<{ id: string; name: string; slug: string }>;
+  grantableAccounts?: Array<{ id: string; label: string; provider: string }>;
+  resourceScope?: {
+    unrestricted: boolean;
+    componentIds: string[] | null;
+    accountIds: string[] | null;
+  };
+}
+
+export interface ProjectMemberResourcePayload {
+  resourceAccess?: 'full' | 'restricted';
+  componentIds?: string[];
+  accountIds?: string[];
 }
 
 export interface InvitePreview {
@@ -437,7 +452,11 @@ export const projectsAPI = {
   },
   addMember: async (
     projectId: string,
-    data: { userId: string; permission: 'read' | 'write'; permissions?: string[] }
+    data: {
+      userId: string;
+      permission: 'read' | 'write';
+      permissions?: string[];
+    } & ProjectMemberResourcePayload
   ) => {
     const response = await api.post(`/projects/${projectId}/members`, data);
     return response.data;
@@ -467,7 +486,7 @@ export const projectsAPI = {
   updateMember: async (
     projectId: string,
     userId: string,
-    data: { permission?: 'read' | 'write'; permissions?: string[] }
+    data: { permission?: 'read' | 'write'; permissions?: string[] } & ProjectMemberResourcePayload
   ) => {
     const response = await api.patch(`/projects/${projectId}/members/${userId}`, data);
     return response.data;

@@ -37,6 +37,17 @@ import {
   getProjectCapabilitiesFromAccess,
   sanitizeProjectPermissions,
 } from '../lib/permissions';
+import Component from '../models/Component';
+import AssociatedAccount from '../models/AssociatedAccount';
+import {
+  canGrantResourceScope,
+  filterIdsByScope,
+  applyMemberScopeFields,
+  parseRestrictedResourceScope,
+  resolveMemberResourceScope,
+  scopeListsFromStoredIds,
+  validateProjectResourceIds,
+} from '../lib/resourceScope';
 
 const TEAM_PROJECT_COLLABORATION_PERMISSIONS = new Set<ProjectPermission>([
   'project:invite',
@@ -407,6 +418,44 @@ router.get(
           : [...getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions)]
       );
 
+      const [allComponents, allAccounts] = await Promise.all([
+        Component.find({ projectId: project._id }).select('name slug').sort({ name: 1 }),
+        AssociatedAccount.find({ projectId: project._id }).select('label provider').sort({ label: 1 }),
+      ]);
+
+      const accessibleComponents = filterIdsByScope(
+        allComponents,
+        attributes.resourceScope.componentIds,
+        attributes.unrestricted
+      ).map((component) => ({
+        id: component._id.toString(),
+        name: component.name,
+        slug: component.slug,
+      }));
+
+      const accessibleAccounts = filterIdsByScope(
+        allAccounts,
+        attributes.resourceScope.accountIds,
+        attributes.unrestricted
+      ).map((account) => ({
+        id: account._id.toString(),
+        label: account.label,
+        provider: account.provider,
+      }));
+
+      const grantableComponents = attributes.unrestricted
+        ? accessibleComponents
+        : accessibleComponents;
+      const grantableAccounts = attributes.unrestricted
+        ? accessibleAccounts
+        : accessibleAccounts;
+
+      const resourceScope = {
+        unrestricted: attributes.unrestricted,
+        componentIds: attributes.resourceScope.componentIds,
+        accountIds: attributes.resourceScope.accountIds,
+      };
+
       res.json({
         catalog: {
           project: PROJECT_PERMISSIONS,
@@ -420,6 +469,11 @@ router.get(
                 getProjectCapabilitiesFromAccess(attributes.accessLevel ?? 'read', attributes.permissions).has(permission)
               )
         ),
+        accessibleComponents,
+        accessibleAccounts,
+        grantableComponents,
+        grantableAccounts,
+        resourceScope,
       });
     } catch (error) {
       console.error('Get project permissions error:', error instanceof Error ? error.message : 'Failed to fetch permissions');
@@ -453,6 +507,18 @@ router.post(
       .optional()
       .isArray()
       .withMessage('Permissions must be an array'),
+    body('resourceAccess')
+      .optional()
+      .isIn(['full', 'restricted'])
+      .withMessage('resourceAccess must be "full" or "restricted"'),
+    body('componentIds')
+      .optional()
+      .isArray()
+      .withMessage('componentIds must be an array'),
+    body('accountIds')
+      .optional()
+      .isArray()
+      .withMessage('accountIds must be an array'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -465,6 +531,11 @@ router.post(
       const projectId = req.params.id;
       const { userId, permission } = req.body;
       const memberPermissions = sanitizeProjectPermissions(req.body.permissions);
+      const resourceScopeGrant = parseRestrictedResourceScope(req.body);
+      if ('error' in resourceScopeGrant) {
+        res.status(400).json({ error: resourceScopeGrant.error });
+        return;
+      }
 
       const project = (req as AuthRequestWithOrg).project as IProject;
       const inviterContext = await getProjectMemberAttributes(
@@ -481,6 +552,32 @@ router.post(
         res.status(403).json({ error: grantCheck.reason || 'Invalid permission grant' });
         return;
       }
+
+      const scopeGrantCheck = canGrantResourceScope(
+        { ...inviterContext.resourceScope, unrestricted: inviterContext.unrestricted },
+        {
+          resourceAccess: resourceScopeGrant.mode,
+          componentIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.componentIds : undefined,
+          accountIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.accountIds : undefined,
+        }
+      );
+      if (!scopeGrantCheck.allowed) {
+        res.status(403).json({ error: scopeGrantCheck.reason || 'Invalid resource scope grant' });
+        return;
+      }
+
+      if (resourceScopeGrant.mode === 'restricted') {
+        const validation = await validateProjectResourceIds(
+          projectId,
+          resourceScopeGrant.componentIds,
+          resourceScopeGrant.accountIds
+        );
+        if (!validation.ok) {
+          res.status(400).json({ error: validation.error });
+          return;
+        }
+      }
+
 
       const user = await User.findById(userId);
       if (!user) {
@@ -504,14 +601,18 @@ router.post(
       if (existingMemberIndex >= 0) {
         project.members[existingMemberIndex].permission = permission as Permission;
         project.members[existingMemberIndex].permissions = memberPermissions;
+        applyMemberScopeFields(project.members[existingMemberIndex], resourceScopeGrant);
       } else {
-        project.members.push({
+        const newMember: IProject['members'][number] = {
           userId: user._id as mongoose.Types.ObjectId,
           permission: permission as Permission,
           permissions: memberPermissions,
-        });
+        };
+        applyMemberScopeFields(newMember, resourceScopeGrant);
+        project.members.push(newMember);
       }
 
+      project.markModified('members');
       await project.save();
 
       await auditMember(
@@ -523,6 +624,9 @@ router.post(
           email: user.email,
           permission: permission as Permission,
           permissions: memberPermissions,
+          resourceAccess: resourceScopeGrant.mode,
+          componentIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.componentIds : undefined,
+          accountIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.accountIds : undefined,
         },
         req
       );
@@ -559,6 +663,18 @@ router.patch(
       .optional()
       .isArray()
       .withMessage('Permissions must be an array'),
+    body('resourceAccess')
+      .optional()
+      .isIn(['full', 'restricted'])
+      .withMessage('resourceAccess must be "full" or "restricted"'),
+    body('componentIds')
+      .optional()
+      .isArray()
+      .withMessage('componentIds must be an array'),
+    body('accountIds')
+      .optional()
+      .isArray()
+      .withMessage('accountIds must be an array'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -574,9 +690,15 @@ router.patch(
       const nextPermissions = req.body.permissions
         ? sanitizeProjectPermissions(req.body.permissions)
         : undefined;
+      const resourceScopeGrant =
+        req.body.resourceAccess !== undefined ? parseRestrictedResourceScope(req.body) : null;
+      if (resourceScopeGrant && 'error' in resourceScopeGrant) {
+        res.status(400).json({ error: resourceScopeGrant.error });
+        return;
+      }
 
-      if (!nextPermission && !nextPermissions) {
-        res.status(400).json({ error: 'Provide permission and/or permissions to update' });
+      if (!nextPermission && !nextPermissions && !resourceScopeGrant) {
+        res.status(400).json({ error: 'Provide permission, permissions, and/or resourceAccess to update' });
         return;
       }
 
@@ -616,16 +738,52 @@ router.patch(
         return;
       }
 
+      if (resourceScopeGrant) {
+        const scopeGrantCheck = canGrantResourceScope(
+          { ...actorContext.resourceScope, unrestricted: actorContext.unrestricted },
+          {
+            resourceAccess: resourceScopeGrant.mode,
+            componentIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.componentIds : undefined,
+            accountIds: resourceScopeGrant.mode === 'restricted' ? resourceScopeGrant.accountIds : undefined,
+          }
+        );
+        if (!scopeGrantCheck.allowed) {
+          res.status(403).json({ error: scopeGrantCheck.reason || 'Invalid resource scope grant' });
+          return;
+        }
+
+        if (resourceScopeGrant.mode === 'restricted') {
+          const validation = await validateProjectResourceIds(
+            projectId,
+            resourceScopeGrant.componentIds,
+            resourceScopeGrant.accountIds
+          );
+          if (!validation.ok) {
+            res.status(400).json({ error: validation.error });
+            return;
+          }
+        }
+      }
+
       if (nextPermission) {
         project.members[memberIndex].permission = nextPermission;
       }
       if (nextPermissions) {
         project.members[memberIndex].permissions = nextPermissions;
       }
+      if (resourceScopeGrant) {
+        applyMemberScopeFields(project.members[memberIndex], resourceScopeGrant);
+      }
 
+      project.markModified('members');
       await project.save();
 
       const targetUser = await User.findById(userId).select('email');
+      const memberScope = scopeListsFromStoredIds(
+        resolveMemberResourceScope(project.members[memberIndex]),
+        project.members[memberIndex].componentIds,
+        project.members[memberIndex].accountIds
+      );
       await auditMember(
         projectId,
         req.user!.userId,
@@ -635,6 +793,9 @@ router.patch(
           email: targetUser?.email,
           permission: project.members[memberIndex].permission,
           permissions: project.members[memberIndex].permissions,
+          resourceAccess: resolveMemberResourceScope(project.members[memberIndex]),
+          componentIds: memberScope.componentIds ?? undefined,
+          accountIds: memberScope.accountIds ?? undefined,
         },
         req
       );

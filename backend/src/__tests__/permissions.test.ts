@@ -142,3 +142,102 @@ describe('permission sanitization', () => {
     expect(sanitized).toEqual(['project:panic', 'project:export']);
   });
 });
+
+describe('resource scope', () => {
+  it('treats missing resourceScope as unrestricted', async () => {
+    const { scopeListsFromStoredIds } = await import('../lib/resourceScope');
+    expect(scopeListsFromStoredIds('full', undefined, undefined)).toEqual({
+      componentIds: null,
+      accountIds: null,
+    });
+    expect(scopeListsFromStoredIds(undefined, undefined, undefined)).toEqual({
+      componentIds: null,
+      accountIds: null,
+    });
+  });
+
+  it('treats restricted scope with empty arrays as no access', async () => {
+    const { scopeListsFromStoredIds } = await import('../lib/resourceScope');
+    expect(scopeListsFromStoredIds('restricted', [], [])).toEqual({
+      componentIds: [],
+      accountIds: [],
+    });
+  });
+
+  it('stores restricted scope explicitly on members', async () => {
+    const { applyMemberScopeFields, resolveMemberResourceScope, scopeListsFromMember } = await import(
+      '../lib/resourceScope'
+    );
+    const member: {
+      resourceScope?: 'full' | 'restricted';
+      componentIds?: import('mongoose').Types.ObjectId[];
+      accountIds?: import('mongoose').Types.ObjectId[];
+    } = {};
+
+    applyMemberScopeFields(member, {
+      mode: 'restricted',
+      componentIds: ['507f1f77bcf86cd799439011'],
+      accountIds: [],
+    });
+
+    expect(member.resourceScope).toBe('restricted');
+    expect(resolveMemberResourceScope(member)).toBe('restricted');
+    expect(scopeListsFromMember(member)).toEqual({
+      componentIds: ['507f1f77bcf86cd799439011'],
+      accountIds: [],
+    });
+  });
+
+  it('allows unrestricted actors to access any scoped resource id', async () => {
+    const { canAccessScopedResource } = await import('../lib/resourceScope');
+    expect(canAccessScopedResource(null, 'abc', true)).toBe(true);
+    expect(canAccessScopedResource(['abc'], 'def', true)).toBe(true);
+  });
+
+  it('enforces allowlists for restricted actors', async () => {
+    const { canAccessScopedResource } = await import('../lib/resourceScope');
+    expect(canAccessScopedResource(null, 'abc', false)).toBe(true);
+    expect(canAccessScopedResource(['abc'], 'abc', false)).toBe(true);
+    expect(canAccessScopedResource(['abc'], 'def', false)).toBe(false);
+    expect(canAccessScopedResource([], 'abc', false)).toBe(false);
+  });
+
+  it('blocks restricted actors from granting full resource access', async () => {
+    const { canGrantResourceScope } = await import('../lib/resourceScope');
+    const actor = {
+      unrestricted: false,
+      componentIds: ['a'],
+      accountIds: null,
+    };
+    expect(canGrantResourceScope(actor, { resourceAccess: 'full' }).allowed).toBe(false);
+    expect(
+      canGrantResourceScope(actor, {
+        resourceAccess: 'restricted',
+        componentIds: ['a'],
+        accountIds: [],
+      }).allowed
+    ).toBe(true);
+    expect(
+      canGrantResourceScope(actor, {
+        resourceAccess: 'restricted',
+        componentIds: ['b'],
+        accountIds: [],
+      }).allowed
+    ).toBe(false);
+  });
+
+  it('requires at least one resource for restricted grants', async () => {
+    const { parseRestrictedResourceScope } = await import('../lib/resourceScope');
+    expect(parseRestrictedResourceScope({ resourceAccess: 'full' })).toEqual({ mode: 'full' });
+    expect(parseRestrictedResourceScope({ resourceAccess: 'restricted', componentIds: [], accountIds: [] })).toEqual({
+      error: 'Select at least one component or account for restricted access',
+    });
+    expect(
+      parseRestrictedResourceScope({ resourceAccess: 'restricted', componentIds: ['507f1f77bcf86cd799439011'] })
+    ).toEqual({
+      mode: 'restricted',
+      componentIds: ['507f1f77bcf86cd799439011'],
+      accountIds: [],
+    });
+  });
+});

@@ -6,6 +6,15 @@ import { arraysEqual } from '@/lib/formUtils';
 import { Button } from '@/components/ui/Button';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { ResourceOption, ResourceScopePicker } from '@/components/ui/ResourceScopePicker';
+
+export interface ProjectMemberSaveData {
+  permission: 'read' | 'write';
+  permissions: ProjectPermission[];
+  resourceAccess: 'full' | 'restricted';
+  componentIds: string[];
+  accountIds: string[];
+}
 
 interface EditProjectMemberModalProps {
   memberName: string;
@@ -13,7 +22,15 @@ interface EditProjectMemberModalProps {
   permission: 'read' | 'write';
   capabilities: ProjectPermission[];
   grantablePermissions: ProjectPermission[];
-  onSave: (data: { permission: 'read' | 'write'; permissions: ProjectPermission[] }) => Promise<void>;
+  resourceAccess: 'full' | 'restricted';
+  componentIds: string[];
+  accountIds: string[];
+  grantableComponents: ResourceOption[];
+  grantableAccounts: ResourceOption[];
+  radioName?: string;
+  projectId?: string;
+  loading?: boolean;
+  onSave: (data: ProjectMemberSaveData) => Promise<void>;
   onClose: () => void;
 }
 
@@ -23,24 +40,51 @@ export function EditProjectMemberModal({
   permission: initialPermission,
   capabilities: initialCapabilities,
   grantablePermissions,
+  resourceAccess: initialResourceAccess,
+  componentIds: initialComponentIds,
+  accountIds: initialAccountIds,
+  grantableComponents,
+  grantableAccounts,
+  radioName = 'editMemberResourceAccess',
+  projectId,
+  loading = false,
   onSave,
   onClose,
 }: EditProjectMemberModalProps) {
   const [permission, setPermission] = useState<'read' | 'write'>(initialPermission);
   const [capabilities, setCapabilities] = useState<ProjectPermission[]>(initialCapabilities);
+  const [resourceAccess, setResourceAccess] = useState<'full' | 'restricted'>(initialResourceAccess);
+  const [selectedComponentIds, setSelectedComponentIds] = useState<string[]>(initialComponentIds);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>(initialAccountIds);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const hasChanges =
-    permission !== initialPermission || !arraysEqual(capabilities, initialCapabilities);
+    permission !== initialPermission ||
+    !arraysEqual(capabilities, initialCapabilities) ||
+    resourceAccess !== initialResourceAccess ||
+    !arraysEqual(selectedComponentIds, initialComponentIds) ||
+    !arraysEqual(selectedAccountIds, initialAccountIds);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (resourceAccess === 'restricted' && selectedComponentIds.length === 0 && selectedAccountIds.length === 0) {
+      setError('Select at least one component or account for restricted access');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
 
     try {
-      await onSave({ permission, permissions: capabilities });
+      await onSave({
+        permission,
+        permissions: capabilities,
+        resourceAccess,
+        componentIds: selectedComponentIds,
+        accountIds: selectedAccountIds,
+      });
       onClose();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -99,6 +143,20 @@ export function EditProjectMemberModal({
             onChange={setCapabilities}
           />
         </div>
+
+        <ResourceScopePicker
+          grantableComponents={grantableComponents}
+          grantableAccounts={grantableAccounts}
+          resourceAccess={resourceAccess}
+          selectedComponentIds={selectedComponentIds}
+          selectedAccountIds={selectedAccountIds}
+          onResourceAccessChange={setResourceAccess}
+          onComponentIdsChange={setSelectedComponentIds}
+          onAccountIdsChange={setSelectedAccountIds}
+          radioName={radioName}
+          projectId={projectId}
+          loading={loading}
+        />
 
         <ModalActions className="pt-2 border-t border-[var(--border)]">
           <Button type="button" variant="outline" size="md" onClick={onClose} disabled={submitting}>

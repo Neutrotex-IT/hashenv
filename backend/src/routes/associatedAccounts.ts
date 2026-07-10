@@ -3,7 +3,9 @@ import { body, validationResult } from 'express-validator';
 import AssociatedAccount, { ACCOUNT_PROVIDERS } from '../models/AssociatedAccount';
 import { encryptProjectData, decryptProjectData } from '../crypto';
 import { authenticate, AuthRequest } from '../lib/auth';
-import { requireProjectAccess } from '../lib/authorization';
+import { requireProjectAccess, requireAccountAccess, AuthRequestWithOrg } from '../lib/authorization';
+import { getProjectMemberAttributes } from '../lib/abac';
+import { filterIdsByScope, removeResourceFromMemberScopes } from '../lib/resourceScope';
 import { validateProjectId, isValidObjectId } from '../middleware/validation';
 import { uploadRateLimiter } from '../middleware/security';
 import { auditAccount } from '../lib/audit';
@@ -97,6 +99,17 @@ router.post(
       }
 
       const projectId = req.params.projectId;
+      const project = (req as AuthRequestWithOrg).project!;
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+      if (attributes.resourceScope.accountIds !== null) {
+        res.status(403).json({ error: 'Access denied: cannot create accounts with restricted scope' });
+        return;
+      }
+
       const {
         label,
         provider,
@@ -198,12 +211,25 @@ router.get(
         return;
       }
 
+      const project = (req as AuthRequestWithOrg).project!;
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+
       const accounts = await AssociatedAccount.find({ projectId })
         .populate('createdBy', 'name email')
         .select(CREDENTIALS_SELECT)
         .sort({ label: 1 });
 
-      res.json(accounts);
+      const visible = filterIdsByScope(
+        accounts,
+        attributes.resourceScope.accountIds,
+        attributes.unrestricted
+      );
+
+      res.json(visible);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error('Get associated accounts error:', errMsg);
@@ -220,7 +246,7 @@ router.get(
   '/:projectId/accounts/:accountId/credentials',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('read'),
+  requireAccountAccess('read'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
@@ -281,7 +307,7 @@ router.put(
   '/:projectId/accounts/:accountId',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('write'),
+  requireAccountAccess('write'),
   [
     body('label')
       .optional()
@@ -463,7 +489,7 @@ router.delete(
   '/:projectId/accounts/:accountId',
   authenticate,
   validateProjectId(),
-  requireProjectAccess('write'),
+  requireAccountAccess('write'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const projectId = req.params.projectId;
@@ -491,6 +517,8 @@ router.delete(
           req
         );
       }
+
+      await removeResourceFromMemberScopes(projectId, 'accountIds', account._id.toString());
 
       res.json({ message: 'Associated account deleted successfully' });
     } catch (error) {

@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { projectsAPI, OrgMember, ProjectInvite } from '@/lib/api';
+import { projectsAPI, OrgMember, ProjectInvite, componentsAPI, accountsAPI } from '@/lib/api';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Button } from '@/components/ui/Button';
 import { OrgMemberSelect } from '@/components/ui/OrgMemberSelect';
 import { ProjectPermissionPicker } from '@/components/ui/PermissionPicker';
-import { EditProjectMemberModal } from '@/components/ui/EditProjectMemberModal';
+import { EditProjectMemberModal, type ProjectMemberSaveData } from '@/components/ui/EditProjectMemberModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
+import { formatMemberResourceScope, ResourceOption, ResourceScopePicker } from '@/components/ui/ResourceScopePicker';
 import { formatPermission, formatProjectPermission, ProjectPermission } from '@/lib/permissions';
 import { ProjectPageHeader } from '@/components/ProjectPageHeader';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
@@ -22,6 +23,31 @@ import { queryKeys } from '@/lib/queryKeys';
 
 interface Project extends ProjectDetail {}
 
+function normalizeIdList(ids?: Array<string | { toString(): string }>): string[] | undefined {
+  if (!Array.isArray(ids)) {
+    return undefined;
+  }
+  return ids.map((id) => (typeof id === 'string' ? id : id.toString()));
+}
+
+function memberResourceState(member: {
+  resourceScope?: 'full' | 'restricted';
+  componentIds?: Array<string | { toString(): string }>;
+  accountIds?: Array<string | { toString(): string }>;
+}) {
+  const componentIds = normalizeIdList(member.componentIds);
+  const accountIds = normalizeIdList(member.accountIds);
+  const resourceScope =
+    member.resourceScope ??
+    (componentIds !== undefined || accountIds !== undefined ? 'restricted' : 'full');
+
+  return {
+    resourceAccess: resourceScope === 'restricted' ? ('restricted' as const) : ('full' as const),
+    componentIds: componentIds ?? [],
+    accountIds: accountIds ?? [],
+  };
+}
+
 export default function ManageMembersPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -33,6 +59,9 @@ export default function ManageMembersPage() {
   const [selectedMember, setSelectedMember] = useState<OrgMember | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<'read' | 'write'>('read');
   const [selectedCapabilities, setSelectedCapabilities] = useState<ProjectPermission[]>([]);
+  const [resourceAccess, setResourceAccess] = useState<'full' | 'restricted'>('full');
+  const [selectedComponentIds, setSelectedComponentIds] = useState<string[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -42,9 +71,17 @@ export default function ManageMembersPage() {
     email: string;
     permission: 'read' | 'write';
     permissions: ProjectPermission[];
+    resourceAccess: 'full' | 'restricted';
+    componentIds: string[];
+    accountIds: string[];
   } | null>(null);
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const [createOrgModalOpen, setCreateOrgModalOpen] = useState(false);
+  const [assignableResources, setAssignableResources] = useState<{
+    components: ResourceOption[];
+    accounts: ResourceOption[];
+  }>({ components: [], accounts: [] });
+  const [resourcesLoading, setResourcesLoading] = useState(false);
 
   const { confirm } = useConfirm();
   const { success: toastSuccess } = useToast();
@@ -52,6 +89,8 @@ export default function ManageMembersPage() {
   const grantablePermissions = (permissionInfo?.grantable ?? []) as ProjectPermission[];
   const canInvite = permissionInfo?.effective.includes('project:invite') ?? false;
   const canManageMembers = permissionInfo?.effective.includes('project:manage_members') ?? false;
+  const grantableComponents = assignableResources.components;
+  const grantableAccounts = assignableResources.accounts;
   const loading = projectLoading || permissionsLoading || invitesLoading;
 
   useEffect(() => {
@@ -60,6 +99,69 @@ export default function ManageMembersPage() {
     }
     void loadInvites();
   }, [projectId, permissionInfo, permissionsLoading]);
+
+  const loadAssignableResources = async () => {
+    if (!permissionInfo || (!canInvite && !canManageMembers)) {
+      return;
+    }
+
+    try {
+      setResourcesLoading(true);
+      const [components, accounts] = await Promise.all([
+        componentsAPI.list(projectId),
+        accountsAPI.list(projectId) as Promise<Array<{ _id: string; label: string; provider: string }>>,
+      ]);
+
+      const unrestricted = permissionInfo.resourceScope?.unrestricted ?? true;
+      const grantableComponentIds = permissionInfo.grantableComponents?.map((component) => component.id);
+      const grantableAccountIds = permissionInfo.grantableAccounts?.map((account) => account.id);
+
+      const filterGrantable = <T extends { _id: string }>(items: T[], grantableIds?: string[]) => {
+        if (unrestricted || grantableIds === undefined) {
+          return items;
+        }
+        const allowed = new Set(grantableIds);
+        return items.filter((item) => allowed.has(item._id));
+      };
+
+      setAssignableResources({
+        components: filterGrantable(components, grantableComponentIds).map((component) => ({
+          id: component._id,
+          label: component.name,
+          description: component.slug,
+        })),
+        accounts: filterGrantable(accounts, grantableAccountIds).map((account) => ({
+          id: account._id,
+          label: account.label,
+          description: account.provider,
+        })),
+      });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setError(axiosErr.response?.data?.error || 'Failed to load project resources');
+      setAssignableResources({
+        components: (permissionInfo.grantableComponents ?? []).map((component) => ({
+          id: component.id,
+          label: component.name,
+          description: component.slug,
+        })),
+        accounts: (permissionInfo.grantableAccounts ?? []).map((account) => ({
+          id: account.id,
+          label: account.label,
+          description: account.provider,
+        })),
+      });
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (permissionsLoading || !permissionInfo) {
+      return;
+    }
+    void loadAssignableResources();
+  }, [projectId, permissionInfo, permissionsLoading, canInvite, canManageMembers]);
 
   const loadInvites = async () => {
     if (!permissionInfo) {
@@ -86,12 +188,18 @@ export default function ManageMembersPage() {
     await queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) });
     await queryClient.invalidateQueries({ queryKey: queryKeys.projectPermissions(projectId) });
     await loadInvites();
+    await loadAssignableResources();
   };
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMember) {
       setError('Please select an organization member');
+      return;
+    }
+
+    if (resourceAccess === 'restricted' && selectedComponentIds.length === 0 && selectedAccountIds.length === 0) {
+      setError('Select at least one component or account for restricted access');
       return;
     }
 
@@ -103,11 +211,18 @@ export default function ManageMembersPage() {
         userId: selectedMember.user._id,
         permission: selectedPermission,
         permissions: selectedCapabilities,
+        resourceAccess,
+        ...(resourceAccess === 'restricted'
+          ? { componentIds: selectedComponentIds, accountIds: selectedAccountIds }
+          : {}),
       });
       await loadData();
       setSelectedMember(null);
       setSelectedPermission('read');
       setSelectedCapabilities([]);
+      setResourceAccess('full');
+      setSelectedComponentIds([]);
+      setSelectedAccountIds([]);
       toastSuccess('Member added');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to add member');
@@ -152,11 +267,15 @@ export default function ManageMembersPage() {
     }
   };
 
-  const handleUpdateMember = async (
-    userId: string,
-    data: { permission: 'read' | 'write'; permissions: ProjectPermission[] }
-  ) => {
-    await projectsAPI.updateMember(projectId, userId, data);
+  const handleUpdateMember = async (userId: string, data: ProjectMemberSaveData) => {
+    await projectsAPI.updateMember(projectId, userId, {
+      permission: data.permission,
+      permissions: data.permissions,
+      resourceAccess: data.resourceAccess,
+      ...(data.resourceAccess === 'restricted'
+        ? { componentIds: data.componentIds, accountIds: data.accountIds }
+        : {}),
+    });
     toastSuccess('Member updated');
     await loadData();
   };
@@ -377,6 +496,20 @@ export default function ManageMembersPage() {
                     />
                   </div>
 
+                  <ResourceScopePicker
+                    grantableComponents={grantableComponents}
+                    grantableAccounts={grantableAccounts}
+                    resourceAccess={resourceAccess}
+                    selectedComponentIds={selectedComponentIds}
+                    selectedAccountIds={selectedAccountIds}
+                    onResourceAccessChange={setResourceAccess}
+                    onComponentIdsChange={setSelectedComponentIds}
+                    onAccountIdsChange={setSelectedAccountIds}
+                    radioName="addMemberResourceAccess"
+                    projectId={projectId}
+                    loading={resourcesLoading}
+                  />
+
                   <div className="flex justify-end pt-4 border-t border-[var(--border)]">
                     <Button variant="primary" size="md" type="submit" disabled={submitting || !selectedMember}>
                       {submitting ? 'Adding...' : 'Add Member'}
@@ -399,6 +532,7 @@ export default function ManageMembersPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">User</th>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Access</th>
                         <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Capabilities</th>
+                        <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Resources</th>
                         {canManageMembers && (
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Actions</th>
                         )}
@@ -428,19 +562,26 @@ export default function ManageMembersPage() {
                                 <span className="text-xs text-[var(--text-muted)]">None</span>
                               )}
                             </td>
+                            <td className="hidden lg:table-cell px-6 py-4 text-sm text-[var(--text-secondary)]">
+                              <span className="text-xs">{formatMemberResourceScope(member)}</span>
+                            </td>
                             {canManageMembers && (
                               <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                 <div className="flex items-center justify-end gap-3">
                                   <button
-                                    onClick={() =>
+                                    onClick={() => {
+                                      const scope = memberResourceState(member);
                                       setEditingMember({
                                         userId,
                                         name: userName,
                                         email: userEmail,
                                         permission: member.permission,
                                         permissions: (member.permissions ?? []) as ProjectPermission[],
-                                      })
-                                    }
+                                        resourceAccess: scope.resourceAccess,
+                                        componentIds: scope.componentIds,
+                                        accountIds: scope.accountIds,
+                                      });
+                                    }}
                                     className="text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
                                   >
                                     Edit
@@ -472,6 +613,14 @@ export default function ManageMembersPage() {
           permission={editingMember.permission}
           capabilities={editingMember.permissions}
           grantablePermissions={grantablePermissions}
+          resourceAccess={editingMember.resourceAccess}
+          componentIds={editingMember.componentIds}
+          accountIds={editingMember.accountIds}
+          grantableComponents={grantableComponents}
+          grantableAccounts={grantableAccounts}
+          radioName="editMemberResourceAccess"
+          projectId={projectId}
+          loading={resourcesLoading}
           onSave={(data) => handleUpdateMember(editingMember.userId, data)}
           onClose={() => setEditingMember(null)}
         />
