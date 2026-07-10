@@ -14,9 +14,9 @@ interface ToastProps {
 const EXIT_MS = 160;
 
 const styles: Record<ToastType, string> = {
-  success: 'border-green-500/30 bg-green-500/10 text-green-400',
-  error: 'border-[var(--error)]/50 bg-[var(--error)]/10 text-[var(--error)]',
-  info: 'border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]',
+  success: 'border-green-500/50 bg-[var(--toast-success-bg)] text-green-400',
+  error: 'border-[var(--error)]/60 bg-[var(--toast-error-bg)] text-[var(--error)]',
+  info: 'border-[var(--border)] bg-[var(--toast-info-bg)] text-[var(--foreground)]',
 };
 
 export function Toast({ message, type, onDismiss, duration = 4000 }: ToastProps) {

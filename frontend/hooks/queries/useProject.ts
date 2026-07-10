@@ -22,6 +22,9 @@ export interface ProjectDetail {
     };
     permission: 'read' | 'write';
     permissions?: string[];
+    resourceScope?: 'full' | 'restricted';
+    componentIds?: string[];
+    accountIds?: string[];
   }>;
   createdAt: string;
 }

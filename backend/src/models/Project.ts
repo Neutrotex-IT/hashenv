@@ -6,6 +6,10 @@ export interface IProjectMember {
   permission: 'read' | 'write';
   /** ABAC capabilities beyond read/write access. */
   permissions: ProjectPermission[];
+  /** When restricted, member can only access listed component/account ids (empty array = none). */
+  resourceScope?: 'full' | 'restricted';
+  componentIds?: mongoose.Types.ObjectId[];
+  accountIds?: mongoose.Types.ObjectId[];
 }
 
 export interface IProject extends Document {
@@ -33,6 +37,19 @@ const ProjectMemberSchema: Schema = new Schema(
     permissions: {
       type: [String],
       default: [],
+    },
+    resourceScope: {
+      type: String,
+      enum: ['full', 'restricted'],
+      default: undefined,
+    },
+    componentIds: {
+      type: [Schema.Types.ObjectId],
+      default: undefined,
+    },
+    accountIds: {
+      type: [Schema.Types.ObjectId],
+      default: undefined,
     },
   },
   { _id: false }

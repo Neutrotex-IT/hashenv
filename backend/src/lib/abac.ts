@@ -10,6 +10,7 @@ import {
   sanitizeOrgPermissions,
   sanitizeProjectPermissions,
 } from './permissions';
+import { ResourceScopeLists, scopeListsFromMember } from './resourceScope';
 
 export interface OrgMemberAttributes {
   role: OrgRole;
@@ -119,16 +120,20 @@ export function canManageOrgMember(
   return actor.role === 'member' && targetRole === 'member';
 }
 
-export async function getProjectMemberAttributes(
-  userId: string,
-  project: IProject,
-  orgRole: OrgRole | null
-): Promise<{
+export interface ProjectMemberAttributes {
   accessLevel: 'read' | 'write' | null;
   permissions: ProjectPermission[];
   isOwner: boolean;
   isOrgElevated: boolean;
-}> {
+  unrestricted: boolean;
+  resourceScope: ResourceScopeLists;
+}
+
+export async function getProjectMemberAttributes(
+  userId: string,
+  project: IProject,
+  orgRole: OrgRole | null
+): Promise<ProjectMemberAttributes> {
   const isOwner = project.createdBy.toString() === userId;
   const isOrgElevated = orgRole === 'owner' || orgRole === 'admin';
 
@@ -138,12 +143,21 @@ export async function getProjectMemberAttributes(
       permissions: sanitizeProjectPermissions([]),
       isOwner,
       isOrgElevated,
+      unrestricted: true,
+      resourceScope: { componentIds: null, accountIds: null },
     };
   }
 
   const member = project.members.find((m) => m.userId.toString() === userId);
   if (!member) {
-    return { accessLevel: null, permissions: [], isOwner: false, isOrgElevated: false };
+    return {
+      accessLevel: null,
+      permissions: [],
+      isOwner: false,
+      isOrgElevated: false,
+      unrestricted: false,
+      resourceScope: { componentIds: [], accountIds: [] },
+    };
   }
 
   return {
@@ -151,6 +165,8 @@ export async function getProjectMemberAttributes(
     permissions: sanitizeProjectPermissions(member.permissions),
     isOwner: false,
     isOrgElevated: false,
+    unrestricted: false,
+    resourceScope: scopeListsFromMember(member),
   };
 }
 

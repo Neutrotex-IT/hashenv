@@ -11,6 +11,7 @@ import {
   hasProjectCapability,
 } from './abac';
 import { OrgPermission, ProjectPermission } from './permissions';
+import { canAccessScopedResource } from './resourceScope';
 
 export type Permission = 'read' | 'write';
 
@@ -447,9 +448,80 @@ export function requireComponentAccess(requiredPermission: Permission = 'read') 
         return;
       }
 
+      if (
+        !canAccessScopedResource(
+          attributes.resourceScope.componentIds,
+          loadedComponent.component._id.toString(),
+          attributes.unrestricted
+        )
+      ) {
+        res.status(403).json({ error: 'Access denied: component not in your scope' });
+        return;
+      }
+
       next();
     } catch (error) {
       console.error('Component authorization error:', error instanceof Error ? error.message : 'Authorization error');
+      res.status(500).json({ error: 'Authorization error' });
+    }
+  };
+}
+
+/**
+ * Middleware to verify account belongs to the project and user has scoped access.
+ */
+export function requireAccountAccess(requiredPermission: Permission = 'read') {
+  return async (
+    req: AuthRequestWithOrg,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const projectId = req.params.projectId || req.params.id;
+      const accountId = req.params.accountId;
+
+      if (!projectId || !accountId) {
+        res.status(400).json({ error: 'Project ID and account ID are required' });
+        return;
+      }
+
+      const loadedProject = await loadProjectContext(req, projectId);
+      if (!loadedProject.ok) {
+        res.status(loadedProject.status).json({ error: loadedProject.error });
+        return;
+      }
+
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        loadedProject.project,
+        req.orgRole ?? null
+      );
+
+      const capability = requiredPermission === 'write' ? 'project:write' : 'project:read';
+      if (!hasProjectCapability(attributes, capability)) {
+        res.status(403).json({ error: `Access denied: ${requiredPermission} permission required` });
+        return;
+      }
+
+      if (!/^[0-9a-fA-F]{24}$/.test(accountId)) {
+        res.status(400).json({ error: 'Invalid account ID format' });
+        return;
+      }
+
+      if (
+        !canAccessScopedResource(
+          attributes.resourceScope.accountIds,
+          accountId,
+          attributes.unrestricted
+        )
+      ) {
+        res.status(403).json({ error: 'Access denied: account not in your scope' });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Account authorization error:', error instanceof Error ? error.message : 'Authorization error');
       res.status(500).json({ error: 'Authorization error' });
     }
   };

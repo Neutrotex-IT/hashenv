@@ -112,6 +112,52 @@ export function canAccessProjectMembers(effectivePermissions: string[]): boolean
   );
 }
 
+export interface ProjectResourceScope {
+  unrestricted: boolean;
+  componentIds: string[] | null;
+  accountIds: string[] | null;
+}
+
+export function canViewComponentsTab(resourceScope?: ProjectResourceScope): boolean {
+  if (!resourceScope || resourceScope.unrestricted || resourceScope.componentIds === null) {
+    return true;
+  }
+  return resourceScope.componentIds.length > 0;
+}
+
+export function canViewAccountsTab(resourceScope?: ProjectResourceScope): boolean {
+  if (!resourceScope || resourceScope.unrestricted || resourceScope.accountIds === null) {
+    return true;
+  }
+  return resourceScope.accountIds.length > 0;
+}
+
+export function canCreateProjectComponents(
+  effectivePermissions: string[],
+  resourceScope?: ProjectResourceScope
+): boolean {
+  if (!canWriteProject(effectivePermissions)) {
+    return false;
+  }
+  if (!resourceScope || resourceScope.unrestricted || resourceScope.componentIds === null) {
+    return true;
+  }
+  return false;
+}
+
+export function canCreateProjectAccounts(
+  effectivePermissions: string[],
+  resourceScope?: ProjectResourceScope
+): boolean {
+  if (!canWriteProject(effectivePermissions)) {
+    return false;
+  }
+  if (!resourceScope || resourceScope.unrestricted || resourceScope.accountIds === null) {
+    return true;
+  }
+  return false;
+}
+
 export function formatPermission(permission: Permission): string {
   return permission === 'read' ? 'Read Only' : 'Read/Write';
 }

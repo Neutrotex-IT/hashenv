@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "backend/src/__tests__/permissions.test.ts": {
-    "mtime": 1783586100.1694434,
-    "ast_hash": "079f037ece3b8fb143f11de88b1d4a1d",
+    "mtime": 1783672994.4044995,
+    "ast_hash": "1ceabb12bc6e18cf3c4997f392081bf3",
     "semantic_hash": ""
   },
   "backend/src/crypto/bootstrap.ts": {
@@ -70,9 +70,9 @@
     "semantic_hash": ""
   },
   "backend/src/lib/abac.ts": {
-    "mtime": 1782569476.8297436,
-    "ast_hash": "fef041f0f095ef33207317ebbc92db60",
-    "semantic_hash": "fef041f0f095ef33207317ebbc92db60"
+    "mtime": 1783671403.4321144,
+    "ast_hash": "db5961d5fdf971cc7e95cedabec09b09",
+    "semantic_hash": ""
   },
   "backend/src/lib/apiTokenAuth.ts": {
     "mtime": 1782569476.8297436,
@@ -95,8 +95,8 @@
     "semantic_hash": "7c13085b43e5f8410b4cfa14b8367766"
   },
   "backend/src/lib/authorization.ts": {
-    "mtime": 1783517349.2209222,
-    "ast_hash": "b5bb89f1bda21bb60896918532d42f08",
+    "mtime": 1783671417.3729637,
+    "ast_hash": "bef21d2502d3bdb1474463c42686cf67",
     "semantic_hash": ""
   },
   "backend/src/lib/autoFlush.ts": {
@@ -215,9 +215,9 @@
     "semantic_hash": "6987e4a5af205eaab28bcb21467a2bb5"
   },
   "backend/src/models/Project.ts": {
-    "mtime": 1782569476.8514338,
-    "ast_hash": "b7024aa8cc7be9ac6e963cd5910037f1",
-    "semantic_hash": "b7024aa8cc7be9ac6e963cd5910037f1"
+    "mtime": 1783672930.7764993,
+    "ast_hash": "159917f027cc3671e5b3b3ea080f3cbe",
+    "semantic_hash": ""
   },
   "backend/src/models/ProjectApiToken.ts": {
     "mtime": 1782569476.8514338,
@@ -260,9 +260,9 @@
     "semantic_hash": "f390dc614838306874be97e6f2f35fac"
   },
   "backend/src/routes/associatedAccounts.ts": {
-    "mtime": 1782569476.8612976,
-    "ast_hash": "859672ef94f1b93785e0e72e858f239d",
-    "semantic_hash": "859672ef94f1b93785e0e72e858f239d"
+    "mtime": 1783671541.579737,
+    "ast_hash": "d7818a44bcf02753881154e7b3a78575",
+    "semantic_hash": ""
   },
   "backend/src/routes/auth.ts": {
     "mtime": 1783485459.1597767,
@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "backend/src/routes/projects.ts": {
-    "mtime": 1783518859.579317,
-    "ast_hash": "7f0e66ed87538318e215b2e1102bb5e4",
+    "mtime": 1783672987.2153168,
+    "ast_hash": "ed44990ba0a5f9ea50211e56709fccf2",
     "semantic_hash": ""
   },
   "backend/src/routes/settings.ts": {
@@ -390,13 +390,13 @@
     "semantic_hash": "42212ad9ca09e14a77f9e7343edc62be"
   },
   "frontend/app/projects/[id]/members/page.tsx": {
-    "mtime": 1782569476.9076636,
-    "ast_hash": "61a9df59257ac3a0460b229672a18faf",
-    "semantic_hash": "61a9df59257ac3a0460b229672a18faf"
+    "mtime": 1783673001.7072396,
+    "ast_hash": "8c251bc418a13568022c56007b4ce584",
+    "semantic_hash": ""
   },
   "frontend/app/projects/[id]/page.tsx": {
-    "mtime": 1783518326.4752371,
-    "ast_hash": "7d4c299e2900881dc378a32fc5c960a5",
+    "mtime": 1783671763.1333616,
+    "ast_hash": "20f88390c7e9383faae7ced538affb63",
     "semantic_hash": ""
   },
   "frontend/app/projects/[id]/settings/page.tsx": {
@@ -535,9 +535,9 @@
     "semantic_hash": "e7e512a732341319547c6c1dbc6e2867"
   },
   "frontend/components/ui/EditProjectMemberModal.tsx": {
-    "mtime": 1782569476.9303606,
-    "ast_hash": "aa50ce2b0e0d0fcdba20bdefd7460fa1",
-    "semantic_hash": "aa50ce2b0e0d0fcdba20bdefd7460fa1"
+    "mtime": 1783672236.706639,
+    "ast_hash": "8053bbe7cd183bfa70089e2315c3727d",
+    "semantic_hash": ""
   },
   "frontend/components/ui/EffectivePermissionsPanel.tsx": {
     "mtime": 1783518289.8821068,
@@ -600,9 +600,9 @@
     "semantic_hash": "e09b7b5f346f02606389339be2f620d1"
   },
   "frontend/components/ui/Toast.tsx": {
-    "mtime": 1782569476.9405172,
-    "ast_hash": "04b87d3640484bba9732f102df360219",
-    "semantic_hash": "04b87d3640484bba9732f102df360219"
+    "mtime": 1783668492.6857176,
+    "ast_hash": "34ba5eec7f773762ae19fb33dd57f55a",
+    "semantic_hash": ""
   },
   "frontend/contexts/AuthContext.tsx": {
     "mtime": 1782569476.9420164,
@@ -635,9 +635,9 @@
     "semantic_hash": "dfa1f5f6a7037bf39dc510f30b180002"
   },
   "frontend/hooks/queries/useProject.ts": {
-    "mtime": 1782569476.9454625,
-    "ast_hash": "f1286f37fa96cabac8f7e74534b1e2f7",
-    "semantic_hash": "f1286f37fa96cabac8f7e74534b1e2f7"
+    "mtime": 1783673002.5116217,
+    "ast_hash": "bbd59089dbeb2b99c92ef3a4cf3eb5e6",
+    "semantic_hash": ""
   },
   "frontend/hooks/queries/useProjectEnvironments.ts": {
     "mtime": 1782569476.9464583,
@@ -655,8 +655,8 @@
     "semantic_hash": "400c629be830579997c0b3e43974cb4f"
   },
   "frontend/lib/api.ts": {
-    "mtime": 1783523910.837409,
-    "ast_hash": "379de5b5d3bf5641d393b8f6c4f0392e",
+    "mtime": 1783671638.2094965,
+    "ast_hash": "ccc7903d45a8c7cee347f4ea64086b49",
     "semantic_hash": ""
   },
   "frontend/lib/apiErrors.ts": {
@@ -690,9 +690,9 @@
     "semantic_hash": ""
   },
   "frontend/lib/permissions.ts": {
-    "mtime": 1782569476.9515648,
-    "ast_hash": "56c942729ee304dd142067e3ba9312ff",
-    "semantic_hash": "56c942729ee304dd142067e3ba9312ff"
+    "mtime": 1783671643.5424962,
+    "ast_hash": "65f5e1aaae01cf5a4ea23b3350d226b1",
+    "semantic_hash": ""
   },
   "frontend/lib/queryKeys.ts": {
     "mtime": 1782569476.9515648,
@@ -700,8 +700,8 @@
     "semantic_hash": "dc85ced95e05956ad4d9123a6fcac7f2"
   },
   "frontend/next-env.d.ts": {
-    "mtime": 1783585821.2672622,
-    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "mtime": 1783670411.0297284,
+    "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
     "semantic_hash": ""
   },
   "frontend/next.config.ts": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "backend/src/routes/components.ts": {
-    "mtime": 1783517394.8338172,
-    "ast_hash": "3dd2ad4926ef2f5ce53c4d9ec5dd2c26",
+    "mtime": 1783671539.9822226,
+    "ast_hash": "5ef19094d1e5102e858d567a20d0b1fd",
     "semantic_hash": ""
   },
   "backend/src/routes/secretFiles.ts": {
@@ -842,6 +842,16 @@
   "frontend/vitest.config.ts": {
     "mtime": 1783586045.1259928,
     "ast_hash": "fc0016a727ec14d10fa12aacd997090d",
+    "semantic_hash": ""
+  },
+  "backend/src/lib/resourceScope.ts": {
+    "mtime": 1783672982.575627,
+    "ast_hash": "efab703dbefb86d79c110c00f53ba1d1",
+    "semantic_hash": ""
+  },
+  "frontend/components/ui/ResourceScopePicker.tsx": {
+    "mtime": 1783672998.3982747,
+    "ast_hash": "5a6aaafcfdbbf972643a065d847e1545",
     "semantic_hash": ""
   }
 }

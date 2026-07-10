@@ -18,6 +18,10 @@
   --error: #ff453a;
   --notification: #ff3b30;
 
+  --toast-success-bg: #152218;
+  --toast-error-bg: #281616;
+  --toast-info-bg: #1e1e1e;
+
   --tag-dev-bg: rgba(76, 111, 255, 0.15);
   --tag-dev-text: #6b8aff;
   --tag-staging-bg: rgba(255, 159, 10, 0.15);
@@ -657,6 +661,7 @@ body {
 /* Toast stack */
 .toast-item {
   animation: toast-in 220ms var(--ease-out);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .toast-item.is-exiting {

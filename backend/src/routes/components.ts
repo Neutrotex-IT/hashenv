@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import Component from '../models/Component';
 import { authenticate, AuthRequest } from '../lib/auth';
 import { requireProjectAccess, requireComponentAccess, AuthRequestWithOrg } from '../lib/authorization';
+import { getProjectMemberAttributes } from '../lib/abac';
+import { filterIdsByScope, removeResourceFromMemberScopes } from '../lib/resourceScope';
 import { auditComponent } from '../lib/audit';
 import {
   validateProjectId,
@@ -40,6 +42,16 @@ router.post(
 
       const projectId = req.params.projectId;
       const project = (req as AuthRequestWithOrg).project!;
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+      if (attributes.resourceScope.componentIds !== null) {
+        res.status(403).json({ error: 'Access denied: cannot create components with restricted scope' });
+        return;
+      }
+
       const name = req.body.name.trim();
       const slug = slugFromComponentName(name);
 
@@ -104,11 +116,24 @@ router.get(
         return;
       }
 
+      const project = (req as AuthRequestWithOrg).project!;
+      const attributes = await getProjectMemberAttributes(
+        req.user!.userId,
+        project,
+        (req as AuthRequestWithOrg).orgRole ?? null
+      );
+
       const components = await Component.find({ projectId })
         .populate('createdBy', 'name email')
         .sort({ name: 1 });
 
-      res.json(components);
+      const visible = filterIdsByScope(
+        components,
+        attributes.resourceScope.componentIds,
+        attributes.unrestricted
+      );
+
+      res.json(visible);
     } catch (error) {
       console.error('List components error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to list components' });
@@ -232,6 +257,7 @@ router.delete(
       );
 
       await deleteComponentCascade(component._id.toString());
+      await removeResourceFromMemberScopes(projectId, 'componentIds', component._id.toString());
 
       res.json({ message: 'Component deleted successfully' });
     } catch (error) {

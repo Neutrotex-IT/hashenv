@@ -12,7 +12,7 @@ import {
   ProjectComponent,
 } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
-import { canReadProject, canWriteProject } from '@/lib/permissions';
+import { canReadProject, canWriteProject, canViewComponentsTab, canViewAccountsTab, canCreateProjectComponents, canCreateProjectAccounts } from '@/lib/permissions';
 import { SkeletonCard, Skeleton } from '@/components/ui/Skeleton';
 import { SensitiveValueModal, SensitiveField } from '@/components/ui/SensitiveValueModal';
 import { EffectivePermissionsPanel } from '@/components/ui/EffectivePermissionsPanel';
@@ -151,6 +151,23 @@ export default function ProjectDetailPage() {
       }
     }
   }, [project, projectId, selectedTab]);
+
+  useEffect(() => {
+    if (!permissionInfo) {
+      return;
+    }
+
+    const tabs: Array<'components' | 'accounts'> = [];
+    if (canViewComponentsTab(permissionInfo.resourceScope)) {
+      tabs.push('components');
+    }
+    if (canViewAccountsTab(permissionInfo.resourceScope)) {
+      tabs.push('accounts');
+    }
+    if (tabs.length > 0 && !tabs.includes(selectedTab)) {
+      setSelectedTab(tabs[0]);
+    }
+  }, [permissionInfo, selectedTab]);
 
   const loadProject = async () => {
     try {
@@ -374,8 +391,17 @@ export default function ProjectDetailPage() {
   };
 
   const effectivePermissions = permissionInfo?.effective ?? [];
+  const resourceScope = permissionInfo?.resourceScope;
   const canRead = canReadProject(effectivePermissions);
   const canWrite = canWriteProject(effectivePermissions);
+  const showComponentsTab = canViewComponentsTab(resourceScope);
+  const showAccountsTab = canViewAccountsTab(resourceScope);
+  const canCreateComponents = canCreateProjectComponents(effectivePermissions, resourceScope);
+  const canCreateAccounts = canCreateProjectAccounts(effectivePermissions, resourceScope);
+  const visibleTabs = [
+    showComponentsTab ? ({ id: 'components' as const, label: 'Components' }) : null,
+    showAccountsTab ? ({ id: 'accounts' as const, label: 'Accounts' }) : null,
+  ].filter((tab): tab is { id: 'components' | 'accounts'; label: string } => tab !== null);
 
   if (loading) {
     return (
@@ -416,7 +442,7 @@ export default function ProjectDetailPage() {
           { label: project.name },
         ]}
         actions={
-          canWrite && selectedTab === 'components' ? (
+          canCreateComponents && selectedTab === 'components' ? (
             <Button variant="primary" size="md" asLink href={`/projects/${projectId}/components/new`}>
               Add Component
             </Button>
@@ -439,14 +465,10 @@ export default function ProjectDetailPage() {
         />
       )}
 
+      {visibleTabs.length > 1 && (
       <div className="mb-6">
         <div role="tablist" aria-label="Project data" className="segmented-control">
-          {(
-            [
-              { id: 'components' as const, label: 'Components' },
-              { id: 'accounts' as const, label: 'Accounts' },
-            ] as const
-          ).map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -464,8 +486,9 @@ export default function ProjectDetailPage() {
           ))}
         </div>
       </div>
+      )}
 
-      {selectedTab === 'components' && (
+      {showComponentsTab && selectedTab === 'components' && (
         <>
           {componentsLoading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -497,7 +520,7 @@ export default function ProjectDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
               <p className="text-[var(--text-secondary)]">No components yet. Add one to start managing secrets files and secrets.</p>
-              {canWrite && (
+              {canCreateComponents && (
                 <Button variant="primary" size="lg" asLink href={`/projects/${projectId}/components/new`} className="mt-4">
                   Add the first component
                 </Button>
@@ -507,7 +530,7 @@ export default function ProjectDetailPage() {
         </>
       )}
 
-      {selectedTab === 'accounts' && (
+      {showAccountsTab && selectedTab === 'accounts' && (
         <>
           <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -518,7 +541,7 @@ export default function ProjectDetailPage() {
                 {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
               </p>
             </div>
-            {canWrite && (
+            {canCreateAccounts && (
               <Button variant="primary" size="md" onClick={openCreateAccountForm}>
                 Add Account
               </Button>
