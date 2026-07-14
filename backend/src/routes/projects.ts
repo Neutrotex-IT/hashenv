@@ -105,7 +105,6 @@ import {
 } from '../lib/dataTransfer';
 import SecretFile from '../models/SecretFile';
 import Secret from '../models/Secret';
-import AssociatedAccount from '../models/AssociatedAccount';
 import { deleteProjectComponents } from '../lib/components';
 import { ProjectApiToken } from '../models/ProjectApiToken';
 import AuditLog from '../models/AuditLog';
