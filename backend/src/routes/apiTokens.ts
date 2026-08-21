@@ -95,9 +95,10 @@ router.post(
         req,
       });
       
-      // Return the token only once - user must save it
+      // Return the plaintext token only once - user must save it.
+      // Use `_id` to match list/update payloads and the rest of the API.
       res.status(201).json({
-        id: apiToken._id,
+        _id: apiToken._id,
         name: apiToken.name,
         token, // Only returned on creation!
         tokenPrefix: apiToken.tokenPrefix,

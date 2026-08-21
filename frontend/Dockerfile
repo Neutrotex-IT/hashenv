@@ -4,25 +4,56 @@ FROM node:20-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
+# ---------------------------------------------------------------------------
+# deps
+# ---------------------------------------------------------------------------
 FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
+# ---------------------------------------------------------------------------
+# development: Next.js hot reload (source bind-mounted by compose)
+# ---------------------------------------------------------------------------
+FROM deps AS development
+ENV NODE_ENV=development \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]
+
+# ---------------------------------------------------------------------------
+# test: Vitest (happy-dom unit tests)
+# ---------------------------------------------------------------------------
+FROM deps AS test
+ENV NODE_ENV=test \
+    NEXT_TELEMETRY_DISABLED=1
+COPY . .
+CMD ["npm", "test"]
+
+# ---------------------------------------------------------------------------
+# builder (production)
+# ---------------------------------------------------------------------------
 FROM deps AS builder
 COPY . .
 RUN mkdir -p public
 
-# Coolify injects build-time env vars when declared as ARG + in compose build.args
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
 
 RUN npx next build
 
+# ---------------------------------------------------------------------------
+# production
+# ---------------------------------------------------------------------------
 FROM base AS production
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 --ingroup nodejs nextjs

@@ -1,35 +1,35 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-vi.mock('../models/OrgMember', () => ({
+vi.mock('../../models/OrgMember', () => ({
   default: {
     find: vi.fn(),
   },
 }));
 
-vi.mock('../models/Project', () => ({
+vi.mock('../../models/Project', () => ({
   default: {
     find: vi.fn(),
   },
 }));
 
-vi.mock('../lib/authorization', () => ({
+vi.mock('../../lib/authorization', () => ({
   getUserOrgRole: vi.fn(),
 }));
 
-vi.mock('../lib/abac', () => ({
+vi.mock('../../lib/abac', () => ({
   getProjectMemberAttributes: vi.fn(),
   hasProjectCapability: vi.fn(),
 }));
 
-import OrgMember from '../models/OrgMember';
-import Project from '../models/Project';
-import { getUserOrgRole } from '../lib/authorization';
-import { getProjectMemberAttributes, hasProjectCapability } from '../lib/abac';
+import OrgMember from '../../models/OrgMember';
+import Project from '../../models/Project';
+import { getUserOrgRole } from '../../lib/authorization';
+import { getProjectMemberAttributes, hasProjectCapability } from '../../lib/abac';
 import {
   canExecutePanicInOrg,
   getPanicEligibleProjects,
   getPanicEligibleProjectsForOrg,
-} from '../lib/panicProjects';
+} from '../../lib/panicProjects';
 
 describe('getPanicEligibleProjectsForOrg', () => {
   const userId = '507f1f77bcf86cd799439011';

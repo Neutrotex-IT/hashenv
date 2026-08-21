@@ -1,0 +1,68 @@
+# HashEnv — automated tests
+#
+# Integration/e2e tests use an ephemeral MongoDB replica set on tmpfs (in-memory).
+# Unit tests can run without Mongo via the unit profile.
+# Never point tests at MongoDB Atlas (dev/prod only).
+
+name: hashenv-test
+
+services:
+  mongo:
+    image: mongo:8
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '27017:27017'
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--eval',
+          "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  backend-test:
+    build:
+      context: ./backend
+      target: test
+    environment:
+      NODE_ENV: test
+      MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0&directConnection=true
+      MONGODB_DB_NAME: hashenv_test
+      MONGODB_TLS: 'false'
+      JWT_SECRET: test-jwt-secret-key-for-ci-only-min-32-chars!
+      ROOT_ENCRYPTION_KEY: dGVzdC1yb290LWVuY3J5cHRpb24ta2V5LTMyYnl0ZXMhISE=
+      FRONTEND_URL: http://localhost:3000
+      DISABLE_EMAIL: 'true'
+      BREVO_API_KEY: test-unused
+      BREVO_SENDER_EMAIL: noreply@test.local
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command: ['npm', 'test']
+
+  backend-unit:
+    build:
+      context: ./backend
+      target: test
+    environment:
+      NODE_ENV: test
+      JWT_SECRET: test-jwt-secret-key-for-ci-only-min-32-chars!
+      ROOT_ENCRYPTION_KEY: dGVzdC1yb290LWVuY3J5cHRpb24ta2V5LTMyYnl0ZXMhISE=
+      FRONTEND_URL: http://localhost:3000
+      DISABLE_EMAIL: 'true'
+    command: ['npx', 'vitest', 'run', 'src/__tests__/unit']
+    profiles: ['unit']
+
+  frontend-test:
+    build:
+      context: ./frontend
+      target: test
+    profiles: ['frontend']

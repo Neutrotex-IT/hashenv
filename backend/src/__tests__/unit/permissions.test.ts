@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canManageOrgMember, canPerformOrgAction } from '../lib/abac';
+import { canManageOrgMember, canPerformOrgAction } from '../../lib/abac';
 import {
   ALL_ORG_PERMISSIONS,
   getEffectiveOrgPermissions,
@@ -7,7 +7,7 @@ import {
   OrgPermission,
   sanitizeOrgPermissions,
   sanitizeProjectPermissions,
-} from '../lib/permissions';
+} from '../../lib/permissions';
 
 describe('getEffectiveOrgPermissions', () => {
   it('grants all permissions to owners and admins', () => {
@@ -145,7 +145,7 @@ describe('permission sanitization', () => {
 
 describe('resource scope', () => {
   it('treats missing resourceScope as unrestricted', async () => {
-    const { scopeListsFromStoredIds } = await import('../lib/resourceScope');
+    const { scopeListsFromStoredIds } = await import('../../lib/resourceScope');
     expect(scopeListsFromStoredIds('full', undefined, undefined)).toEqual({
       componentIds: null,
       accountIds: null,
@@ -157,7 +157,7 @@ describe('resource scope', () => {
   });
 
   it('treats restricted scope with empty arrays as no access', async () => {
-    const { scopeListsFromStoredIds } = await import('../lib/resourceScope');
+    const { scopeListsFromStoredIds } = await import('../../lib/resourceScope');
     expect(scopeListsFromStoredIds('restricted', [], [])).toEqual({
       componentIds: [],
       accountIds: [],
@@ -166,7 +166,7 @@ describe('resource scope', () => {
 
   it('stores restricted scope explicitly on members', async () => {
     const { applyMemberScopeFields, resolveMemberResourceScope, scopeListsFromMember } = await import(
-      '../lib/resourceScope'
+      '../../lib/resourceScope'
     );
     const member: {
       resourceScope?: 'full' | 'restricted';
@@ -189,13 +189,13 @@ describe('resource scope', () => {
   });
 
   it('allows unrestricted actors to access any scoped resource id', async () => {
-    const { canAccessScopedResource } = await import('../lib/resourceScope');
+    const { canAccessScopedResource } = await import('../../lib/resourceScope');
     expect(canAccessScopedResource(null, 'abc', true)).toBe(true);
     expect(canAccessScopedResource(['abc'], 'def', true)).toBe(true);
   });
 
   it('enforces allowlists for restricted actors', async () => {
-    const { canAccessScopedResource } = await import('../lib/resourceScope');
+    const { canAccessScopedResource } = await import('../../lib/resourceScope');
     expect(canAccessScopedResource(null, 'abc', false)).toBe(true);
     expect(canAccessScopedResource(['abc'], 'abc', false)).toBe(true);
     expect(canAccessScopedResource(['abc'], 'def', false)).toBe(false);
@@ -203,7 +203,7 @@ describe('resource scope', () => {
   });
 
   it('blocks restricted actors from granting full resource access', async () => {
-    const { canGrantResourceScope } = await import('../lib/resourceScope');
+    const { canGrantResourceScope } = await import('../../lib/resourceScope');
     const actor = {
       unrestricted: false,
       componentIds: ['a'],
@@ -227,7 +227,7 @@ describe('resource scope', () => {
   });
 
   it('requires at least one resource for restricted grants', async () => {
-    const { parseRestrictedResourceScope } = await import('../lib/resourceScope');
+    const { parseRestrictedResourceScope } = await import('../../lib/resourceScope');
     expect(parseRestrictedResourceScope({ resourceAccess: 'full' })).toEqual({ mode: 'full' });
     expect(parseRestrictedResourceScope({ resourceAccess: 'restricted', componentIds: [], accountIds: [] })).toEqual({
       error: 'Select at least one component or account for restricted access',

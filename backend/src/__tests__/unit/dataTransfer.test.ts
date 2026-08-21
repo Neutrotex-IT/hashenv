@@ -6,7 +6,7 @@ import {
   parseImportPayload,
   type ExportedProject,
   type HashEnvExport,
-} from '../lib/dataTransfer';
+} from '../../lib/dataTransfer';
 
 function sampleProject(overrides: Partial<ExportedProject> = {}): ExportedProject {
   return {

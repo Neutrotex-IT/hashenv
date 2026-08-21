@@ -1,9 +1,16 @@
-# HashEnv — local Docker Compose (development / smoke testing)
+# HashEnv — local Docker Compose (production-like smoke testing)
 #
-# Not used on Dokploy — deploy backend and frontend as separate Application services.
-# See docs/DOKPLOY-DEPLOY.md for production deployment.
+# For day-to-day development with hot reload:
+#   docker compose -f docker-compose.dev.yml up --build
+#   (or: make dev / .\scripts\run.ps1 dev)
 #
-# Usage:
+# For automated tests (ephemeral Docker Mongo, never Atlas):
+#   docker compose -f docker-compose.test.yml run --rm --build backend-test
+#   (or: make test / .\scripts\run.ps1 test)
+#
+# Not used on Coolify — see docker-compose.coolify.yml and docs/DOKPLOY-DEPLOY.md.
+#
+# Usage (this file = production images, Atlas via backend/.env):
 #   cp backend/env.example backend/.env   # edit MONGODB_URI, secrets, etc.
 #   docker compose up --build
 #
@@ -17,6 +24,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: production
     restart: unless-stopped
     ports:
       - '3001:3001'
@@ -42,6 +50,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: production
       args:
         NEXT_PUBLIC_API_URL: http://localhost:3001/api
     restart: unless-stopped

@@ -4,6 +4,31 @@ Secure environment-variable and secrets manager. Stores `.env` files, standalone
 
 ## Quick start
 
+### Docker development (hot reload)
+
+```bash
+cp backend/env.example backend/.env
+# Edit backend/.env — use MongoDB Atlas for MONGODB_URI (dev/prod)
+
+# PowerShell
+.\scripts\run.ps1 dev
+
+# or Make
+make dev
+```
+
+App: http://localhost:3000 · API: http://localhost:3001/api/health
+
+### Tests (Docker Mongo — never Atlas)
+
+```bash
+.\scripts\run.ps1 test-backend   # unit + integration + e2e API
+.\scripts\run.ps1 test-frontend
+# or: make test
+```
+
+### Local without Docker
+
 ```bash
 # Backend
 cd backend && npm install && cp env.example .env

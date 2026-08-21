@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffEnvContent } from '../lib/envDiff';
+import { diffEnvContent } from '../../lib/envDiff';
 
 describe('env diff', () => {
   it('detects added, removed, and changed keys', () => {

@@ -5,6 +5,9 @@ import helmet from 'helmet';
  * Security middleware configurations
  */
 
+/** Skip rate limits in automated tests (limits still apply in development/production). */
+const skipInTest = (): boolean => process.env.NODE_ENV === 'test';
+
 /**
  * Rate limiter for authentication endpoints (prevent brute force)
  */
@@ -17,6 +20,7 @@ export const authRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true, // Don't count successful logins
+  skip: skipInTest,
 });
 
 /**
@@ -30,6 +34,7 @@ export const apiRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
 });
 
 /**
@@ -43,6 +48,7 @@ export const uploadRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
 });
 
 /**
@@ -56,6 +62,7 @@ export const invitePreviewRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
 });
 
 /**

@@ -32,8 +32,10 @@ export function slugFromComponentName(name: string): string {
   if (isValidComponentSlug(slug)) {
     return slug;
   }
-  const fallback = slug.replace(/^[^a-z]+/, 'c-').slice(0, 32);
-  return isValidComponentSlug(fallback) ? fallback : 'component';
+  // Do not silently remap reserved or invalid names to a generic slug —
+  // callers must reject invalid names. Returning the invalid normalized form
+  // keeps isValidComponentSlug(slug) === false so create/update fail closed.
+  return slug;
 }
 
 export async function deleteComponentCascade(componentId: string): Promise<void> {

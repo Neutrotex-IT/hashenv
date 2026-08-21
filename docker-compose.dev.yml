@@ -1,0 +1,81 @@
+# HashEnv — local development with hot reload
+# Usage:
+#   cp backend/env.example backend/.env   # Atlas URI, JWT, ROOT_ENCRYPTION_KEY, etc.
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml watch
+#
+# Dev/prod data: MongoDB Atlas via backend/.env (MONGODB_URI).
+# Tests use a separate compose file with ephemeral Docker Mongo — never Atlas.
+
+name: hashenv-dev
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: development
+    ports:
+      - '3001:3001'
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: development
+      PORT: '3001'
+      FRONTEND_URL: http://localhost:3000
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json
+      - ./backend/package-lock.json:/app/package-lock.json
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - ./backend/tsconfig.build.json:/app/tsconfig.build.json
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/src
+          target: /app/src
+          initial_sync: true
+        - action: rebuild
+          path: ./backend/package.json
+        - action: rebuild
+          path: ./backend/package-lock.json
+        - action: rebuild
+          path: ./backend/Dockerfile
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+      NEXT_TELEMETRY_DISABLED: '1'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    # Wipe stale .next on boot (bind mounts on Windows can serve stale route trees)
+    command:
+      [
+        'sh',
+        '-c',
+        'find .next -mindepth 1 -delete 2>/dev/null; exec npm run dev -- -H 0.0.0.0 -p 3000',
+      ]
+    depends_on:
+      backend:
+        condition: service_healthy

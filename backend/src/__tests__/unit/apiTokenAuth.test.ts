@@ -4,7 +4,7 @@ import {
   requireApiScope,
   requireApiTokenProject,
   type ApiTokenRequest,
-} from '../lib/apiTokenAuth';
+} from '../../lib/apiTokenAuth';
 
 function mockResponse() {
   const res = {

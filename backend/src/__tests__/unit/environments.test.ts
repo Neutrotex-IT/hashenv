@@ -3,7 +3,7 @@ import {
   assertEnvAllowed,
   isValidEnvSlug,
   normalizeEnvSlug,
-} from '../lib/environments';
+} from '../../lib/environments';
 
 describe('environment slug validation', () => {
   const project = { environments: ['dev', 'staging', 'prod', 'qa'] };

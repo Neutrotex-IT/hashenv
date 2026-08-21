@@ -55,20 +55,24 @@ async function sendEmailViaBrevo(
   htmlContent: string,
   textContent?: string
 ): Promise<void> {
-  const apiKey = getBrevoApiKey();
-  const sender = getSenderInfo();
-
-  // Validate recipients
+  // Validate recipients first (even in test) so callers still get bad input errors
   if (!to || !Array.isArray(to) || to.length === 0) {
     throw new Error('At least one recipient email address is required');
   }
 
-  // Validate each recipient email
   for (const recipient of to) {
     if (!recipient.email || typeof recipient.email !== 'string' || !recipient.email.includes('@')) {
       throw new Error(`Invalid recipient email address: ${recipient.email}`);
     }
   }
+
+  // Tests and local runs without Brevo: no outbound network
+  if (process.env.NODE_ENV === 'test' || process.env.DISABLE_EMAIL === 'true') {
+    return;
+  }
+
+  const apiKey = getBrevoApiKey();
+  const sender = getSenderInfo();
 
   // Prepare payload for Brevo API
   const payload = {

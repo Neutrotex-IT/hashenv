@@ -4,5 +4,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Shared MongoDB + encryption singleton: run files sequentially
+    fileParallelism: false,
+    hookTimeout: 60_000,
+    testTimeout: 45_000,
   },
 });

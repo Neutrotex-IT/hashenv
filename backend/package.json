@@ -6,10 +6,13 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm ci && tsc",
+    "build": "npm ci && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:unit": "vitest run src/__tests__/unit",
+    "test:integration": "vitest run src/__tests__/integration",
+    "test:e2e": "vitest run src/__tests__/e2e",
     "wipe-db": "tsx scripts/wipe-database.ts"
   },
   "dependencies": {
@@ -38,6 +41,8 @@
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
     "tsx": "^4.7.0",
     "vitest": "^3.2.4"
   },

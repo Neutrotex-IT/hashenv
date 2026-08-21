@@ -3,13 +3,13 @@ import {
   isValidComponentSlug,
   normalizeComponentSlug,
   slugFromComponentName,
-} from '../lib/components';
+} from '../../lib/components';
 import {
   buildContentDisposition,
   inferSecretFileType,
   isAllowedSecretFileName,
   sanitizeSecretFileName,
-} from '../lib/secretFiles';
+} from '../../lib/secretFiles';
 
 describe('component slug validation', () => {
   it('normalizes names into slugs', () => {
@@ -25,6 +25,11 @@ describe('component slug validation', () => {
   it('rejects reserved slugs', () => {
     expect(isValidComponentSlug('new')).toBe(false);
     expect(isValidComponentSlug('default')).toBe(false);
+  });
+
+  it('does not silently remap reserved names to a valid slug', () => {
+    expect(isValidComponentSlug(slugFromComponentName('new'))).toBe(false);
+    expect(isValidComponentSlug(slugFromComponentName('default'))).toBe(false);
   });
 });
 

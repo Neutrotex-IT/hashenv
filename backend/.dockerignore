@@ -10,7 +10,3 @@ coverage
 .vscode
 *.log
 npm-debug.log*
-scripts
-**/*.test.ts
-**/*.spec.ts
-vitest.config.*

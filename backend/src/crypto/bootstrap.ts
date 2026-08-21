@@ -62,3 +62,12 @@ export function getEncryptionStatus(): EncryptionStatus {
 export function isEncryptionReady(): boolean {
   return encryptionStatus.initialized && !encryptionStatus.error;
 }
+
+/** Reset module state between integration tests after DB wipe + clearKeyCache(). */
+export function resetEncryptionStatusForTests(): void {
+  encryptionStatus = {
+    initialized: false,
+    hasInstanceKey: false,
+    hasEncryptedData: false,
+  };
+}

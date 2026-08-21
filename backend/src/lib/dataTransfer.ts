@@ -19,7 +19,7 @@ import {
   normalizeEnvSlug,
 } from './environments';
 import { auditSecretFile, auditSecret, auditAccount } from './audit';
-import { slugFromComponentName } from './components';
+import { isValidComponentSlug, slugFromComponentName } from './components';
 import { contentTypeForSecretFile, inferSecretFileType, isAllowedSecretFileName, sanitizeSecretFileName } from './secretFiles';
 import type { Request } from 'express';
 
@@ -388,6 +388,9 @@ async function ensureComponent(
 ): Promise<IComponent> {
   const projectId = project._id.toString();
   const slug = componentData.slug || slugFromComponentName(componentData.name);
+  if (!isValidComponentSlug(slug)) {
+    throw new Error(`Invalid or reserved component name/slug: ${componentData.name}`);
+  }
   let component = await Component.findOne({ projectId, slug });
 
   if (!component) {
