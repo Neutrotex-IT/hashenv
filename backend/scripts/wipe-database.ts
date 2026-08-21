@@ -69,13 +69,18 @@ function getPreservedCollections(options: WipeOptions): Set<string> {
   return preserved;
 }
 
-function getDatabaseName(uri: string): string {
+function resolveDatabaseName(uri: string): string {
+  const fromEnv = (process.env.MONGODB_DB_NAME || '').trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+
   try {
     const pathname = new URL(uri).pathname.replace(/^\//, '');
     const dbName = pathname.split('/')[0];
-    return dbName || '(default)';
+    return dbName || 'hashenv';
   } catch {
-    return '(unknown)';
+    return 'hashenv';
   }
 }
 
@@ -92,13 +97,14 @@ async function wipeDatabase(options: WipeOptions): Promise<void> {
     process.exit(1);
   }
 
+  const dbName = resolveDatabaseName(mongoUri);
   const preserved = getPreservedCollections(options);
   const mode = options.dryRun ? 'DRY RUN' : 'WIPE';
 
   console.log('========================================');
   console.log(`  HashEnv Database ${mode}`);
   console.log('========================================\n');
-  console.log(`Database: ${getDatabaseName(mongoUri)}`);
+  console.log(`Database: ${dbName}`);
 
   if (preserved.size > 0) {
     console.log(`Preserving: ${[...preserved].sort().join(', ')}`);
@@ -110,7 +116,7 @@ async function wipeDatabase(options: WipeOptions): Promise<void> {
 
   try {
     console.log('Connecting to MongoDB...');
-    await mongoose.connect(mongoUri);
+    await mongoose.connect(mongoUri, { dbName });
     console.log('Connected.\n');
 
     const db = mongoose.connection.db;

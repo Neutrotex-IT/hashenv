@@ -30,6 +30,8 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const MONGODB_URI = process.env.MONGODB_URI;
+/** Explicit DB name (URI path or this env). Atlas URIs without a path otherwise land on "test". */
+const MONGODB_DB_NAME = (process.env.MONGODB_DB_NAME || 'hashenv').trim() || 'hashenv';
 
 // Trust proxy - Required for Render and other reverse proxy setups
 // Set to 1 to trust only the first proxy (Render's proxy), which is more secure
@@ -215,15 +217,22 @@ function shouldUseMongoTls(uri: string): boolean {
   return false;
 }
 
+// Assumptions (Atlas M0 free + single long-running Express process, OLTP):
+// keep the pool modest so idle sockets do not burn shared-tier connection budget.
 const mongoOptions: mongoose.ConnectOptions = {
+  dbName: MONGODB_DB_NAME,
   ...(shouldUseMongoTls(MONGODB_URI) && {
     tls: true,
     tlsAllowInvalidCertificates: false,
   }),
-  // Security: Connection timeout
-  serverSelectionTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
-  // Security: Retry configuration
+  // Pool: ~1 app instance, low–moderate concurrent requests on free tier
+  maxPoolSize: 20,
+  minPoolSize: 0,
+  maxIdleTimeMS: 60_000,
+  // Timeouts: fail reasonably fast on Atlas network issues; OLTP ops stay under socketTimeout
+  connectTimeoutMS: 10_000,
+  serverSelectionTimeoutMS: 10_000,
+  socketTimeoutMS: 45_000,
   retryWrites: true,
   w: 'majority',
 };
@@ -231,7 +240,8 @@ const mongoOptions: mongoose.ConnectOptions = {
 mongoose
   .connect(MONGODB_URI, mongoOptions)
   .then(async () => {
-    console.log('Connected to MongoDB');
+    const dbName = mongoose.connection.name || MONGODB_DB_NAME;
+    console.log(`Connected to MongoDB (database: ${dbName})`);
     
     // Bootstrap encryption system
     try {
@@ -323,6 +333,24 @@ mongoose
     console.error('MongoDB connection error:', error.message);
     process.exit(1);
   });
+
+// Graceful shutdown: return pooled connections cleanly (important on Atlas free tier)
+async function shutdown(signal: string): Promise<void> {
+  console.log(`[Shutdown] ${signal} received - closing MongoDB connection`);
+  try {
+    await mongoose.connection.close();
+  } catch (error) {
+    console.error('[Shutdown] MongoDB close error:', error instanceof Error ? error.message : 'Unknown');
+  }
+  process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  void shutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM');
+});
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

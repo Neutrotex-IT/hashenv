@@ -31,6 +31,7 @@ The codebase uses environment variables for all critical configuration. A few fa
 | `PORT` | Default `3001`; hosting platforms often set this automatically |
 | `FRONTEND_URL` | **Critical** — production frontend URL with `https://` (CORS, email links) |
 | `MONGODB_URI` | **Critical** — production MongoDB connection string |
+| `MONGODB_DB_NAME` | Recommended — database name (default `hashenv`); set if Atlas URI has no path |
 | `JWT_SECRET` | **Critical** — new 32+ char secret; do not reuse dev |
 | `ROOT_ENCRYPTION_KEY` | **Critical** — new 32-byte base64 key; **losing it loses all encrypted data** |
 | `NODE_ENV` | **Critical** — set to `production` |
@@ -59,6 +60,7 @@ Must include `/api` and use `https://` in production.
 - [ ] Generate new `ROOT_ENCRYPTION_KEY` for production
 - [ ] Update `FRONTEND_URL` to production domain
 - [ ] Update `MONGODB_URI` to production database
+- [ ] Set `MONGODB_DB_NAME` (e.g. `hashenv`) so the app does not use Atlas default `test`
 - [ ] Update `NEXT_PUBLIC_API_URL` to production API
 - [ ] Set `NODE_ENV=production`
 - [ ] Configure production SMTP credentials

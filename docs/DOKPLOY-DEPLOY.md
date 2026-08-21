@@ -283,7 +283,8 @@ Add all variables below in **Environment** only (runtime). See [Environment vari
 
 | Variable | Type | Required | Example / notes |
 |----------|------|----------|-----------------|
-| `MONGODB_URI` | Runtime | **Yes** | Atlas URI, e.g. `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/hashenv?retryWrites=true&w=majority` |
+| `MONGODB_URI` | Runtime | **Yes** | Atlas URI, e.g. `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/?appName=HashEnv` |
+| `MONGODB_DB_NAME` | Runtime | Recommended | Database name (default `hashenv`). Required if URI has no path (otherwise driver uses `test`) |
 | `JWT_SECRET` | Runtime | **Yes** | Long random string — min 32 chars (`openssl rand -hex 32`) |
 | `ROOT_ENCRYPTION_KEY` | Runtime | **Yes** | Base64-encoded 32-byte key — **losing this key loses all encrypted secrets** |
 | `FRONTEND_URL` | Runtime | **Yes** | `https://hashenv.neutrotex.com` — used for CORS and email links |
@@ -515,7 +516,7 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 
 | Type | Variables | Service |
 |------|-----------|---------|
-| **Runtime only** | `MONGODB_URI`, `JWT_SECRET`, `ROOT_ENCRYPTION_KEY`, `FRONTEND_URL`, `CORS_ORIGINS`, `BREVO_*`, `MONGODB_TLS`, `BACKEND_URL`, `PORT`, `NODE_ENV` | Backend |
+| **Runtime only** | `MONGODB_URI`, `MONGODB_DB_NAME`, `JWT_SECRET`, `ROOT_ENCRYPTION_KEY`, `FRONTEND_URL`, `CORS_ORIGINS`, `BREVO_*`, `MONGODB_TLS`, `BACKEND_URL`, `PORT`, `NODE_ENV` | Backend |
 | **Runtime only** | `NODE_ENV`, `PORT`, `HOSTNAME` | Frontend (optional — defaults in Dockerfile) |
 | **Build only** | *(none)* | — |
 | **Both** | `NEXT_PUBLIC_API_URL` | Frontend |
@@ -525,6 +526,7 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 | Variable | Service | Build | Runtime | Set both? |
 |----------|---------|:-----:|:-------:|:---------:|
 | `MONGODB_URI` | Backend | — | Yes | Runtime only |
+| `MONGODB_DB_NAME` | Backend | `hashenv` | Recommended | Runtime only |
 | `JWT_SECRET` | Backend | — | Yes | Runtime only |
 | `ROOT_ENCRYPTION_KEY` | Backend | — | Yes | Runtime only |
 | `FRONTEND_URL` | Backend | — | Yes | Runtime only |

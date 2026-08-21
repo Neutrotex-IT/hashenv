@@ -148,6 +148,7 @@ For a fresh greenfield install, an empty database is fine. The server bootstraps
 | `PORT` | No | API port (default: `3001`) |
 | `NODE_ENV` | No | `development` or `production` |
 | `MONGODB_URI` | **Yes** | MongoDB connection string |
+| `MONGODB_DB_NAME` | No | Database name (default `hashenv`). Use when the Atlas URI has no path so the driver does not fall back to `test` |
 | `JWT_SECRET` | **Yes** | JWT signing secret (min 32 characters) |
 | `ROOT_ENCRYPTION_KEY` | **Yes** | Root encryption key (min 32 characters) |
 | `FRONTEND_URL` | **Yes** | Frontend URL for CORS and email links (e.g. `http://localhost:3000`) |
@@ -171,6 +172,7 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:3000
 
 MONGODB_URI=mongodb://localhost:27017/hashenv
+MONGODB_DB_NAME=hashenv
 
 JWT_SECRET=<generated-32+-char-secret>
 ROOT_ENCRYPTION_KEY=<generated-32+-char-secret>
