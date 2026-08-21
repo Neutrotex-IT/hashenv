@@ -287,12 +287,16 @@ Add all variables below in **Environment** only (runtime). See [Environment vari
 | `JWT_SECRET` | Runtime | **Yes** | Long random string — min 32 chars (`openssl rand -hex 32`) |
 | `ROOT_ENCRYPTION_KEY` | Runtime | **Yes** | Base64-encoded 32-byte key — **losing this key loses all encrypted secrets** |
 | `FRONTEND_URL` | Runtime | **Yes** | `https://hashenv.neutrotex.com` — used for CORS and email links |
-| `BREVO_API_KEY` | Runtime | **Yes** (if email enabled) | From [Brevo API keys](https://app.brevo.com/settings/keys/api) |
-| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email enabled) | Verified sender in Brevo, e.g. `noreply@neutrotex.com` |
+| `SMTP_HOST` | Runtime | **Yes** (if email enabled) | SMTP hostname, e.g. `smtp.gmail.com` |
+| `SMTP_PORT` | Runtime | **Yes** (if email enabled) | e.g. `587` (STARTTLS) or `465` (TLS) |
+| `SMTP_USER` | Runtime | **Yes** (if email enabled) | SMTP login / email address |
+| `SMTP_PASSWORD` | Runtime | **Yes** (if email enabled) | SMTP password or app password |
+| `SMTP_FROM` | Runtime | **Yes** (if email enabled) | From address, e.g. `noreply@neutrotex.com` |
 | `NODE_ENV` | Runtime | **Yes** | `production` |
 | `PORT` | Runtime | Optional | `3001` (default) |
 | `CORS_ORIGINS` | Runtime | Optional | Comma-separated list if you need multiple origins instead of `FRONTEND_URL` alone |
-| `BREVO_SENDER_NAME` | Runtime | Optional | Display name in emails, e.g. `HashEnv` |
+| `SMTP_SECURE` | Runtime | Optional | `true` for port 465, `false` for 587 (default) |
+| `SMTP_DISPLAY_NAME` | Runtime | Optional | Display name in emails, e.g. `HashEnv` |
 | `BACKEND_URL` | Runtime | Optional | Public API origin without trailing slash — only needed on platforms that sleep idle backends (Render). **Not required on Dokploy.** |
 
 Generate secrets:
@@ -444,7 +448,7 @@ Deploy **after** the backend is healthy. Verify:
 
 - `https://hashenv.neutrotex.com` loads
 - Browser network tab shows API calls to `https://hashenv-api.neutrotex.com/api/...` (not `localhost`)
-- Registration / login / email verification work (if Brevo is configured)
+- Registration / login / email verification work (if SMTP is configured)
 
 ---
 
@@ -489,13 +493,14 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 | `ROOT_ENCRYPTION_KEY` | Runtime | **Yes** | Environment | Base64 32-byte key — **backup securely; losing it loses all encrypted data** |
 | `FRONTEND_URL` | Runtime | **Yes** | Environment | `https://hashenv.neutrotex.com` — CORS (single origin) and email links |
 | `NODE_ENV` | Runtime | **Yes** | Environment | `production` |
-| `BREVO_API_KEY` | Runtime | **Yes** (if email) | Environment | [Brevo API key](https://app.brevo.com/settings/keys/api) |
-| `BREVO_SENDER_EMAIL` | Runtime | **Yes** (if email) | Environment | Verified sender, e.g. `noreply@neutrotex.com` |
+| `SMTP_HOST` | Runtime | **Yes** (if email) | Environment | e.g. `smtp.gmail.com` |
+| `SMTP_PORT` | Runtime | **Yes** (if email) | Environment | e.g. `587` or `465` |
+| `SMTP_USER` | Runtime | **Yes** (if email) | Environment | SMTP login email |
+| `SMTP_PASSWORD` | Runtime | **Yes** (if email) | Environment | SMTP password or app password |
+| `SMTP_FROM` | Runtime | **Yes** (if email) | Environment | From address, e.g. `noreply@neutrotex.com` |
 | `CORS_ORIGINS` | Runtime | Optional | Environment | Comma-separated origins — use instead of `FRONTEND_URL` when you need multiple |
-| `BREVO_SENDER_NAME` | Runtime | Optional | Environment | Email display name, e.g. `HashEnv` |
-| `BREVO_FROM_EMAIL` | Runtime | Optional | Environment | Alias for `BREVO_SENDER_EMAIL` |
-| `BREVO_DISPLAY_NAME` | Runtime | Optional | Environment | Alias for `BREVO_SENDER_NAME` |
-| `BREVO_API_URL` | Runtime | Optional | Environment | Defaults to `https://api.brevo.com/v3/smtp/email` |
+| `SMTP_SECURE` | Runtime | Optional | Environment | `true` for 465, `false` for 587 |
+| `SMTP_DISPLAY_NAME` | Runtime | Optional | Environment | Email display name, e.g. `HashEnv` |
 | `PORT` | Runtime | Optional | Environment | Default `3001` |
 | `MONGODB_TLS` | Runtime | Optional | Environment | `true` / `false` — auto-detected from `mongodb+srv://` URI if unset |
 | `BACKEND_URL` | Runtime | Optional | Environment | Public API origin (no trailing slash). **Not needed on Dokploy** — only for platforms that sleep idle backends (Render) |
@@ -515,7 +520,7 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 
 | Type | Variables | Service |
 |------|-----------|---------|
-| **Runtime only** | `MONGODB_URI`, `JWT_SECRET`, `ROOT_ENCRYPTION_KEY`, `FRONTEND_URL`, `CORS_ORIGINS`, `BREVO_*`, `MONGODB_TLS`, `BACKEND_URL`, `PORT`, `NODE_ENV` | Backend |
+| **Runtime only** | `MONGODB_URI`, `JWT_SECRET`, `ROOT_ENCRYPTION_KEY`, `FRONTEND_URL`, `CORS_ORIGINS`, `SMTP_*`, `MONGODB_TLS`, `BACKEND_URL`, `PORT`, `NODE_ENV` | Backend |
 | **Runtime only** | `NODE_ENV`, `PORT`, `HOSTNAME` | Frontend (optional — defaults in Dockerfile) |
 | **Build only** | *(none)* | — |
 | **Both** | `NEXT_PUBLIC_API_URL` | Frontend |
@@ -529,12 +534,13 @@ Set every backend variable in **Environment** only. Do **not** add backend vars 
 | `ROOT_ENCRYPTION_KEY` | Backend | — | Yes | Runtime only |
 | `FRONTEND_URL` | Backend | — | Yes | Runtime only |
 | `CORS_ORIGINS` | Backend | — | Optional | Runtime only |
-| `BREVO_API_KEY` | Backend | — | Yes | Runtime only |
-| `BREVO_SENDER_EMAIL` | Backend | — | Yes | Runtime only |
-| `BREVO_SENDER_NAME` | Backend | — | Optional | Runtime only |
-| `BREVO_FROM_EMAIL` | Backend | — | Optional | Runtime only |
-| `BREVO_DISPLAY_NAME` | Backend | — | Optional | Runtime only |
-| `BREVO_API_URL` | Backend | — | Optional | Runtime only |
+| `SMTP_HOST` | Backend | — | Yes | Runtime only |
+| `SMTP_PORT` | Backend | — | Yes | Runtime only |
+| `SMTP_USER` | Backend | — | Yes | Runtime only |
+| `SMTP_PASSWORD` | Backend | — | Yes | Runtime only |
+| `SMTP_FROM` | Backend | — | Yes | Runtime only |
+| `SMTP_SECURE` | Backend | — | Optional | Runtime only |
+| `SMTP_DISPLAY_NAME` | Backend | — | Optional | Runtime only |
 | `MONGODB_TLS` | Backend | — | Optional | Runtime only |
 | `BACKEND_URL` | Backend | — | Optional | Runtime only |
 | `NODE_ENV` | Backend | — | Yes | Runtime only |
@@ -566,9 +572,13 @@ ROOT_ENCRYPTION_KEY=
 FRONTEND_URL=https://hashenv.neutrotex.com
 NODE_ENV=production
 PORT=3001
-BREVO_API_KEY=
-BREVO_SENDER_EMAIL=noreply@neutrotex.com
-BREVO_SENDER_NAME=HashEnv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=noreply@neutrotex.com
+SMTP_DISPLAY_NAME=HashEnv
 # Optional — use instead of FRONTEND_URL when you need multiple origins:
 # CORS_ORIGINS=https://hashenv.neutrotex.com,https://www.hashenv.neutrotex.com
 # Optional — not needed on Dokploy:
@@ -693,7 +703,7 @@ The API subdomain (`hashenv-api.neutrotex.com`) does not need to be in CORS — 
 5. Create Application **`hashenv-backend`** → Build Path `backend` → domain `hashenv-api.neutrotex.com` → deploy → confirm health endpoints.
 6. Create Application **`hashenv-frontend`** → Build Path `frontend` → build args → domain `hashenv.neutrotex.com` (+ optional www + redirect) → deploy.
 7. Set `FRONTEND_URL` / `CORS_ORIGINS` on backend to match the canonical frontend URL; redeploy backend if needed.
-8. Test auth flows and Brevo transactional email (register, verify, password reset).
+8. Test auth flows and SMTP transactional email (register, verify, password reset).
 
 Unlike Docker Compose, there is no `depends_on` across Dokploy applications. Deploy backend first, then frontend.
 
@@ -776,11 +786,12 @@ This uses `docker-compose.yml` — not deployed on Dokploy.
 
 - `ROOT_ENCRYPTION_KEY` must be set and **stable across redeploys**. Rotating it without following [ROOT-KEY-ROTATION.md](./ROOT-KEY-ROTATION.md) makes existing encrypted data unreadable.
 
-### Email not sending (Brevo)
+### Email not sending (SMTP)
 
-- Verify `BREVO_API_KEY` is valid.
-- `BREVO_SENDER_EMAIL` must be a **verified sender** in your Brevo account.
-- Check backend logs for Brevo API errors on register / password-reset flows.
+- Verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` are correct.
+- For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
+- `SMTP_FROM` should be an address your SMTP provider allows you to send as.
+- Check backend logs for SMTP errors on register / password-reset flows.
 
 ### Auth cookies not persisting
 
@@ -814,8 +825,11 @@ Use `backend/env.example` for additional backend variable names. **Never commit 
 | `JWT_SECRET` | Backend | Runtime | Environment |
 | `ROOT_ENCRYPTION_KEY` | Backend | Runtime | Environment |
 | `FRONTEND_URL` | Backend | Runtime | Environment |
-| `BREVO_API_KEY` | Backend | Runtime | Environment |
-| `BREVO_SENDER_EMAIL` | Backend | Runtime | Environment |
+| `SMTP_HOST` | Backend | Runtime | Environment |
+| `SMTP_PORT` | Backend | Runtime | Environment |
+| `SMTP_USER` | Backend | Runtime | Environment |
+| `SMTP_PASSWORD` | Backend | Runtime | Environment |
+| `SMTP_FROM` | Backend | Runtime | Environment |
 | `NODE_ENV` | Backend | Runtime | Environment |
 | `NEXT_PUBLIC_API_URL` | Frontend | **Both** | Build Time Arguments **+** Environment |
 
@@ -825,8 +839,13 @@ MONGODB_URI=mongodb+srv://...
 JWT_SECRET=<openssl rand -hex 32>
 ROOT_ENCRYPTION_KEY=<node -e "crypto.randomBytes(32).toString('base64')">
 FRONTEND_URL=https://hashenv.neutrotex.com
-BREVO_API_KEY=...
-BREVO_SENDER_EMAIL=noreply@neutrotex.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=...
+SMTP_PASSWORD=...
+SMTP_FROM=noreply@neutrotex.com
+SMTP_DISPLAY_NAME=HashEnv
 NODE_ENV=production
 
 # Frontend → hashenv-frontend → Build Time Arguments AND Environment (both)
