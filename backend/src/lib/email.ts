@@ -12,6 +12,21 @@ import type { Transporter } from 'nodemailer';
 
 let transporter: Transporter | null = null;
 
+type EmailKind = 'verification' | 'password_reset' | 'org_invite' | 'project_invite';
+
+/**
+ * Server/container stdout only (never browser). Safe for production:
+ * logs kind + recipient, never tokens or magic links.
+ */
+function logEmail(event: 'sending' | 'sent' | 'failed', kind: EmailKind, to: string, detail?: string): void {
+  const base = `[email] ${event} kind=${kind} to=${to}`;
+  if (event === 'failed') {
+    console.error(detail ? `${base} error=${detail}` : base);
+    return;
+  }
+  console.log(detail ? `${base} ${detail}` : base);
+}
+
 /**
  * Get SMTP transporter (lazy singleton)
  */
@@ -133,6 +148,10 @@ async function sendEmailViaSmtp(
   }
 }
 
+function isDev(): boolean {
+  return process.env.NODE_ENV === 'development';
+}
+
 /**
  * Generate a secure random token for email verification or password reset
  */
@@ -152,7 +171,9 @@ export async function sendVerificationEmail(email: string, token: string, name: 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationUrl = `${frontendUrl}/verify-email?token=${token}`;
 
-  if (process.env.NODE_ENV === 'development') {
+  logEmail('sending', 'verification', email);
+
+  if (isDev()) {
     console.log('\n========== EMAIL VERIFICATION (DEVELOPMENT MODE) ==========');
     console.log(`To: ${email}`);
     console.log(`Subject: Verify Your Email Address - HashEnv`);
@@ -200,22 +221,18 @@ export async function sendVerificationEmail(email: string, token: string, name: 
       textContent
     );
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Verification email sent successfully via SMTP');
-    }
+    logEmail('sent', 'verification', email, 'via=smtp');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logEmail('failed', 'verification', email, errorMessage);
 
-    console.error('Failed to send verification email via SMTP:', {
-      error: errorMessage,
-      email,
-    });
-
-    console.log('\n========== VERIFICATION URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
-    console.log(`Email: ${email}`);
-    console.log(`Verification URL: ${verificationUrl}`);
-    console.log('NOTE: Copy this URL and use it to verify the account manually');
-    console.log('====================================================================\n');
+    if (isDev()) {
+      console.log('\n========== VERIFICATION URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+      console.log(`Email: ${email}`);
+      console.log(`Verification URL: ${verificationUrl}`);
+      console.log('NOTE: Copy this URL and use it to verify the account manually');
+      console.log('====================================================================\n');
+    }
 
     throw new Error(`Failed to send verification email: ${errorMessage}`);
   }
@@ -233,7 +250,9 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
-  if (process.env.NODE_ENV === 'development') {
+  logEmail('sending', 'password_reset', email);
+
+  if (isDev()) {
     console.log('\n========== PASSWORD RESET (DEVELOPMENT MODE) ==========');
     console.log(`To: ${email}`);
     console.log(`Subject: Reset Your Password - HashEnv`);
@@ -283,22 +302,18 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
       textContent
     );
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Password reset email sent successfully via SMTP');
-    }
+    logEmail('sent', 'password_reset', email, 'via=smtp');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logEmail('failed', 'password_reset', email, errorMessage);
 
-    console.error('Failed to send password reset email via SMTP:', {
-      error: errorMessage,
-      email,
-    });
-
-    console.log('\n========== PASSWORD RESET URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
-    console.log(`Email: ${email}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log('NOTE: Copy this URL and use it to reset the password manually');
-    console.log('==================================================================\n');
+    if (isDev()) {
+      console.log('\n========== PASSWORD RESET URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+      console.log(`Email: ${email}`);
+      console.log(`Reset URL: ${resetUrl}`);
+      console.log('NOTE: Copy this URL and use it to reset the password manually');
+      console.log('==================================================================\n');
+    }
 
     throw new Error(`Failed to send password reset email: ${errorMessage}`);
   }
@@ -316,7 +331,9 @@ export async function sendOrgInviteEmail(
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
 
-  if (process.env.NODE_ENV === 'development') {
+  logEmail('sending', 'org_invite', email);
+
+  if (isDev()) {
     console.log('\n========== ORG INVITE (DEVELOPMENT MODE) ==========');
     console.log(`To: ${email}`);
     console.log(`Subject: You've been invited to join ${organizationName} on HashEnv`);
@@ -364,21 +381,17 @@ export async function sendOrgInviteEmail(
       textContent
     );
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Organization invite email sent successfully via SMTP');
-    }
+    logEmail('sent', 'org_invite', email, 'via=smtp');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logEmail('failed', 'org_invite', email, errorMessage);
 
-    console.error('Failed to send organization invite email via SMTP:', {
-      error: errorMessage,
-      email,
-    });
-
-    console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
-    console.log(`Email: ${email}`);
-    console.log(`Invite URL: ${inviteUrl}`);
-    console.log('====================================================================\n');
+    if (isDev()) {
+      console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+      console.log(`Email: ${email}`);
+      console.log(`Invite URL: ${inviteUrl}`);
+      console.log('====================================================================\n');
+    }
 
     throw new Error(`Failed to send organization invite email: ${errorMessage}`);
   }
@@ -396,7 +409,9 @@ export async function sendProjectInviteEmail(
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const inviteUrl = `${frontendUrl}/accept-invite?token=${token}`;
 
-  if (process.env.NODE_ENV === 'development') {
+  logEmail('sending', 'project_invite', email);
+
+  if (isDev()) {
     console.log('\n========== PROJECT INVITE (DEVELOPMENT MODE) ==========');
     console.log(`To: ${email}`);
     console.log(`Subject: You've been invited to collaborate on ${projectName} on HashEnv`);
@@ -444,21 +459,17 @@ export async function sendProjectInviteEmail(
       textContent
     );
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Project invite email sent successfully via SMTP');
-    }
+    logEmail('sent', 'project_invite', email, 'via=smtp');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logEmail('failed', 'project_invite', email, errorMessage);
 
-    console.error('Failed to send project invite email via SMTP:', {
-      error: errorMessage,
-      email,
-    });
-
-    console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
-    console.log(`Email: ${email}`);
-    console.log(`Invite URL: ${inviteUrl}`);
-    console.log('====================================================================\n');
+    if (isDev()) {
+      console.log('\n========== INVITE URL (EMAIL FAILED - USE THIS AS FALLBACK) ==========');
+      console.log(`Email: ${email}`);
+      console.log(`Invite URL: ${inviteUrl}`);
+      console.log('====================================================================\n');
+    }
 
     throw new Error(`Failed to send project invite email: ${errorMessage}`);
   }

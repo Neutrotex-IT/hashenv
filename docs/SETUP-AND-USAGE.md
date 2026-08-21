@@ -234,14 +234,7 @@ Open [http://localhost:3000](http://localhost:3000).
 2. On signup, HashEnv automatically creates a **personal organization** for you.
 3. You must verify your email before logging in.
 
-**Without SMTP configured:** registration still succeeds. Check the backend terminal for a line like:
-
-```
-========== EMAIL VERIFICATION (DEVELOPMENT MODE) ==========
-Verification URL: http://localhost:3000/verify-email?token=...
-```
-
-Open that URL in your browser to verify.
+**Without SMTP configured:** registration still succeeds. In development, check the backend terminal for a verification URL banner. In production, check **backend container logs** for `[email] sending|sent|failed` lines (no magic links in prod logs).
 
 ### 2. Log in
 
@@ -597,7 +590,8 @@ Refresh cookies use `secure: true` in production. Both frontend and API must be 
 ### "Email not verified" on login
 
 - Complete email verification first.
-- In dev without SMTP: copy the verification URL from the backend console after registration.
+- In development: copy the verification URL from the backend console after registration.
+- In production: open backend container logs and look for `[email] sent kind=verification` or `[email] failed ...`.
 
 ### CORS errors in the browser
 

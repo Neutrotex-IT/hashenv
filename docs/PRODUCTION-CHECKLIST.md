@@ -75,7 +75,7 @@ Must include `/api` and use `https://` in production.
 1. **Backend** — set env vars, `npm run build`, `npm start`
 2. **Frontend** — set `NEXT_PUBLIC_API_URL`, `npm run build`, `npm start`
 3. **Database** — verify network access and TLS from hosting to MongoDB Atlas
-4. **Email** — test SMTP; configure SPF/DKIM for your domain
+4. **Email** — test SMTP; configure SPF/DKIM for your domain. Confirm backend container logs show `[email] sent ...` after register / reset.
 
 ---
 

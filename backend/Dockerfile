@@ -15,7 +15,8 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npx tsc -p tsconfig.build.json
 
-# Production image
+# Production image — process stdout/stderr = container logs (Dokploy Logs / docker logs).
+# Email events log as: [email] sending|sent|failed kind=... to=...
 FROM base AS runner
 ENV NODE_ENV=production
 

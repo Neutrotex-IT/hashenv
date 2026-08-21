@@ -688,7 +688,7 @@ The API subdomain (`hashenv-api.neutrotex.com`) does not need to be in CORS — 
 | CPU / memory limits | Application → **Advanced** → **Resources** |
 | Health checks | Application → **Advanced** → **Swarm Settings** (image already includes `HEALTHCHECK`) |
 | Deploy / rebuild | Application → **General** → **Deploy** |
-| Logs | Application → **Logs** |
+| Logs | Application → **Logs** (backend: filter `[email]` for SMTP send/fail) |
 | Auto-deploy on git push | Application → **Deployments** → Webhook URL |
 | Limit rebuilds to subfolder changes | Application → **General** → **Watch Paths** (if available) |
 
@@ -703,7 +703,7 @@ The API subdomain (`hashenv-api.neutrotex.com`) does not need to be in CORS — 
 5. Create Application **`hashenv-backend`** → Build Path `backend` → domain `hashenv-api.neutrotex.com` → deploy → confirm health endpoints.
 6. Create Application **`hashenv-frontend`** → Build Path `frontend` → build args → domain `hashenv.neutrotex.com` (+ optional www + redirect) → deploy.
 7. Set `FRONTEND_URL` / `CORS_ORIGINS` on backend to match the canonical frontend URL; redeploy backend if needed.
-8. Test auth flows and SMTP transactional email (register, verify, password reset).
+8. Test auth flows and SMTP email (register, verify, password reset). Confirm `[email] sent` in backend Logs.
 
 Unlike Docker Compose, there is no `depends_on` across Dokploy applications. Deploy backend first, then frontend.
 
@@ -791,7 +791,11 @@ This uses `docker-compose.yml` — not deployed on Dokploy.
 - Verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` are correct.
 - For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
 - `SMTP_FROM` should be an address your SMTP provider allows you to send as.
-- Check backend logs for SMTP errors on register / password-reset flows.
+- Check **hashenv-backend → Logs** for lines starting with `[email]`:
+  - `[email] sending kind=verification to=...` — send attempted
+  - `[email] sent kind=verification to=... via=smtp` — SMTP accepted the message
+  - `[email] failed kind=... to=... error=...` — SMTP or config error
+- Magic-link / token URLs are **not** printed in production logs (dev only).
 
 ### Auth cookies not persisting
 
