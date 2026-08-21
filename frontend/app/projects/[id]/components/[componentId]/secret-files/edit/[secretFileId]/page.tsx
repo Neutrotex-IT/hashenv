@@ -22,6 +22,10 @@ export default function EditSecretFilePage() {
   const [componentName, setComponentName] = useState('');
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
+  const [label, setLabel] = useState('');
+  const [originalLabel, setOriginalLabel] = useState('');
+  const [description, setDescription] = useState('');
+  const [originalDescription, setOriginalDescription] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMode, setSaveMode] = useState<'update' | 'newVersion'>('update');
@@ -44,6 +48,10 @@ export default function EditSecretFilePage() {
       const data = await secretFilesAPI.getFileContent(projectId, componentId, secretFileId);
       setContent(data.content);
       setOriginalContent(data.content);
+      setLabel(data.label || '');
+      setOriginalLabel(data.label || '');
+      setDescription(data.description || '');
+      setOriginalDescription(data.description || '');
       setError('');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -67,7 +75,11 @@ export default function EditSecretFilePage() {
     setSaveMode(saveAsNewVersion ? 'newVersion' : 'update');
     setError('');
     try {
-      await secretFilesAPI.edit(projectId, componentId, secretFileId, content, { saveAsNewVersion });
+      await secretFilesAPI.edit(projectId, componentId, secretFileId, content, {
+        saveAsNewVersion,
+        label,
+        description,
+      });
       setLastEnvironment(projectId, componentId, environment);
       router.push(
         `/projects/${projectId}/components/${componentId}?environment=${encodeURIComponent(environment)}`
@@ -85,7 +97,8 @@ export default function EditSecretFilePage() {
     await handleSave(false);
   };
 
-  const hasChanges = content !== originalContent;
+  const hasChanges =
+    content !== originalContent || label !== originalLabel || description !== originalDescription;
 
   if (loading) {
     return (
@@ -121,6 +134,37 @@ export default function EditSecretFilePage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label htmlFor="label" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+            Label <span className="font-normal text-[var(--text-muted)]">(optional)</span>
+          </label>
+          <input
+            id="label"
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value.slice(0, 100))}
+            placeholder="e.g. API backend env"
+            maxLength={100}
+            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+            Description <span className="font-normal text-[var(--text-muted)]">(optional)</span>
+          </label>
+          <textarea
+            id="description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value.slice(0, 500))}
+            placeholder="Short note about what this file is for"
+            rows={3}
+            maxLength={500}
+            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] text-sm placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] resize-y"
+          />
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{description.length}/500</p>
+        </div>
+
         <div>
           <label htmlFor="content" className="block text-sm font-medium text-[var(--foreground)] mb-2">
             File Content

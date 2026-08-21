@@ -257,7 +257,8 @@ export default function ComponentDetailPage() {
 
   const handleViewFile = async (version: SecretFileVersion) => {
     rememberEnvironment(version.environment);
-    const title = `${version.fileName} v${version.version}`;
+    const displayName = version.label?.trim() || version.fileName;
+    const title = `${displayName} v${version.version}`;
     setSensitiveModal({ title, fields: [], loading: true });
     try {
       const data = await secretFilesAPI.getFileContent(projectId, componentId, version._id);
@@ -276,8 +277,9 @@ export default function ComponentDetailPage() {
   };
 
   const handleRollback = async (version: SecretFileVersion) => {
+    const displayName = version.label?.trim() || version.fileName;
     const ok = await confirm({
-      title: `Rollback ${version.fileName} to version ${version.version}?`,
+      title: `Rollback ${displayName} to version ${version.version}?`,
       message: `This creates a new version with the content from v${version.version}. Current history is preserved.`,
       confirmLabel: 'Rollback',
       variant: 'danger',
@@ -301,8 +303,9 @@ export default function ComponentDetailPage() {
   };
 
   const handleDeleteVersion = async (version: SecretFileVersion) => {
+    const displayName = version.label?.trim() || version.fileName;
     const ok = await confirm({
-      title: 'Delete secrets file version?',
+      title: `Delete ${displayName} v${version.version}?`,
       message: 'This action cannot be undone.',
       confirmLabel: 'Delete',
       variant: 'danger',
@@ -633,7 +636,7 @@ export default function ComponentDetailPage() {
               {versionsLoading ? (
                 <SkeletonDataTable
                   columns={[
-                    { key: 'fileName', width: 120 },
+                    { key: 'fileName', width: 160 },
                     { key: 'type', width: 80 },
                     { key: 'version', width: 56 },
                     { key: 'uploadedBy', width: 112 },
@@ -646,7 +649,7 @@ export default function ComponentDetailPage() {
                   <thead className="bg-[var(--surface-elevated)]">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
-                        File name
+                        File
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">
                         Type
@@ -671,8 +674,20 @@ export default function ComponentDetailPage() {
                       const latestForFile = fileVersions[0];
                       return (
                         <tr key={version._id} className="hover:bg-[var(--surface-elevated)] transition-colors">
-                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-[var(--foreground)]">
-                            {version.fileName}
+                          <td className="max-w-xs px-6 py-4 text-sm text-[var(--foreground)]">
+                            <div className="font-medium">
+                              {version.label?.trim() || version.fileName}
+                            </div>
+                            {version.label?.trim() ? (
+                              <div className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
+                                {version.fileName}
+                              </div>
+                            ) : null}
+                            {version.description?.trim() ? (
+                              <div className="mt-1 line-clamp-2 text-xs text-[var(--text-secondary)]">
+                                {version.description}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-secondary)]">
                             {formatSecretFileType(version.fileType)}

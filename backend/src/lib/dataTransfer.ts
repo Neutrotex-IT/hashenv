@@ -31,6 +31,8 @@ export interface ExportedSecretFile {
   fileType: string;
   version: number;
   content: string;
+  label?: string;
+  description?: string;
 }
 
 export interface ExportedSecret {
@@ -153,6 +155,8 @@ export async function exportProjectData(project: IProject): Promise<ExportedProj
           fileType: secretFile.fileType,
           version: secretFile.version,
           content,
+          ...(secretFile.label ? { label: secretFile.label } : {}),
+          ...(secretFile.description ? { description: secretFile.description } : {}),
         });
       } catch (error) {
         console.error(`Export: failed to decrypt secret file ${component.name}/${secretFile.fileName}:`, error);
@@ -431,6 +435,8 @@ async function importSecretFileRecord(
     .limit(1);
   const nextVersion = latest ? latest.version + 1 : 1;
   const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), secretFile.content);
+  const label = secretFile.label?.trim() || latest?.label;
+  const description = secretFile.description?.trim() || latest?.description;
 
   const created = await SecretFile.create({
     projectId,
@@ -438,6 +444,8 @@ async function importSecretFileRecord(
     environment,
     fileName,
     fileType,
+    label,
+    description,
     encryptedData,
     iv,
     authTag,

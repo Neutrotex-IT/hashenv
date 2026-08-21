@@ -41,6 +41,8 @@ export default function UploadSecretFilePage() {
   const [environment, setEnvironment] = useState('dev');
   const [fileType, setFileType] = useState('env');
   const [fileName, setFileName] = useState('.env');
+  const [label, setLabel] = useState('');
+  const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState('');
   const [uploadMethod, setUploadMethod] = useState<'file' | 'text'>('file');
@@ -166,9 +168,10 @@ export default function UploadSecretFilePage() {
 
     setLoading(true);
     setError('');
+    const meta = { label, description };
     try {
       if (uploadMethod === 'file' && file) {
-        await secretFilesAPI.upload(projectId, componentId, file, environment, resolvedFileName, fileType);
+        await secretFilesAPI.upload(projectId, componentId, file, environment, resolvedFileName, fileType, meta);
       } else {
         await secretFilesAPI.uploadText(
           projectId,
@@ -176,7 +179,8 @@ export default function UploadSecretFilePage() {
           content,
           environment,
           resolvedFileName,
-          fileType
+          fileType,
+          meta
         );
       }
       setLastEnvironment(projectId, componentId, environment);
@@ -354,6 +358,37 @@ export default function UploadSecretFilePage() {
               {formatSecretFileType(fileType)}
             </div>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="label" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+            Label <span className="font-normal text-[var(--text-muted)]">(optional)</span>
+          </label>
+          <input
+            id="label"
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value.slice(0, 100))}
+            placeholder="e.g. API backend env"
+            maxLength={100}
+            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-[var(--foreground)] mb-2">
+            Description <span className="font-normal text-[var(--text-muted)]">(optional)</span>
+          </label>
+          <textarea
+            id="description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value.slice(0, 500))}
+            placeholder="Short note about what this file is for"
+            rows={3}
+            maxLength={500}
+            className="block w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)] text-sm placeholder:text-[var(--text-muted)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] resize-y"
+          />
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{description.length}/500</p>
         </div>
 
         <div className="rounded-md border border-[var(--warning)]/50 bg-[var(--warning)]/10 p-4">

@@ -7,6 +7,8 @@ export interface ISecretFile extends Document {
   environment: string;
   fileName: string;
   fileType: (typeof SECRET_FILE_TYPES)[number];
+  label?: string;
+  description?: string;
   encryptedData: Buffer;
   iv: Buffer;
   authTag: Buffer;
@@ -45,6 +47,16 @@ const SecretFileSchema: Schema = new Schema(
       type: String,
       enum: SECRET_FILE_TYPES,
       required: true,
+    },
+    label: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Label must be less than 100 characters'],
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Description must be less than 500 characters'],
     },
     encryptedData: {
       type: Buffer,

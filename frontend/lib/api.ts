@@ -565,6 +565,8 @@ export interface SecretFileVersion {
   environment: string;
   fileName: string;
   fileType: string;
+  label?: string;
+  description?: string;
   version: number;
   uploadedBy: {
     _id: string;
@@ -581,13 +583,16 @@ export const secretFilesAPI = {
     file: File,
     environment: string,
     fileName?: string,
-    fileType?: string
+    fileType?: string,
+    meta?: { label?: string; description?: string }
   ) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('environment', environment);
     if (fileName) formData.append('fileName', fileName);
     if (fileType) formData.append('fileType', fileType);
+    if (meta?.label?.trim()) formData.append('label', meta.label.trim());
+    if (meta?.description?.trim()) formData.append('description', meta.description.trim());
 
     const response = await api.post(
       `/projects/${projectId}/components/${componentId}/secret-files`,
@@ -602,13 +607,16 @@ export const secretFilesAPI = {
     content: string,
     environment: string,
     fileName: string,
-    fileType?: string
+    fileType?: string,
+    meta?: { label?: string; description?: string }
   ) => {
     const response = await api.post(`/projects/${projectId}/components/${componentId}/secret-files`, {
       content,
       environment,
       fileName,
       fileType,
+      ...(meta?.label?.trim() ? { label: meta.label.trim() } : {}),
+      ...(meta?.description?.trim() ? { description: meta.description.trim() } : {}),
     });
     return response.data;
   },
@@ -633,13 +641,18 @@ export const secretFilesAPI = {
     componentId: string,
     secretFileId: string,
     content: string,
-    options?: { saveAsNewVersion?: boolean }
+    options?: { saveAsNewVersion?: boolean; label?: string; description?: string }
   ) => {
     const saveAsNewVersion = options?.saveAsNewVersion === true;
     const url = `/projects/${projectId}/components/${componentId}/secret-files/${secretFileId}${
       saveAsNewVersion ? '?saveAsNewVersion=true' : ''
     }`;
-    const response = await api.put(url, { content, saveAsNewVersion });
+    const response = await api.put(url, {
+      content,
+      saveAsNewVersion,
+      label: options?.label ?? '',
+      description: options?.description ?? '',
+    });
     return response.data;
   },
   delete: async (projectId: string, componentId: string, secretFileId: string) => {
@@ -662,7 +675,13 @@ export const secretFilesAPI = {
     const response = await api.get(
       `/projects/${projectId}/components/${componentId}/secret-files/${secretFileId}/content`
     );
-    return response.data as { content: string; fileName: string; fileType: string };
+    return response.data as {
+      content: string;
+      fileName: string;
+      fileType: string;
+      label?: string;
+      description?: string;
+    };
   },
   getLogs: async (projectId: string, componentId: string, environment?: string, file?: string) => {
     const params = new URLSearchParams();

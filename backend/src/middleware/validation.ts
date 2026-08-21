@@ -119,6 +119,22 @@ export const validateSecretFileType = (): ValidationChain => {
     .withMessage('Invalid secrets file type');
 };
 
+export const validateSecretFileLabel = (): ValidationChain => {
+  return body('label')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Label must be less than 100 characters');
+};
+
+export const validateSecretFileDescription = (): ValidationChain => {
+  return body('description')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Description must be less than 500 characters');
+};
+
 export const validateSecretFileNameQuery = (): ValidationChain => {
   return query('file')
     .trim()
