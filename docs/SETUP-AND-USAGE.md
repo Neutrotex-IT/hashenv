@@ -36,7 +36,7 @@ Install these before you start:
 
 Optional:
 
-- **Brevo account** — for sending verification and password-reset emails in non-dev environments
+- **SMTP credentials** — for sending verification and password-reset emails (e.g. Gmail App Password or any SMTP provider)
 - **Git** — for cloning the repository
 
 ---
@@ -152,9 +152,13 @@ For a fresh greenfield install, an empty database is fine. The server bootstraps
 | `ROOT_ENCRYPTION_KEY` | **Yes** | Root encryption key (min 32 characters) |
 | `FRONTEND_URL` | **Yes** | Frontend URL for CORS and email links (e.g. `http://localhost:3000`) |
 | `CORS_ORIGINS` | No | Comma-separated allowed origins (overrides `FRONTEND_URL` for multiple domains) |
-| `BREVO_API_KEY` | For email | Brevo API key for transactional email |
-| `BREVO_SENDER_EMAIL` | For email | Verified sender address in Brevo |
-| `BREVO_SENDER_NAME` | No | Display name for outgoing email |
+| `SMTP_HOST` | For email | SMTP server hostname (e.g. `smtp.gmail.com`) |
+| `SMTP_PORT` | For email | SMTP port (e.g. `587` or `465`) |
+| `SMTP_SECURE` | No | `true` for port 465, `false` for STARTTLS on 587 |
+| `SMTP_USER` | For email | SMTP username / login email |
+| `SMTP_PASSWORD` | For email | SMTP password or app password |
+| `SMTP_FROM` | For email | From address (falls back to `SMTP_USER`) |
+| `SMTP_DISPLAY_NAME` | No | Display name for outgoing email |
 | `BACKEND_URL` | Prod only | Public backend URL (used by health-ping cron on Render) |
 
 ### Frontend (`frontend/.env`)
@@ -176,9 +180,13 @@ JWT_SECRET=<generated-32+-char-secret>
 ROOT_ENCRYPTION_KEY=<generated-32+-char-secret>
 
 # Optional for local dev — verification URLs are logged to the backend console
-BREVO_API_KEY=
-BREVO_SENDER_EMAIL=noreply@yourdomain.com
-BREVO_SENDER_NAME=HashEnv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=your-email@gmail.com
+SMTP_DISPLAY_NAME=HashEnv
 ```
 
 ---
@@ -226,14 +234,7 @@ Open [http://localhost:3000](http://localhost:3000).
 2. On signup, HashEnv automatically creates a **personal organization** for you.
 3. You must verify your email before logging in.
 
-**Without Brevo configured:** registration still succeeds. Check the backend terminal for a line like:
-
-```
-========== EMAIL VERIFICATION (DEVELOPMENT MODE) ==========
-Verification URL: http://localhost:3000/verify-email?token=...
-```
-
-Open that URL in your browser to verify.
+**Without SMTP configured:** registration still succeeds. In development, check the backend terminal for a verification URL banner. In production, check **backend container logs** for `[email] sending|sent|failed` lines (no magic links in prod logs).
 
 ### 2. Log in
 
@@ -567,7 +568,7 @@ See **[PRODUCTION-CHECKLIST.md](./PRODUCTION-CHECKLIST.md)** for the full deploy
 3. Set `FRONTEND_URL` to your production frontend URL
 4. Set `NEXT_PUBLIC_API_URL` to your production API URL (e.g. `https://api.yourdomain.com/api`)
 5. Generate **new** `JWT_SECRET` and `ROOT_ENCRYPTION_KEY` for production using OpenSSL or Node (see [Generate required secrets](#3-generate-required-secrets)); do not reuse dev secrets
-6. Configure Brevo for email delivery
+6. Configure SMTP credentials for email delivery
 7. Use MongoDB Atlas or a managed MongoDB instance with TLS
 8. Ensure CORS allows only your frontend origin(s)
 
@@ -589,7 +590,8 @@ Refresh cookies use `secure: true` in production. Both frontend and API must be 
 ### "Email not verified" on login
 
 - Complete email verification first.
-- In dev without Brevo: copy the verification URL from the backend console after registration.
+- In development: copy the verification URL from the backend console after registration.
+- In production: open backend container logs and look for `[email] sent kind=verification` or `[email] failed ...`.
 
 ### CORS errors in the browser
 
