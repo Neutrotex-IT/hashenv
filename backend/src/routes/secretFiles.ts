@@ -15,6 +15,8 @@ import {
   validateFileContent,
   validateSecretFileName,
   validateSecretFileType,
+  validateSecretFileLabel,
+  validateSecretFileDescription,
   validateSecretFileNameQuery,
   isValidObjectId,
 } from '../middleware/validation';
@@ -69,6 +71,29 @@ function resolveFileName(req: AuthRequest): string | null {
   return null;
 }
 
+/** Non-empty trimmed text, or undefined when blank. */
+function normalizeOptionalText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const trimmed = String(value).trim();
+  return trimmed || undefined;
+}
+
+/**
+ * Upload: non-empty sets; omit inherits previous; empty inherits previous
+ * so re-uploads keep metadata unless the client sends a new value.
+ */
+function resolveInheritedMeta(raw: unknown, previous?: string): string | undefined {
+  if (raw === undefined || raw === null) return previous;
+  const trimmed = String(raw).trim();
+  return trimmed || previous;
+}
+
+/** Edit: present field sets or clears; omit keeps existing. */
+function resolveEditableMeta(raw: unknown, existing?: string): string | undefined {
+  if (raw === undefined) return existing;
+  return normalizeOptionalText(raw);
+}
+
 router.post(
   '/:projectId/components/:componentId/secret-files',
   authenticate,
@@ -77,7 +102,7 @@ router.post(
   uploadRateLimiter,
   requireComponentAccess('write'),
   upload.single('file'),
-  [validateEnvironment(), validateSecretFileName().optional(), validateSecretFileType()],
+  [validateEnvironment(), validateSecretFileName().optional(), validateSecretFileType(), validateSecretFileLabel(), validateSecretFileDescription()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -136,6 +161,8 @@ router.post(
         .limit(1);
 
       const nextVersion = latest ? latest.version + 1 : 1;
+      const label = resolveInheritedMeta(req.body.label, latest?.label);
+      const description = resolveInheritedMeta(req.body.description, latest?.description);
 
       const secretFile = await SecretFile.create({
         projectId,
@@ -143,6 +170,8 @@ router.post(
         environment,
         fileName,
         fileType,
+        label,
+        description,
         encryptedData,
         iv,
         authTag,
@@ -230,7 +259,13 @@ router.get(
         );
       }
 
-      res.json({ content: plaintextData, fileName: secretFile.fileName, fileType: secretFile.fileType });
+      res.json({
+        content: plaintextData,
+        fileName: secretFile.fileName,
+        fileType: secretFile.fileType,
+        label: secretFile.label,
+        description: secretFile.description,
+      });
     } catch (error) {
       console.error('Get secrets file content error:', error instanceof Error ? error.message : 'Unknown error');
       res.status(500).json({ error: 'Failed to get secrets file content' });
@@ -392,7 +427,7 @@ router.put(
   validateComponentId(),
   validateSecretFileId(),
   requireComponentAccess('write'),
-  [validateFileContent()],
+  [validateFileContent(), validateSecretFileLabel(), validateSecretFileDescription()],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
@@ -428,6 +463,8 @@ router.put(
 
       const oldVersion = secretFile.version;
       const { environment, fileName } = secretFile;
+      const label = resolveEditableMeta(req.body.label, secretFile.label);
+      const description = resolveEditableMeta(req.body.description, secretFile.description);
       const { encryptedData, iv, authTag } = await encryptComponentData(component._id.toString(), content);
 
       if (saveAsNewVersion) {
@@ -442,6 +479,8 @@ router.put(
           environment,
           fileName,
           fileType: secretFile.fileType,
+          label,
+          description,
           encryptedData,
           iv,
           authTag,
@@ -478,10 +517,20 @@ router.put(
         return;
       }
 
-      secretFile.encryptedData = encryptedData;
-      secretFile.iv = iv;
-      secretFile.authTag = authTag;
-      await secretFile.save();
+      const $set: Record<string, unknown> = { encryptedData, iv, authTag };
+      const $unset: Record<string, 1> = {};
+      if (label) $set.label = label;
+      else $unset.label = 1;
+      if (description) $set.description = description;
+      else $unset.description = 1;
+
+      await SecretFile.updateOne(
+        { _id: secretFile._id },
+        {
+          $set,
+          ...(Object.keys($unset).length > 0 ? { $unset } : {}),
+        }
+      );
 
       await auditSecretFile(
         projectId,
@@ -705,6 +754,8 @@ router.post(
         environment,
         fileName,
         fileType: sourceFile.fileType,
+        label: sourceFile.label,
+        description: sourceFile.description,
         encryptedData,
         iv,
         authTag,
