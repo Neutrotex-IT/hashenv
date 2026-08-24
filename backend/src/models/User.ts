@@ -10,6 +10,7 @@ export interface IUser extends Document {
   emailVerificationExpires?: Date;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  schemaVersion: number;
   createdAt: Date;
 }
 
@@ -65,10 +66,18 @@ const UserSchema: Schema = new Schema(
       type: Date,
       select: false,
     },
+    schemaVersion: {
+      type: Number,
+      required: true,
+      default: 1,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
   }
 );
+
+UserSchema.index({ emailVerificationToken: 1 }, { unique: true, sparse: true });
+UserSchema.index({ passwordResetToken: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<IUser>('User', UserSchema);

@@ -106,36 +106,25 @@ You may still put `/hashenv` in the URI path; `MONGODB_DB_NAME` remains the reli
 
 ### Findings and recommendations
 
-#### F1 — Audit log growth (Archive / TTL) — Medium
+#### F1 — Audit log growth (Archive / TTL) — Medium — **Applied**
 
-`auditlogs` only grows. Indexes on `organizationId+createdAt`, `projectId+createdAt`, etc. will bloat on M0 storage.
+Daily archive job moves docs older than **90 days** into `auditlogarchives` via `$merge`, then deletes from hot `auditlogs` (MongoDB Archive Pattern). See `backend/src/lib/archiveAuditLogs.ts`.
 
-**Suggestion:** TTL or archive after N days (e.g. 90–180). Example TTL index once retention is agreed:
+#### F2 — Secret file version unbounded growth — Medium — **Applied**
 
-```js
-// Only after product sign-off on retention
-db.auditlogs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 15552000 }) // 180d
-```
-
-Or Online Archive / cold collection per Archive pattern.
-
-#### F2 — Secret file version unbounded growth — Medium
-
-Each upload creates a new `secretfiles` document with full encrypted payload. Correct modeling, but versions never prune.
-
-**Suggestion:** Cap retained versions per `(componentId, environment, fileName)` (e.g. keep last 20) or offer “prune old versions” in admin tools. Monitor collection size on M0 (512 MB shared).
+Cap: last **20** versions per `(componentId, environment, fileName)`. Prune after upload/edit/rollback/import; startup backfill; UI notice on component version list.
 
 #### F3 — Settings as separate collections — Low (acceptable)
 
-`usersettings` / `organizationsettings` are 1:1. Embedding into `users` / `organizations` would reduce round trips slightly. Current split is fine for independent updates and clearer panic/auto-flush queries. **No change required.**
+`usersettings` / `organizationsettings` are 1:1. Embedding into `users` / `organizations` would reduce round trips slightly. Current split is fine for independent updates and clearer panic/auto-flush queries. **No change required** (skipped by design).
 
-#### F4 — No database-level `$jsonSchema` validators — Low
+#### F4 — No database-level `$jsonSchema` validators — Low — **Applied**
 
-Mongoose validates in app. For defense in depth on Atlas, consider moderate `$jsonSchema` on high-risk collections later (`validationLevel: "moderate"`, start with `warn`).
+`ensureCollectionValidators()` applies `$jsonSchema` with `validationLevel: "moderate"` and `validationAction: "warn"` on `users`, `secrets`, `secretfiles`, `projects`, `auditlogs`.
 
-#### F5 — Schema versioning — Info
+#### F5 — Schema versioning — Info — **Applied**
 
-No `schemaVersion` field. Fine while models are stable; add when rolling breaking document shape changes without downtime.
+`schemaVersion: 1` (default) on high-risk models + startup backfill. Pairs with F4 validators.
 
 #### F6 — Extended reference opportunity — Low
 
@@ -172,60 +161,25 @@ MongoDB MCP / Atlas Performance Advisor were **not** available. Suggestions belo
 
 ### High-impact gaps
 
-#### Q1 — Auth token lookups on `users` — High
+#### Q1 — Auth token lookups on `users` — High — **Applied**
 
-Routes look up by `emailVerificationToken` / `passwordResetToken` (with expiry). Those fields are `select: false` and **have no indexes** → collection scan as user count grows.
+Sparse unique indexes on `emailVerificationToken` and `passwordResetToken`.
 
-**Suggestion:**
+#### Q2 — Auto-flush scan on `usersettings` — Medium — **Applied**
 
-```js
-db.users.createIndex({ emailVerificationToken: 1 }, { sparse: true })
-db.users.createIndex({ passwordResetToken: 1 }, { sparse: true })
-```
+Partial index on `flushDuration` with `{ flushDuration: { $gte: 1 } }`.
 
-(Or partial indexes where token exists.)
+#### Q3 — Redundant indexes — Low (write overhead) — **Applied**
 
-#### Q2 — Auto-flush scan on `usersettings` — Medium
+Dropped redundant singletons / overlapping SecretFile unique; kept `{ createdAt: -1 }` on `auditlogs` for archive age scans. `syncIndexes()` on touched models at startup.
 
-`UserSettings.find({ flushDuration: { $ne: null, $gte: 1 } })` hourly. Without an index, full scan of settings.
+#### Q4 — SecretFile aggregations — Medium (shape OK, index path) — **Applied**
 
-**Suggestion:**
+Compound index `{ projectId: 1, componentId: 1, version: -1 }`. Unique latest-by-file index uses `version: -1`.
 
-```js
-db.usersettings.createIndex(
-  { flushDuration: 1 },
-  { partialFilterExpression: { flushDuration: { $gte: 1 } } }
-)
-```
+#### Q5 — N+1 / multi-round-trip patterns — Medium (code, not index) — **Applied**
 
-#### Q3 — Redundant indexes — Low (write overhead)
-
-| Collection | Issue |
-|------------|-------|
-| `associatedaccounts` | `{ projectId: 1, label: 1 }` unique **and** `{ projectId: 1 }` — prefix of compound covers `projectId`-only queries; drop singleton if Atlas advises |
-| `secretfiles` | Unique `{ componentId, environment, fileName, version: 1 }` **and** non-unique same fields with `version: -1` — overlapping; prefer one compound that matches sort (`version: -1`) plus uniqueness strategy |
-| `components` | `projectId: index: true` plus `{ projectId, slug }` unique — singleton often redundant |
-| `auditlogs` | Standalone `{ createdAt: -1 }` may be redundant if every query also filters org/project/actor |
-
-Drop only after confirming with Performance Advisor `dropIndexSuggestions` or `explain`.
-
-#### Q4 — SecretFile aggregations — Medium (shape OK, index path)
-
-`SecretFile.aggregate` patterns:
-
-1. `$match: { projectId }` → `$sort: { version: -1 }` → `$group` by environment  
-2. `$match: { projectId, componentId }` → `$sort: { version: -1 }` → `$group` by env+fileName  
-
-`projectId` is indexed (field + compound elsewhere). For (2), a compound like `{ projectId: 1, componentId: 1, version: -1 }` can reduce in-memory sort cost as versions grow. Current `{ componentId, environment, fileName, version }` helps latest-by-file lookups well.
-
-#### Q5 — N+1 / multi-round-trip patterns — Medium (code, not index)
-
-| Location | Pattern | Suggestion |
-|----------|---------|------------|
-| `dataTransfer.ts` | Per-component `SecretFile.find` / `Secret.find` | Prefer `$in: componentIds` once, group in memory |
-| `autoFlush.ts` | `find` all files then `deleteMany` | `deleteMany` alone + `deletedCount` (skip load unless audit needs count of docs) |
-| `authorization` / `abac` | Repeated `OrgMember` / `Project` loads per request | Request-scoped cache already partially via middleware; avoid duplicate finds in same handler |
-| `component-crypto.ts` | Component → Project chain | Acceptable; rare path |
+`dataTransfer` export batches SecretFile/Secret with `$in`; `autoFlush` uses `deleteMany.deletedCount`.
 
 #### Q6 — Large audit list caps — OK
 
@@ -253,12 +207,13 @@ You already approximate this; keep uniqueness constraints aligned with that key.
 | Done | Conservative pool / idle timeouts for Atlas free | Connection |
 | Done | Graceful Mongo disconnect on SIGINT/SIGTERM | Connection |
 | P0 | Confirm live data is under intended DB (migrate off `test` if needed) | Ops |
-| P1 | Sparse indexes on user verification / reset tokens | Index |
-| P1 | Partial index for auto-flush `flushDuration` | Index |
-| P2 | Audit log retention (TTL or archive) | Schema lifecycle |
-| P2 | Secret file version retention policy | Schema lifecycle |
-| P3 | Deduplicate redundant indexes after Advisor review | Index hygiene |
-| P3 | Batch queries in `dataTransfer` / auto-flush | Query code |
+| Done | Sparse indexes on user verification / reset tokens | Index |
+| Done | Partial index for auto-flush `flushDuration` | Index |
+| Done | Audit log archive after 90 days (cold collection) | Schema lifecycle |
+| Done | Secret file version retention (last 20) + UI notice | Schema lifecycle |
+| Done | Deduplicate redundant indexes + syncIndexes | Index hygiene |
+| Done | Batch queries in `dataTransfer` / auto-flush | Query code |
+| Done | `schemaVersion` + moderate/warn `$jsonSchema` on high-risk collections | Schema defense |
 
 ---
 
@@ -276,6 +231,10 @@ Do **not** create or drop indexes in production without explicit approval.
 
 ## Related files
 
-- Connection: `backend/src/index.ts`
+- Connection: `backend/src/index.ts`, `backend/src/config/mongo.ts`
+- Index sync: `backend/src/config/syncIndexes.ts`
+- Validators / schemaVersion: `backend/src/config/collectionValidators.ts`
+- Audit archive: `backend/src/lib/archiveAuditLogs.ts`, `backend/src/models/AuditLogArchive.ts`
+- Version cap: `backend/src/lib/secretFiles.ts` (`SECRET_FILE_MAX_VERSIONS`, prune helpers)
 - Wipe script: `backend/scripts/wipe-database.ts`
 - Env samples: `backend/env.example`, `docs/SETUP-AND-USAGE.md`, `docs/DOKPLOY-DEPLOY.md`

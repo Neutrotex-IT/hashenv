@@ -604,6 +604,9 @@ export default function ComponentDetailPage() {
                 <>
                   {filteredVersions.length} {filteredVersions.length === 1 ? 'version' : 'versions'} in{' '}
                   {formatEnvLabel(selectedEnv)}
+                  <span className="mt-1 block text-xs">
+                    Only the last 20 versions per file are kept; older versions are removed automatically.
+                  </span>
                 </>
               )}
             </div>

@@ -125,4 +125,27 @@ describe('Secret file CRUD lifecycle', () => {
       .set(authHeader(token));
     expect(forced.status).toBe(200);
   });
+
+  it('caps retained versions at 20 per file key', async () => {
+    for (let i = 1; i <= 21; i++) {
+      const res = await request(app)
+        .post(base())
+        .set(authHeader(token))
+        .field('environment', 'dev')
+        .field('fileName', '.env')
+        .field('content', `FOO=v${i}\n`);
+      expect(res.status).toBe(201);
+      expect(res.body.version).toBe(i);
+    }
+
+    const list = await request(app)
+      .get(`${base()}/versions`)
+      .query({ environment: 'dev', file: '.env' })
+      .set(authHeader(token));
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(20);
+    const versions = list.body.map((v: { version: number }) => v.version).sort((a: number, b: number) => a - b);
+    expect(versions[0]).toBe(2);
+    expect(versions[versions.length - 1]).toBe(21);
+  });
 });

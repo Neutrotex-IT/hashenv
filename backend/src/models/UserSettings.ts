@@ -74,5 +74,9 @@ const UserSettingsSchema: Schema = new Schema(
 );
 
 // Note: userId index is automatically created by unique: true
+UserSettingsSchema.index(
+  { flushDuration: 1 },
+  { partialFilterExpression: { flushDuration: { $gte: 1 } } }
+);
 
 export default mongoose.model<IUserSettings>('UserSettings', UserSettingsSchema);

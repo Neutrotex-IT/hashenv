@@ -17,6 +17,9 @@ export const SECRET_FILE_TYPES = [
 
 export type SecretFileType = (typeof SECRET_FILE_TYPES)[number];
 
+/** Maximum retained versions per (componentId, environment, fileName). */
+export const SECRET_FILE_MAX_VERSIONS = 20;
+
 export const UPLOAD_ALLOWED_EXTENSIONS = new Set([
   '.json',
   '.yaml',
@@ -194,6 +197,70 @@ export function buildContentDisposition(fileName: string): string {
   const asciiFallback = safe.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_') || 'secrets-file';
   const encoded = encodeURIComponent(safe);
   return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
+ * Keep only the newest SECRET_FILE_MAX_VERSIONS documents for a file key.
+ * Call after creating a new version.
+ */
+export async function pruneOldSecretFileVersions(
+  componentId: string,
+  environment: string,
+  fileName: string,
+  keep: number = SECRET_FILE_MAX_VERSIONS
+): Promise<number> {
+  const SecretFile = (await import('../models/SecretFile')).default;
+  const stale = await SecretFile.find({ componentId, environment, fileName })
+    .sort({ version: -1 })
+    .skip(keep)
+    .select('_id')
+    .lean();
+
+  if (stale.length === 0) {
+    return 0;
+  }
+
+  const result = await SecretFile.deleteMany({
+    _id: { $in: stale.map((doc) => doc._id) },
+  });
+  return result.deletedCount ?? 0;
+}
+
+/**
+ * Cap versions for every (componentId, environment, fileName) group that exceeds the limit.
+ * Used as an idempotent startup backfill.
+ */
+export async function pruneAllOversizedSecretFileVersionGroups(
+  keep: number = SECRET_FILE_MAX_VERSIONS
+): Promise<number> {
+  const SecretFile = (await import('../models/SecretFile')).default;
+  const groups = await SecretFile.aggregate<{
+    _id: { componentId: string; environment: string; fileName: string };
+    count: number;
+  }>([
+    {
+      $group: {
+        _id: {
+          componentId: '$componentId',
+          environment: '$environment',
+          fileName: '$fileName',
+        },
+        count: { $sum: 1 },
+      },
+    },
+    { $match: { count: { $gt: keep } } },
+  ]);
+
+  let pruned = 0;
+  for (const group of groups) {
+    pruned += await pruneOldSecretFileVersions(
+      String(group._id.componentId),
+      group._id.environment,
+      group._id.fileName,
+      keep
+    );
+  }
+  return pruned;
 }
 
 export const UPLOAD_ACCEPT_ATTRIBUTE =

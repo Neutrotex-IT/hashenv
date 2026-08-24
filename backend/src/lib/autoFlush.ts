@@ -36,18 +36,17 @@ export async function runAutoFlush(): Promise<void> {
 
     for (const project of projects) {
       const projectId = project._id.toString();
-      const secretFiles = await SecretFile.find({ projectId });
+      const result = await SecretFile.deleteMany({ projectId: project._id });
 
-      if (secretFiles.length === 0) {
+      if (result.deletedCount === 0) {
         continue;
       }
 
-      await SecretFile.deleteMany({ projectId: project._id });
-      flushedCount += secretFiles.length;
+      flushedCount += result.deletedCount;
 
       await auditSecretFile(projectId, userId, 'delete', undefined, {
         reason: 'auto_flush',
-        flushedCount: secretFiles.length,
+        flushedCount: result.deletedCount,
         flushDurationHours: hours,
       });
     }

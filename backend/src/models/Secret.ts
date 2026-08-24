@@ -8,6 +8,7 @@ export interface ISecret extends Document {
   iv: Buffer;
   authTag: Buffer;
   createdBy: mongoose.Types.ObjectId;
+  schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +47,11 @@ const SecretSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    schemaVersion: {
+      type: Number,
+      required: true,
+      default: 1,
     },
   },
   {

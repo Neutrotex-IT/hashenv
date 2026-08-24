@@ -15,6 +15,7 @@ export interface ISecretFile extends Document {
   contentType?: string;
   version: number;
   uploadedBy: mongoose.Types.ObjectId;
+  schemaVersion: number;
   createdAt: Date;
 }
 
@@ -24,18 +25,15 @@ const SecretFileSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Project',
       required: true,
-      index: true,
     },
     componentId: {
       type: Schema.Types.ObjectId,
       ref: 'Component',
       required: true,
-      index: true,
     },
     environment: {
       type: String,
       required: [true, 'Environment is required'],
-      index: true,
     },
     fileName: {
       type: String,
@@ -85,16 +83,23 @@ const SecretFileSchema: Schema = new Schema(
       ref: 'User',
       required: true,
     },
+    schemaVersion: {
+      type: Number,
+      required: true,
+      default: 1,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
   }
 );
 
-SecretFileSchema.index({ componentId: 1, environment: 1, fileName: 1, version: -1 });
+// Unique + latest-by-file sort (ESR: equality keys then version sort)
 SecretFileSchema.index(
-  { componentId: 1, environment: 1, fileName: 1, version: 1 },
+  { componentId: 1, environment: 1, fileName: 1, version: -1 },
   { unique: true }
 );
+// Aggregations: match projectId / projectId+componentId, sort version
+SecretFileSchema.index({ projectId: 1, componentId: 1, version: -1 });
 
 export default mongoose.model<ISecretFile>('SecretFile', SecretFileSchema);

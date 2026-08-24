@@ -19,6 +19,7 @@ export interface IProject extends Document {
   members: IProjectMember[];
   /** Allowed environment slugs for this project. */
   environments: string[];
+  schemaVersion: number;
   createdAt: Date;
 }
 
@@ -79,6 +80,11 @@ const ProjectSchema: Schema = new Schema(
     environments: {
       type: [String],
       default: ['dev', 'staging', 'prod'],
+    },
+    schemaVersion: {
+      type: Number,
+      required: true,
+      default: 1,
     },
   },
   {

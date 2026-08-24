@@ -3,8 +3,12 @@ import cron from 'node-cron';
 import mongoose from 'mongoose';
 import { createApp } from './app';
 import { connectMongo, getMongoDbName } from './config/mongo';
+import { backfillSchemaVersions, ensureCollectionValidators } from './config/collectionValidators';
+import { syncTouchedModelIndexes } from './config/syncIndexes';
 import { bootstrapEncryption } from './crypto';
 import { runAutoFlush } from './lib/autoFlush';
+import { runArchiveAuditLogs } from './lib/archiveAuditLogs';
+import { pruneAllOversizedSecretFileVersionGroups } from './lib/secretFiles';
 import Project from './models/Project';
 import { DEFAULT_ENVIRONMENTS } from './lib/environments';
 
@@ -29,6 +33,25 @@ connectMongo()
     }
 
     try {
+      await syncTouchedModelIndexes();
+    } catch (error) {
+      console.warn(
+        '[Indexes] sync warning:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+
+    try {
+      await backfillSchemaVersions();
+      await ensureCollectionValidators();
+    } catch (error) {
+      console.warn(
+        '[Schema] validation bootstrap warning:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+
+    try {
       const result = await Project.updateMany(
         {
           $or: [{ environments: { $exists: false } }, { environments: { $size: 0 } }],
@@ -41,6 +64,18 @@ connectMongo()
     } catch (error) {
       console.warn(
         'Environment backfill warning:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+
+    try {
+      const pruned = await pruneAllOversizedSecretFileVersionGroups();
+      if (pruned > 0) {
+        console.log(`[SecretFile] Pruned ${pruned} old version(s) over retention cap`);
+      }
+    } catch (error) {
+      console.warn(
+        '[SecretFile] Version prune backfill warning:',
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
@@ -98,6 +133,22 @@ connectMongo()
       });
     });
     console.log('[AutoFlush] Cron job started - checking hourly');
+
+    cron.schedule('0 3 * * *', () => {
+      runArchiveAuditLogs()
+        .then(({ archived }) => {
+          if (archived > 0) {
+            console.log(`[AuditArchive] Moved ${archived} log(s) to archive`);
+          }
+        })
+        .catch((error) => {
+          console.error(
+            '[AuditArchive] Job failed:',
+            error instanceof Error ? error.message : 'Unknown error'
+          );
+        });
+    });
+    console.log('[AuditArchive] Cron job started - archiving logs older than 90 days daily at 03:00');
   })
   .catch((error) => {
     console.error('MongoDB connection error:', error.message);

@@ -30,6 +30,7 @@ import {
   inferSecretFileType,
   isAllowedFileUploadName,
   isAllowedSecretFileName,
+  pruneOldSecretFileVersions,
   sanitizeSecretFileName,
 } from '../lib/secretFiles';
 
@@ -179,6 +180,8 @@ router.post(
         version: nextVersion,
         uploadedBy: req.user.userId,
       });
+
+      await pruneOldSecretFileVersions(component._id.toString(), environment, fileName);
 
       await auditSecretFile(
         projectId,
@@ -489,6 +492,8 @@ router.put(
           uploadedBy: req.user.userId,
         });
 
+        await pruneOldSecretFileVersions(component._id.toString(), environment, fileName);
+
         await auditSecretFile(
           projectId,
           req.user.userId,
@@ -763,6 +768,8 @@ router.post(
         version: nextVersion,
         uploadedBy: req.user.userId,
       });
+
+      await pruneOldSecretFileVersions(component._id.toString(), environment, fileName);
 
       await auditSecretFile(
         projectId,

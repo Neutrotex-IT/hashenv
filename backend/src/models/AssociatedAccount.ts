@@ -97,6 +97,5 @@ const AssociatedAccountSchema: Schema = new Schema(
 );
 
 AssociatedAccountSchema.index({ projectId: 1, label: 1 }, { unique: true });
-AssociatedAccountSchema.index({ projectId: 1 });
 
 export default mongoose.model<IAssociatedAccount>('AssociatedAccount', AssociatedAccountSchema);

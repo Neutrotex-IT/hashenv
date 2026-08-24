@@ -20,7 +20,7 @@ import {
 } from './environments';
 import { auditSecretFile, auditSecret, auditAccount } from './audit';
 import { isValidComponentSlug, slugFromComponentName } from './components';
-import { contentTypeForSecretFile, inferSecretFileType, isAllowedSecretFileName, sanitizeSecretFileName } from './secretFiles';
+import { contentTypeForSecretFile, inferSecretFileType, isAllowedSecretFileName, pruneOldSecretFileVersions, sanitizeSecretFileName } from './secretFiles';
 import type { Request } from 'express';
 
 export const DATA_TRANSFER_FORMAT_VERSION = '2.0';
@@ -128,12 +128,43 @@ export async function exportProjectData(project: IProject): Promise<ExportedProj
   const projectId = project._id.toString();
   const environments = getProjectEnvironments(project);
   const components = await Component.find({ projectId }).sort({ name: 1 });
+  const componentIds = components.map((c) => c._id);
+  const allSecretFiles =
+    componentIds.length > 0
+      ? await SecretFile.find({ componentId: { $in: componentIds } }).sort({ version: -1 })
+      : [];
+  const allSecrets =
+    componentIds.length > 0 ? await Secret.find({ componentId: { $in: componentIds } }) : [];
+
+  const secretFilesByComponent = new Map<string, typeof allSecretFiles>();
+  for (const secretFile of allSecretFiles) {
+    const key = secretFile.componentId.toString();
+    const list = secretFilesByComponent.get(key);
+    if (list) {
+      list.push(secretFile);
+    } else {
+      secretFilesByComponent.set(key, [secretFile]);
+    }
+  }
+
+  const secretsByComponent = new Map<string, typeof allSecrets>();
+  for (const secret of allSecrets) {
+    const key = secret.componentId.toString();
+    const list = secretsByComponent.get(key);
+    if (list) {
+      list.push(secret);
+    } else {
+      secretsByComponent.set(key, [secret]);
+    }
+  }
+
   const exportedComponents: ExportedComponent[] = [];
 
   for (const component of components) {
-    const allSecretFiles = await SecretFile.find({ componentId: component._id }).sort({ version: -1 });
-    const latestByKey = new Map<string, (typeof allSecretFiles)[number]>();
-    for (const secretFile of allSecretFiles) {
+    const componentIdStr = component._id.toString();
+    const componentSecretFiles = secretFilesByComponent.get(componentIdStr) ?? [];
+    const latestByKey = new Map<string, (typeof componentSecretFiles)[number]>();
+    for (const secretFile of componentSecretFiles) {
       const key = `${secretFile.environment}::${secretFile.fileName}`;
       if (!latestByKey.has(key)) {
         latestByKey.set(key, secretFile);
@@ -144,7 +175,7 @@ export async function exportProjectData(project: IProject): Promise<ExportedProj
     for (const secretFile of latestByKey.values()) {
       try {
         const content = await decryptComponentData(
-          component._id.toString(),
+          componentIdStr,
           secretFile.encryptedData,
           secretFile.iv,
           secretFile.authTag
@@ -163,12 +194,12 @@ export async function exportProjectData(project: IProject): Promise<ExportedProj
       }
     }
 
-    const componentSecrets = await Secret.find({ componentId: component._id });
+    const componentSecrets = secretsByComponent.get(componentIdStr) ?? [];
     const exportedSecrets: ExportedSecret[] = [];
     for (const secret of componentSecrets) {
       try {
         const content = await decryptComponentData(
-          component._id.toString(),
+          componentIdStr,
           secret.encryptedData,
           secret.iv,
           secret.authTag
@@ -456,6 +487,8 @@ async function importSecretFileRecord(
     version: nextVersion,
     uploadedBy: userId,
   });
+
+  await pruneOldSecretFileVersions(component._id.toString(), environment, fileName);
 
   await auditSecretFile(
     projectId,

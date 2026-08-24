@@ -1,20 +1,11 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import type { ActorType, ResourceType } from './AuditLog';
 
-export type ResourceType =
-  | 'env'
-  | 'secret'
-  | 'secret_file'
-  | 'component'
-  | 'account'
-  | 'project'
-  | 'org'
-  | 'member'
-  | 'session'
-  | 'api_token'
-  | 'panic';
-export type ActorType = 'user' | 'api_token';
-
-export interface IAuditLog extends Document {
+/**
+ * Cold archive of audit logs older than AUDIT_RETENTION_DAYS.
+ * Same document shape as AuditLog; minimal indexes for rare reads.
+ */
+export interface IAuditLogArchive extends Document {
   organizationId?: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId;
   resourceType: ResourceType;
@@ -25,12 +16,12 @@ export interface IAuditLog extends Document {
   actorEmail?: string;
   ipAddress?: string;
   userAgent?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   schemaVersion: number;
   createdAt: Date;
 }
 
-const AuditLogSchema: Schema = new Schema(
+const AuditLogArchiveSchema: Schema = new Schema(
   {
     organizationId: {
       type: Schema.Types.ObjectId,
@@ -42,19 +33,6 @@ const AuditLogSchema: Schema = new Schema(
     },
     resourceType: {
       type: String,
-      enum: [
-        'env',
-        'secret',
-        'secret_file',
-        'component',
-        'account',
-        'project',
-        'org',
-        'member',
-        'session',
-        'api_token',
-        'panic',
-      ],
       required: true,
     },
     resourceId: {
@@ -68,11 +46,9 @@ const AuditLogSchema: Schema = new Schema(
       type: String,
       enum: ['user', 'api_token'],
       required: true,
-      default: 'user',
     },
     actorId: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
       required: true,
     },
     actorEmail: {
@@ -92,16 +68,17 @@ const AuditLogSchema: Schema = new Schema(
       required: true,
       default: 1,
     },
+    createdAt: {
+      type: Date,
+      required: true,
+    },
   },
   {
-    timestamps: { createdAt: true, updatedAt: false },
+    timestamps: false,
+    collection: 'auditlogarchives',
   }
 );
 
-AuditLogSchema.index({ organizationId: 1, createdAt: -1 });
-AuditLogSchema.index({ projectId: 1, createdAt: -1 });
-AuditLogSchema.index({ actorId: 1, createdAt: -1 });
-AuditLogSchema.index({ resourceType: 1, createdAt: -1 });
-AuditLogSchema.index({ createdAt: -1 });
+AuditLogArchiveSchema.index({ createdAt: -1 });
 
-export default mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
+export default mongoose.model<IAuditLogArchive>('AuditLogArchive', AuditLogArchiveSchema);

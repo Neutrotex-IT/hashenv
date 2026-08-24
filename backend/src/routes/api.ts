@@ -20,6 +20,7 @@ import {
   contentTypeForSecretFile,
   inferSecretFileType,
   isAllowedSecretFileName,
+  pruneOldSecretFileVersions,
   sanitizeSecretFileName,
 } from '../lib/secretFiles';
 
@@ -250,6 +251,8 @@ router.put(
         version: newVersion,
         uploadedBy: req.apiToken!.createdBy,
       });
+
+      await pruneOldSecretFileVersions(component._id.toString(), envSlug, normalizedFileName);
 
       await audit({
         projectId,
